@@ -7,12 +7,12 @@ function getApiErrorMessage(res) {
   if (!res || !res.error) return 'Неизвестная ошибка';
   const err = res.error();
   if (!err) return 'Неизвестная ошибка';
-  
+
   // Битрикс может вернуть ошибку в разных форматах
   const desc = err.error_description || err.errorDescription || err.description || '';
   const code = err.error || err.code || 'UNKNOWN';
   const exception = err.errorException || err.exception || '';
-  
+
   if (desc || exception) {
     return `${code}: ${desc} ${exception}`.trim();
   }
@@ -24,7 +24,7 @@ function logAction(message, type = 'info') {
   const timestamp = new Date().toLocaleTimeString();
   const prefix = type === 'error' ? '❌' : (type === 'success' ? '✅' : 'ℹ️');
   console.log(`[${timestamp}] ${prefix} ${message}`);
-  
+
   // Если на странице есть блок логов, добавляем туда
   const logContainer = document.getElementById('app-logs');
   if (logContainer) {
@@ -44,11 +44,11 @@ function showToast(message, type = 'info') {
     toast.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:12px 20px;border-radius:8px;color:#fff;font-weight:500;z-index:9999;opacity:0;transition:opacity 0.3s;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
     document.body.appendChild(toast);
   }
-  
+
   toast.textContent = message;
   toast.style.backgroundColor = type === 'error' ? '#ef4444' : (type === 'success' ? '#10b981' : '#3b82f6');
   toast.style.opacity = '1';
-  
+
   setTimeout(() => {
     toast.style.opacity = '0';
   }, 3000);
@@ -58,4 +58,82 @@ function showToast(message, type = 'info') {
 function cleanText(text) {
   if (!text) return '';
   return String(text).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// ============================================================
+// 🔥 ВОССТАНОВЛЕННЫЕ ФУНКЦИИ (были потеряны при переписывании)
+// ============================================================
+
+// Расчёт итоговой суммы закупки (товары + доставка)
+function calculateTotalAmount(item) {
+  if (!item) return 0;
+  const productField = actualFields.amountProduct;
+  const deliveryField = actualFields.amountDelivery;
+  const product = productField ? (parseFloat(item[productField]) || 0) : 0;
+  const delivery = deliveryField ? (parseFloat(item[deliveryField]) || 0) : 0;
+  return product + delivery;
+}
+
+// Форматирование суммы в деньги (с разделителями тысяч и знаком ₽)
+function formatMoney(amount) {
+  if (amount === undefined || amount === null || isNaN(amount)) return '0 ₽';
+  return Number(amount).toLocaleString('ru-RU', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }) + ' ₽';
+}
+
+// Получение отображаемого значения поля (enum/список или отдел)
+function getDisplayValue(item, fieldCode, type) {
+  if (!fieldCode || !item || item[fieldCode] === undefined || item[fieldCode] === null) return '—';
+  const raw = item[fieldCode];
+  const val = Array.isArray(raw) ? raw[0] : raw;
+  if (!val) return '—';
+
+  if (type === 'dept') {
+    const short = settings.deptShortNames[String(val)];
+    if (short) return short;
+    const dept = departments.find(d => String(d.ID) === String(val));
+    return dept ? dept.NAME : String(val);
+  }
+
+  // enum / список — ищем VALUE по ID в fieldDefs[fieldCode].items
+  const def = fieldDefs[fieldCode];
+  if (def && def.items && def.items.length) {
+    const found = def.items.find(i => String(i.ID) === String(val));
+    if (found) return found.VALUE;
+  }
+  return String(val);
+}
+
+// Форматирование дедлайна с цветовой подсветкой по settings.deadlineRedDays / YellowDays
+function getDeadlineDisplay(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '—';
+  const dateText = d.toLocaleDateString('ru-RU');
+  const now = new Date();
+  const diffDays = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  let color = '';
+  if (diffDays < 0) color = '#ef4444';
+  else if (diffDays <= (settings.deadlineRedDays || 3)) color = '#ef4444';
+  else if (diffDays <= (settings.deadlineYellowDays || 7)) color = '#f59e0b';
+
+  if (color) {
+    return `<span style="color:${color}; font-weight:600;">${dateText}</span>`;
+  }
+  return dateText;
+}
+
+// Извлечение имени файла и URL из файлового UF-поля
+function getFileInfo(item, fileFieldCode) {
+  if (!fileFieldCode || !item || !item[fileFieldCode]) return null;
+  const raw = item[fileFieldCode];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  const file = arr.find(f => f && (f.url || f.downloadUrl || f.id));
+  if (!file) return null;
+  const url = file.url || file.downloadUrl || '';
+  const name = file.name || file.originalName || 'Файл';
+  return { url, name };
 }
