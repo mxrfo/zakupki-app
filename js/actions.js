@@ -112,10 +112,14 @@ function submitAction(e) {
     logAction(`Отправка в работу: headId=${headIdNum}, поля для обновления: ${Object.keys(fields).join(', ') || '(нет)'}`, 'info');
 
     const proceedToTask = () => {
+      // 🔥 ИСПРАВЛЕНИЕ: Создаем задачу от имени системного администратора, 
+      // чтобы избежать ERROR_CORE из-за нехватки прав у обычного сотрудника на создание задач "от имени" руководителя.
+      const adminUserId = parseInt(settings.systemUserId) || 1;
+
       const taskPayload = {
         TITLE: '[🛒] Утверждение исполняющего сотрудника по закупке',
         RESPONSIBLE_ID: headIdNum,
-        CREATED_BY: headIdNum,
+        CREATED_BY: adminUserId, // <-- ИСПРАВЛЕНО: автор задачи теперь админ, а не руководитель
         DESCRIPTION: `Задача:
 1. Выбрать в качестве СОИСПОЛНИТЕЛЯ сотрудника, который будет выполнять сбор данных и расчёт примерной стоимости закупки
 2. Завершить задачу
@@ -137,7 +141,7 @@ ${shortDescText}`,
       BX24.callMethod('tasks.task.add', { fields: taskPayload }, (taskRes) => {
         if (taskRes.error()) {
           const errMsg = getApiErrorMessage(taskRes);
-          logAction(`ОШИБКА СОЗДАНИЯ ЗАДАЧИ: ${errMsg}`, 'error');
+          logAction(`ОШИБКА СОЗДАНИЯ ЗАДАЧИ: ${errMsg} | Payload: ${JSON.stringify(taskPayload)}`, 'error');
           showToast('Ошибка создания задачи: ' + errMsg, 'error');
           sendToWorkInProgress[id] = false;
           if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = submitBtn.dataset.originalText || 'Отправить'; }

@@ -1,167 +1,61 @@
-// js/utils.js — Утилиты: форматирование, логирование, преобразования
+// ============================================================
+// МОДУЛЬ: utils.js — Утилиты и хелперы
+// ============================================================
 
-// Конвертация HEX в RGBA
-function hexToRgba(hex, alpha = 0.15) {
-    if (!hex) return `rgba(100, 116, 139, ${alpha})`;
-    hex = hex.replace('#', '');
-    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
-    let r = parseInt(hex.substring(0, 2), 16);
-    let g = parseInt(hex.substring(2, 4), 16);
-    let b = parseInt(hex.substring(4, 6), 16);
-    if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(100, 116, 139, ${alpha})`;
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
+// Надёжное получение текста ошибки из ответа BX24
+function getApiErrorMessage(res) {
+  if (!res || !res.error) return 'Неизвестная ошибка';
+  const err = res.error();
+  if (!err) return 'Неизвестная ошибка';
   
-  // Форматирование денег
-  function formatMoney(val) {
-    if (val === undefined || val === null || val === '') return '—';
-    if (typeof val === 'object' && val.VALUE !== undefined) val = val.VALUE;
-    let str = String(val).replace(/\|RUB/i, '').replace(/,/g, '.');
-    let num = parseFloat(str);
-    if (isNaN(num)) return str;
-    return num.toLocaleString('ru-RU') + ' ₽';
-  }
+  // Битрикс может вернуть ошибку в разных форматах
+  const desc = err.error_description || err.errorDescription || err.description || '';
+  const code = err.error || err.code || 'UNKNOWN';
+  const exception = err.errorException || err.exception || '';
   
-  // Очистка значения денег (для вычислений)
-  function cleanMoney(val) {
-    if (val === undefined || val === null || val === '') return '';
-    if (typeof val === 'object' && val.VALUE !== undefined) val = val.VALUE;
-    let str = String(val).replace(/\|RUB/i, '').replace(/,/g, '.').replace(/[^\d.-]/g, '');
-    let num = parseFloat(str);
-    return isNaN(num) ? '' : num;
+  if (desc || exception) {
+    return `${code}: ${desc} ${exception}`.trim();
   }
+  return `Код ошибки: ${code}`;
+}
+
+// Логирование действий в консоль и UI (если есть элемент логов)
+function logAction(message, type = 'info') {
+  const timestamp = new Date().toLocaleTimeString();
+  const prefix = type === 'error' ? '❌' : (type === 'success' ? '✅' : 'ℹ️');
+  console.log(`[${timestamp}] ${prefix} ${message}`);
   
-  // Расчёт общей суммы закупки
-  function calculateTotalAmount(item) {
-    const p = parseFloat(cleanMoney(item[actualFields.amountProduct])) || 0;
-    const d = parseFloat(cleanMoney(item[actualFields.amountDelivery])) || 0;
-    return p + d;
-  }
-  
-  // Получение информации о файле
-  function getFileInfo(item, fieldCode) {
-    const val = item[fieldCode];
-    if (!val) return null;
-    if (Array.isArray(val) && val.length > 0) {
-      const fileObj = val[0];
-      if (typeof fileObj === 'object') {
-        return {
-          url: fileObj.downloadUrl || fileObj.url || fileObj.src || null,
-          name: fileObj.name || 'Скачать файл'
-        };
-      }
-    }
-    return null;
-  }
-  
-  // Логирование действий в консоль приложения
-  function logAction(msg, type = 'info') {
-    console.log(`[${type.toUpperCase()}] ${msg}`);
-    const logContent = document.getElementById('log-content');
-    if (!logContent) return;
-    const time = new Date().toLocaleTimeString('ru-RU');
+  // Если на странице есть блок логов, добавляем туда
+  const logContainer = document.getElementById('app-logs');
+  if (logContainer) {
     const div = document.createElement('div');
-    div.className = `log-line log-${type}`;
-    div.innerHTML = `<span class="log-time">[${time}]</span> ${msg}`;
-    logContent.appendChild(div);
-    logContent.scrollTop = logContent.scrollHeight;
+    div.className = `log-entry log-${type}`;
+    div.textContent = `[${timestamp}] ${message}`;
+    logContainer.prepend(div);
+  }
+}
+
+// Показ всплывающего уведомления (toast)
+function showToast(message, type = 'info') {
+  let toast = document.getElementById('app-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'app-toast';
+    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:12px 20px;border-radius:8px;color:#fff;font-weight:500;z-index:9999;opacity:0;transition:opacity 0.3s;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
+    document.body.appendChild(toast);
   }
   
-  // Переключение панели логов
-  function toggleLogPanel() {
-    document.getElementById('log-panel').classList.toggle('open');
-  }
+  toast.textContent = message;
+  toast.style.backgroundColor = type === 'error' ? '#ef4444' : (type === 'success' ? '#10b981' : '#3b82f6');
+  toast.style.opacity = '1';
   
-  // Извлечение сообщения об ошибке из ответа API
-  function getApiErrorMessage(res) {
-    if (!res || !res.error) return 'Неизвестная ошибка API';
-    const err = res.error();
-    let msg = err.error || 'ERROR_CORE';
-    if (err.error_description) msg += ' | ' + err.error_description;
-    logAction('ОШИБКА БИТРИКС: ' + msg, 'error');
-    return msg;
-  }
-  
-  // Очистка текста от BB-кодов и HTML
-  function cleanText(str) {
-    if (!str) return '';
-    return String(str).replace(/\[.*?\]/g, '').replace(/<[^>]*>/g, '').trim();
-  }
-  
-  // Обновление отображения имени файла
-  function updateFileName(input) {
-    const display = document.getElementById('file-name-display');
-    if (input.files && input.files.length > 0) {
-      display.innerText = input.files[0].name;
-      display.style.color = 'var(--brand-blue)';
-    } else {
-      display.innerText = 'Нажмите, чтобы выбрать файл';
-      display.style.color = '#0f172a';
-    }
-  }
-  
-  // Получение отображаемого значения поля
-  function getDisplayValue(item, fieldCode, type) {
-    if (!fieldCode || !item[fieldCode]) return '—';
-    let val = item[fieldCode];
-  
-    if (type === 'dept') {
-      if (Array.isArray(val)) val = val[0];
-      if (fieldDefs[fieldCode] && fieldDefs[fieldCode].type === 'enumeration') {
-        const enumItem = fieldDefs[fieldCode].items?.find(i => String(i.ID) === String(val));
-        if (enumItem) return enumItem.VALUE;
-      }
-      const deptObj = departments.find(d => String(d.ID) === String(val));
-      return deptObj ? deptObj.NAME : val;
-    }
-  
-    if (type === 'date') {
-      const d = new Date(val);
-      return isNaN(d.getTime()) ? val : d.toLocaleDateString('ru-RU');
-    }
-  
-    if (type === 'money') return formatMoney(val);
-    if (type === 'user') return userNames[val] || `Сотрудник`;
-  
-    if (type === 'enum') {
-      if (Array.isArray(val)) val = val[0];
-      if (fieldDefs[fieldCode] && fieldDefs[fieldCode].items) {
-        const enumItem = fieldDefs[fieldCode].items.find(i => String(i.ID) === String(val));
-        return enumItem ? enumItem.VALUE : val;
-      }
-    }
-  
-    return val;
-  }
-  
-  // Отображение дедлайна с цветовой индикацией
-  function getDeadlineDisplay(deadlineStr) {
-    if (!deadlineStr) return '—';
-    const d = new Date(deadlineStr);
-    if (isNaN(d.getTime())) return deadlineStr;
-    const formattedDate = d.toLocaleDateString('ru-RU');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diffDays = Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  
-    let extraText = '';
-    if (diffDays < 0) {
-      extraText = `<span style="color: #ef4444; font-weight: 700; font-size: 11px; margin-left: 6px;">Просрочено</span>`;
-    } else if (diffDays === 0) {
-      extraText = `<span style="color: #ef4444; font-weight: 700; font-size: 11px; margin-left: 6px;">Сегодня</span>`;
-    } else if (diffDays <= settings.deadlineRedDays) {
-      extraText = `<span style="color: #ef4444; font-weight: 700; font-size: 11px; margin-left: 6px;">${diffDays} дн.</span>`;
-    } else if (diffDays <= settings.deadlineYellowDays) {
-      extraText = `<span style="color: #f59e0b; font-weight: 700; font-size: 11px; margin-left: 6px;">${diffDays} дн.</span>`;
-    }
-  
-    return `<span style="font-weight:600; white-space:nowrap;">${formattedDate}</span>${extraText}`;
-  }
-  
-  // Показ тоста
-  function showToast(msg, type = 'success') {
-    const t = document.getElementById('toast');
-    t.innerText = msg;
-    t.className = `toast show ${type}`;
-    setTimeout(() => t.className = 'toast', 5000);
-  }
+  setTimeout(() => {
+    toast.style.opacity = '0';
+  }, 3000);
+}
+
+// Очистка текста от HTML-тегов и лишних пробелов
+function cleanText(text) {
+  if (!text) return '';
+  return String(text).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+}
