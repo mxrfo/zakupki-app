@@ -197,8 +197,7 @@ function syncManagersFromTasks(done) {
         if (!f.item[actualFields.taskSbor]) {
           const shortDescText = cleanText(f.item[actualFields.shortDesc]) || f.item.title;
           
-          // 🔥 ИСПРАВЛЕНИЕ: Создаем задачу ОТ ИМЕНИ АДМИНИСТРАТОРА (systemUserId), 
-          // чтобы избежать ERROR_CORE из-за нехватки прав у обычного сотрудника.
+          // 🔥 ИСПРАВЛЕНИЕ: Создаем задачу ОТ ИМЕНИ АДМИНИСТРАТОРА
           const adminUserId = parseInt(settings.systemUserId) || 1; 
           const responsibleUserId = parseInt(f.mgrId);
 
@@ -211,9 +210,9 @@ function syncManagersFromTasks(done) {
           const taskPayload = {
             TITLE: '[🛒] Сбор данных и расчет по закупке',
             RESPONSIBLE_ID: responsibleUserId,
-            CREATED_BY: adminUserId, // <-- Жёстко задаем админа как постановщика
+            CREATED_BY: adminUserId, // <-- ИСПРАВЛЕНО: автор задачи админ
             DESCRIPTION: `Необходимо собрать данные и рассчитать стоимость по закупке "${shortDescText}".`,
-            STATUS: 2, // Новая
+            STATUS: 2,
             ADD_IN_REPORT: 'Y'
           };
 
@@ -221,7 +220,6 @@ function syncManagersFromTasks(done) {
 
           BX24.callMethod('tasks.task.add', { fields: taskPayload }, (tr) => {
             if (tr.error()) {
-              // Теперь ошибка будет полной и понятной
               logAction(`tasks.task.add ОШИБКА: ${getApiErrorMessage(tr)} | Payload: ${JSON.stringify(taskPayload)}`, 'error');
               finish(f.item.id);
               return;
