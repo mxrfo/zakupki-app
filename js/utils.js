@@ -8,7 +8,6 @@ function getApiErrorMessage(res) {
   const err = res.error();
   if (!err) return 'Неизвестная ошибка';
 
-  // Битрикс может вернуть ошибку в разных форматах
   const desc = err.error_description || err.errorDescription || err.description || '';
   const code = err.error || err.code || 'UNKNOWN';
   const exception = err.errorException || err.exception || '';
@@ -19,19 +18,23 @@ function getApiErrorMessage(res) {
   return `Код ошибки: ${code}`;
 }
 
-// Логирование действий в консоль и UI (если есть элемент логов)
+// Логирование действий в консоль и UI
 function logAction(message, type = 'info') {
   const timestamp = new Date().toLocaleTimeString();
   const prefix = type === 'error' ? '❌' : (type === 'success' ? '✅' : 'ℹ️');
   console.log(`[${timestamp}] ${prefix} ${message}`);
 
-  // Если на странице есть блок логов, добавляем туда
+  // Добавляем в панель логов, если она открыта
   const logContainer = document.getElementById('app-logs');
-  if (logContainer) {
+  if (logContainer && logContainer.style.display !== 'none') {
     const div = document.createElement('div');
     div.className = `log-entry log-${type}`;
+    div.style.cssText = `padding:3px 0; border-bottom:1px solid #1e293b; ${
+      type === 'error' ? 'color:#f87171;' : type === 'success' ? 'color:#34d399;' : 'color:#cbd5e1;'
+    }`;
     div.textContent = `[${timestamp}] ${message}`;
-    logContainer.prepend(div);
+    logContainer.appendChild(div);
+    logContainer.scrollTop = logContainer.scrollHeight;
   }
 }
 
@@ -61,7 +64,7 @@ function cleanText(text) {
 }
 
 // ============================================================
-// 🔥 ВОССТАНОВЛЕННЫЕ ФУНКЦИИ (были потеряны при переписывании)
+// 🔥 ВОССТАНОВЛЕННЫЕ ФУНКЦИИ (были потеряны)
 // ============================================================
 
 // Расчёт итоговой суммы закупки (товары + доставка)
@@ -74,7 +77,7 @@ function calculateTotalAmount(item) {
   return product + delivery;
 }
 
-// Форматирование суммы в деньги (с разделителями тысяч и знаком ₽)
+// Форматирование суммы в деньги
 function formatMoney(amount) {
   if (amount === undefined || amount === null || isNaN(amount)) return '0 ₽';
   return Number(amount).toLocaleString('ru-RU', {
@@ -97,7 +100,6 @@ function getDisplayValue(item, fieldCode, type) {
     return dept ? dept.NAME : String(val);
   }
 
-  // enum / список — ищем VALUE по ID в fieldDefs[fieldCode].items
   const def = fieldDefs[fieldCode];
   if (def && def.items && def.items.length) {
     const found = def.items.find(i => String(i.ID) === String(val));
@@ -106,7 +108,7 @@ function getDisplayValue(item, fieldCode, type) {
   return String(val);
 }
 
-// Форматирование дедлайна с цветовой подсветкой по settings.deadlineRedDays / YellowDays
+// Форматирование дедлайна с цветовой подсветкой
 function getDeadlineDisplay(dateStr) {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
@@ -137,3 +139,93 @@ function getFileInfo(item, fileFieldCode) {
   const name = file.name || file.originalName || 'Файл';
   return { url, name };
 }
+
+// ============================================================
+// 🔥 ПАНЕЛЬ ЛОГОВ (создаётся программно + функция toggleLogPanel)
+// ============================================================
+
+// Функция переключения панели логов (вызывается кнопкой)
+function toggleLogPanel() {
+  const panel = document.getElementById('app-logs');
+  const btn = document.getElementById('log-toggle-btn');
+  if (!panel) return;
+
+  const isVisible = panel.style.display === 'block';
+  panel.style.display = isVisible ? 'none' : 'block';
+  if (btn) btn.style.background = isVisible ? '#1e293b' : '#334155';
+  if (!isVisible) panel.scrollTop = panel.scrollHeight;
+}
+
+// Автоинициализация панели логов при загрузке
+(function initLogPanel() {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', buildLogPanel);
+  } else {
+    buildLogPanel();
+  }
+
+  function buildLogPanel() {
+    if (document.getElementById('log-toggle-btn')) return;
+
+    // Кнопка-триггер
+    const btn = document.createElement('button');
+    btn.id = 'log-toggle-btn';
+    btn.innerHTML = '≡';
+    btn.title = 'Открыть/закрыть панель логов';
+    btn.onclick = toggleLogPanel;
+    btn.style.cssText = `
+      position: fixed;
+      left: 20px;
+      bottom: 20px;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #1e293b;
+      color: #fff;
+      border: none;
+      font-size: 22px;
+      cursor: pointer;
+      z-index: 9998;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+
+    // Панель логов
+    const panel = document.createElement('div');
+    panel.id = 'app-logs';
+    panel.style.cssText = `
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 220px;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 12px;
+      padding: 12px 16px;
+      overflow-y: auto;
+      z-index: 9997;
+      display: none;
+      border-top: 2px solid #334155;
+    `;
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #334155;';
+    header.innerHTML = `
+      <span style="font-weight:700; color:#60a5fa;">📋 КОНСОЛЬ ЛОГОВ</span>
+      <button id="log-clear-btn" style="background:#ef4444;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;">Очистить</button>
+    `;
+    panel.appendChild(header);
+
+    document.body.appendChild(panel);
+    document.body.appendChild(btn);
+
+    document.getElementById('log-clear-btn').addEventListener('click', () => {
+      const entries = panel.querySelectorAll('.log-entry');
+      entries.forEach(e => e.remove());
+    });
+  }
+})();
