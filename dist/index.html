@@ -1305,7 +1305,6 @@ function logAction(message, type = 'info') {
   const prefix = type === 'error' ? '❌' : (type === 'success' ? '✅' : 'ℹ️');
   console.log(`[${timestamp}] ${prefix} ${message}`);
 
-  // Добавляем в панель логов, если она открыта
   const logContainer = document.getElementById('app-logs');
   if (logContainer && logContainer.style.display !== 'none') {
     const div = document.createElement('div');
@@ -1345,7 +1344,7 @@ function cleanText(text) {
 }
 
 // ============================================================
-// 🔥 ВОССТАНОВЛЕННЫЕ ФУНКЦИИ (были потеряны)
+// 🔥 ВОССТАНОВЛЕННЫЕ ФУНКЦИИ
 // ============================================================
 
 // Расчёт итоговой суммы закупки (товары + доставка)
@@ -1358,13 +1357,18 @@ function calculateTotalAmount(item) {
   return product + delivery;
 }
 
-// Форматирование суммы в деньги
+// Форматирование суммы в деньги (12300 → "12 300 ₽")
 function formatMoney(amount) {
   if (amount === undefined || amount === null || isNaN(amount)) return '0 ₽';
   return Number(amount).toLocaleString('ru-RU', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2
   }) + ' ₽';
+}
+
+// 🔥 cleanMoney — алиас для formatMoney (используется в openViewModal)
+function cleanMoney(amount) {
+  return formatMoney(amount);
 }
 
 // Получение отображаемого значения поля (enum/список или отдел)
@@ -1422,22 +1426,26 @@ function getFileInfo(item, fileFieldCode) {
 }
 
 // ============================================================
-// 🔥 ПАНЕЛЬ ЛОГОВ (создаётся программно + функция toggleLogPanel)
+// 🔥 ПАНЕЛЬ ЛОГОВ (умная инициализация — не создаёт дубль)
 // ============================================================
 
-// Функция переключения панели логов (вызывается кнопкой)
+// Функция переключения панели логов (вызывается и старой, и новой кнопкой)
 function toggleLogPanel() {
   const panel = document.getElementById('app-logs');
-  const btn = document.getElementById('log-toggle-btn');
   if (!panel) return;
 
   const isVisible = panel.style.display === 'block';
   panel.style.display = isVisible ? 'none' : 'block';
-  if (btn) btn.style.background = isVisible ? '#1e293b' : '#334155';
+
+  // Обновляем фон ЛЮБОЙ кнопки логов (и старой, и новой)
+  document.querySelectorAll('#log-toggle-btn, .log-toggle-btn, [onclick*="toggleLogPanel"]').forEach(btn => {
+    btn.style.background = isVisible ? '#1e293b' : '#334155';
+  });
+
   if (!isVisible) panel.scrollTop = panel.scrollHeight;
 }
 
-// Автоинициализация панели логов при загрузке
+// Автоинициализация панели логов — ТОЛЬКО если её ещё нет
 (function initLogPanel() {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', buildLogPanel);
@@ -1446,11 +1454,13 @@ function toggleLogPanel() {
   }
 
   function buildLogPanel() {
-    if (document.getElementById('log-toggle-btn')) return;
+    // ✅ ПРОВЕРКА: если панель уже есть в DOM — не создаём дубль
+    if (document.getElementById('app-logs')) return;
 
     // Кнопка-триггер
     const btn = document.createElement('button');
     btn.id = 'log-toggle-btn';
+    btn.className = 'log-toggle-btn';
     btn.innerHTML = '≡';
     btn.title = 'Открыть/закрыть панель логов';
     btn.onclick = toggleLogPanel;
