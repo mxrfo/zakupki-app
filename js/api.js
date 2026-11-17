@@ -31,31 +31,20 @@ function registerNotificationBot(callback) {
   });
 }
 
-// ✅ Утилита: полный URL портала (не CDN приложения)
+// Утилита: полный URL портала (не CDN приложения)
 function getPortalOrigin() {
   try {
     if (document.referrer) return new URL(document.referrer).origin;
   } catch (e) {}
-  try {
-    if (window.top && window.top.location && window.top.location.origin &&
-        window.top.location.origin !== 'null' &&
-        !window.top.location.origin.includes('bitrix24.net') === false) {
-      // fallback ниже
-    }
-  } catch (e) {}
-  // Fallback: из appBaseUrl вырезаем домен портала, если он там есть
   return window.location.origin;
 }
 
-// ✅ ИСПРАВЛЕНО: уведомления с кликабельными ссылками
-// im.notify — только plain text + параметр link (клик по уведомлению)
-// im.message.add — BB-коды [URL=...], и ТОЛЬКО в существующий диалог (без im.chat.add!)
+// Уведомления с кликабельными ссылками
 function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl) {
   userId = parseInt(userId);
   if (!userId) return;
 
   const portalOrigin = getPortalOrigin();
-  // Полная ссылка на задачу (taskUrl приходит относительным /company/...)
   const fullTaskUrl = taskUrl ? (taskUrl.startsWith('http') ? taskUrl : portalOrigin + taskUrl) : '';
   const fullItemUrl = itemUrl ? (itemUrl.startsWith('http') ? itemUrl : portalOrigin + itemUrl) : '';
 
@@ -80,7 +69,6 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl) {
       logAction(`Диалог с ID ${userId} не найден — в чат не пишем (колокольчика достаточно)`, 'info');
       return;
     }
-    // BB-коды: [B], [URL=...] — HTML-теги НЕ поддерживаются
     let chatMessage = `[B]${title}[/B]\n${message}`;
     if (fullItemUrl) chatMessage += `\n[URL=${fullItemUrl}]📋 Открыть закупку[/URL]`;
     if (fullTaskUrl) chatMessage += `\n[URL=${fullTaskUrl}]✅ Открыть задачу[/URL]`;
@@ -109,13 +97,9 @@ function loadAllData() {
   if (items.length === 0) {
     document.getElementById('app-container').innerHTML = '<div class="loading" style="grid-column: 1/-1;">Загрузка данных...</div>';
   }
-  
-  // 🔥 ИСПРАВЛЕНИЕ 1: Оптимизация запроса. Тянем только нужные поля, а не все UF_*
-  const baseFields = ['id', 'title', 'stageId', 'createdBy', 'assignedById', 'categoryId'];
-  const mappedFields = Object.values(settings.mapping).filter(Boolean);
-  const selectFields = [...new Set([...baseFields, ...mappedFields])];
 
-  BX24.callMethod('crm.item.list', { entityTypeId: ENTITY_TYPE_ID, select: selectFields }, (res) => {
+  // ✅ ОТКАТ: возвращаем полный select — оптимизацию сделаем отдельно
+  BX24.callMethod('crm.item.list', { entityTypeId: ENTITY_TYPE_ID, select: ['*', 'UF_*'] }, (res) => {
     loadAllDataInProgress = false;
     if (res.error()) {
       logAction('Ошибка загрузки данных: ' + getApiErrorMessage(res), 'error');
@@ -285,9 +269,8 @@ function syncManagersFromTasks(done) {
 
         if (!f.item[actualFields.taskSbor]) {
           const shortDescText = cleanText(f.item[actualFields.shortDesc]) || f.item.title;
-          
-          // 🔥 ИСПРАВЛЕНИЕ 2: Создаем задачу ОТ ИМЕНИ АДМИНИСТРАТОРА (systemUserId), 
-          // чтобы избежать ERROR_CORE из-за нехватки прав у обычного сотрудника на создание задач "от имени" другого пользователя.
+
+          // ✅ СОХРАНЯЕМ ГЛАВНОЕ ИСПРАВЛЕНИЕ: задача создаётся от имени админа
           const adminUserId = parseInt(settings.systemUserId) || 1;
           const responsibleUserId = parseInt(f.mgrId);
 
@@ -300,7 +283,7 @@ function syncManagersFromTasks(done) {
           const taskPayload = {
             TITLE: '[🛒] Сбор данных и расчет по закупке',
             RESPONSIBLE_ID: responsibleUserId,
-            CREATED_BY: adminUserId, // <-- Жёстко задаем админа как постановщика
+            CREATED_BY: adminUserId,
             DESCRIPTION: `Необходимо собрать данные и рассчитать стоимость по закупке "${shortDescText}".`,
             STATUS: 2,
             ADD_IN_REPORT: 'Y'
