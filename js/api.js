@@ -37,7 +37,7 @@ function getPortalOrigin() {
   return window.location.origin;
 }
 
-// ✅ ИСПРАВЛЕНО: уведомления с рабочими ссылками
+// ✅ ФИКС: уведомления с рабочими гиперссылками в чате
 function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl) {
   userId = parseInt(userId);
   if (!userId) return;
@@ -46,7 +46,7 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl) {
   const fullTaskUrl = taskUrl ? (taskUrl.startsWith('http') ? taskUrl : portalOrigin + taskUrl) : '';
   const fullItemUrl = itemUrl ? (itemUrl.startsWith('http') ? itemUrl : portalOrigin + itemUrl) : '';
 
-  // 1. Колокольчик (im.notify) — одна ссылка через параметр link
+  // 1. Колокольчик: кликабельное уведомление через link (сама ссылка в тексте НЕ рендерится) [[23]]
   const primaryLink = fullTaskUrl || fullItemUrl || '';
   BX24.callMethod('im.notify', {
     to: userId,
@@ -62,26 +62,33 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl) {
     }
   });
 
-  // 2. Сообщение в чат (im.message.add) — с BB-кодом ссылок
-  // ✅ ИСПРАВЛЕНО: используем DIALOG_ID в формате 'user_' + userId
-  const dialogId = 'user_' + userId;
-  
-  let chatMessage = `[B]${title}[/B]\n${message}`;
-  if (fullItemUrl) chatMessage += `\n[URL=${fullItemUrl}]📋 Открыть закупку[/URL]`;
-  if (fullTaskUrl) chatMessage += `\n[URL=${fullTaskUrl}]✅ Открыть задачу[/URL]`;
-
-  BX24.callMethod('im.message.add', {
-    DIALOG_ID: dialogId,
-    MESSAGE: chatMessage
-  }, (mr) => {
-    if (mr.error()) {
-      logAction(`im.message.add (ID ${userId}) не прошёл: ` + getApiErrorMessage(mr), 'error');
-    } else {
-      logAction(`Сообщение отправлено в чат пользователю ID ${userId}`, 'success');
+  // 2. Чат с ГИПЕРССЫЛКАМИ: сначала получаем числовой DIALOG_ID через im.dialog.get
+  //    (параметр именно DIALOG_ID='user_'+userId, а не USER_ID) [[31]][[32]][[40]]
+  BX24.callMethod('im.dialog.get', { DIALOG_ID: 'user_' + userId }, (r) => {
+    if (r.error() || !r.data() || !r.data().id) {
+      logAction(`Диалог с ID ${userId} не найден — в чат не пишем (колокольчика достаточно)`, 'info');
+      return;
     }
+    // BB-коды [B], [URL=...] — HTML не поддерживается, только BB [[3]]
+    let chatMessage = `[B]${title}[/B]\n${message}`;
+    if (fullItemUrl) chatMessage += `\n[URL=${fullItemUrl}]📋 Открыть закупку[/URL]`;
+    if (fullTaskUrl) chatMessage += `\n[URL=${fullTaskUrl}]✅ Открыть задачу[/URL]`;
+
+    // ✅ DIALOG_ID = числовой id из im.dialog.get (не строка 'user_...') [[40]]
+    BX24.callMethod('im.message.add', {
+      DIALOG_ID: r.data().id,
+      MESSAGE: chatMessage
+    }, (mr) => {
+      if (mr.error()) {
+        logAction(`im.message.add (ID ${userId}) не прошёл: ` + getApiErrorMessage(mr), 'error');
+      } else {
+        logAction(`Сообщение с гиперссылками отправлено в чат ID ${userId}`, 'success');
+      }
+    });
   });
 }
 
+// Загрузка списка закупок
 function loadAllData() {
   if (loadAllDataInProgress) {
     logAction('Загрузка уже идёт, пропускаем повторный вызов', 'info');
@@ -92,6 +99,7 @@ function loadAllData() {
   if (items.length === 0) {
     document.getElementById('app-container').innerHTML = '<div class="loading" style="grid-column: 1/-1;">Загрузка данных...</div>';
   }
+  // ✅ ФИКС: правильные звёздочки (в Knowledge Base были пробелы [' ','UF_ '])
   BX24.callMethod('crm.item.list', { entityTypeId: ENTITY_TYPE_ID, select: ['*', 'UF_*'] }, (res) => {
     loadAllDataInProgress = false;
     if (res.error()) {
@@ -190,7 +198,6 @@ function syncManagersFromTasks(done) {
 
   BX24.callBatch(batch, (res) => {
     logAction(`Ответ batch получен. Тип: ${Array.isArray(res) ? 'массив' : 'объект'}, ключей: ${Object.keys(res).length}`, 'info');
-
     const found = [];
 
     need.forEach((i, idx) => {
@@ -207,7 +214,6 @@ function syncManagersFromTasks(done) {
       }
       const taskData = r.data();
       const task = (taskData && taskData.task) || taskData || {};
-
       const accomplices = task.accomplices || [];
       const status = task.status;
       const responsibleId = task.responsibleId;
@@ -259,6 +265,8 @@ function syncManagersFromTasks(done) {
 
         if (!f.item[actualFields.taskSbor]) {
           const shortDescText = cleanText(f.item[actualFields.shortDesc]) || f.item.title;
+
+          // ✅ ФИКС: CREATED_BY = админ (systemUserId), а НЕ headArr/currentUser
           const adminUserId = parseInt(settings.systemUserId) || 1;
           const responsibleUserId = parseInt(f.mgrId);
 
