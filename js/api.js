@@ -2,7 +2,6 @@
 // МОДУЛЬ: api.js — Обёртки над BX24 API
 // ============================================================
 
-// Регистрация бота для отправки уведомлений
 function registerNotificationBot(callback) {
   const savedBotId = localStorage.getItem('notification_bot_id');
   if (savedBotId) {
@@ -31,23 +30,14 @@ function registerNotificationBot(callback) {
   });
 }
 
-// ✅ Утилита: полный URL портала (не CDN приложения)
 function getPortalOrigin() {
   try {
     if (document.referrer) return new URL(document.referrer).origin;
   } catch (e) {}
-  try {
-    if (window.top && window.top.location && window.top.location.origin &&
-        window.top.location.origin !== 'null' &&
-        !window.top.location.origin.includes('bitrix24.net') === false) {
-      // fallback ниже
-    }
-  } catch (e) {}
-  // Fallback: из appBaseUrl вырезаем домен портала, если он там есть
   return window.location.origin;
 }
 
-// ✅ ИСПРАВЛЕНО: уведомления с кликабельными ссылками
+// ✅ ИСПРАВЛЕНО: уведомления с рабочими ссылками
 function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl) {
   userId = parseInt(userId);
   if (!userId) return;
@@ -56,13 +46,14 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl) {
   const fullTaskUrl = taskUrl ? (taskUrl.startsWith('http') ? taskUrl : portalOrigin + taskUrl) : '';
   const fullItemUrl = itemUrl ? (itemUrl.startsWith('http') ? itemUrl : portalOrigin + itemUrl) : '';
 
-  // 1. Колокольчик
+  // 1. Колокольчик (im.notify) — одна ссылка через параметр link
+  const primaryLink = fullTaskUrl || fullItemUrl || '';
   BX24.callMethod('im.notify', {
     to: userId,
     message: `${title}\n${message}`,
     type: 'SYSTEM',
-    link: fullTaskUrl || fullItemUrl || '',
-    button_text: (fullTaskUrl || fullItemUrl) ? 'Открыть' : ''
+    link: primaryLink,
+    button_text: primaryLink ? 'Открыть' : ''
   }, (r) => {
     if (r.error()) {
       logAction(`im.notify (ID ${userId}) не прошёл: ` + getApiErrorMessage(r), 'error');
@@ -71,30 +62,26 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl) {
     }
   });
 
-  // 2. Сообщение в чат
-  BX24.callMethod('im.dialog.get', { USER_ID: userId }, (r) => {
-    if (r.error() || !r.data() || !r.data().id) {
-      logAction(`Диалог с ID ${userId} не найден — в чат не пишем`, 'info');
-      return;
-    }
-    let chatMessage = `[B]${title}[/B]\n${message}`;
-    if (fullItemUrl) chatMessage += `\n[URL=${fullItemUrl}]📋 Открыть закупку[/URL]`;
-    if (fullTaskUrl) chatMessage += `\n[URL=${fullTaskUrl}]✅ Открыть задачу[/URL]`;
+  // 2. Сообщение в чат (im.message.add) — с BB-кодом ссылок
+  // ✅ ИСПРАВЛЕНО: используем DIALOG_ID в формате 'user_' + userId
+  const dialogId = 'user_' + userId;
+  
+  let chatMessage = `[B]${title}[/B]\n${message}`;
+  if (fullItemUrl) chatMessage += `\n[URL=${fullItemUrl}]📋 Открыть закупку[/URL]`;
+  if (fullTaskUrl) chatMessage += `\n[URL=${fullTaskUrl}]✅ Открыть задачу[/URL]`;
 
-    BX24.callMethod('im.message.add', {
-      DIALOG_ID: r.data().id,
-      MESSAGE: chatMessage
-    }, (mr) => {
-      if (mr.error()) {
-        logAction(`im.message.add не прошёл: ` + getApiErrorMessage(mr), 'error');
-      } else {
-        logAction(`Сообщение отправлено в диалог ID ${userId}`, 'success');
-      }
-    });
+  BX24.callMethod('im.message.add', {
+    DIALOG_ID: dialogId,
+    MESSAGE: chatMessage
+  }, (mr) => {
+    if (mr.error()) {
+      logAction(`im.message.add (ID ${userId}) не прошёл: ` + getApiErrorMessage(mr), 'error');
+    } else {
+      logAction(`Сообщение отправлено в чат пользователю ID ${userId}`, 'success');
+    }
   });
 }
 
-// Загрузка списка закупок
 function loadAllData() {
   if (loadAllDataInProgress) {
     logAction('Загрузка уже идёт, пропускаем повторный вызов', 'info');
@@ -102,12 +89,9 @@ function loadAllData() {
   }
   loadAllDataInProgress = true;
   logAction('Загрузка списка закупок...', 'info');
-  
   if (items.length === 0) {
     document.getElementById('app-container').innerHTML = '<div class="loading" style="grid-column: 1/-1;">Загрузка данных...</div>';
   }
-
-  // ✅ ВАЖНО: Используем '*' и 'UF_*' чтобы гарантированно получить все поля
   BX24.callMethod('crm.item.list', { entityTypeId: ENTITY_TYPE_ID, select: ['*', 'UF_*'] }, (res) => {
     loadAllDataInProgress = false;
     if (res.error()) {
@@ -117,7 +101,6 @@ function loadAllData() {
     }
     items = res.data().items || [];
     logAction(`Данные загружены. Всего записей: ${items.length}`, 'success');
-    
     syncManagersFromTasks(() => {
       render();
       handleUrlParams();
@@ -125,7 +108,6 @@ function loadAllData() {
   });
 }
 
-// Функция смены сценария
 function changeScenario(val) {
   currentScenario = val;
   localStorage.setItem('purchase_scenario', val);
@@ -139,14 +121,12 @@ function changeScenario(val) {
   showToast(`Сценарий: ${labels[val] || val}`);
 }
 
-// Автопроход сценария после создания закупки
 function runScenarioAfterCreate(itemId) {
   if (!isTestMode || currentScenario === 'none') return;
   if (scenarioRunning[itemId]) return;
   scenarioRunning[itemId] = true;
   const item = items.find(i => i.id === itemId);
   if (!item) return;
-  
   logAction(`Запуск сценария "${currentScenario}" для закупки ID ${itemId}...`, 'info');
   const secDef = fieldDefs[actualFields.section];
   const dirDef = fieldDefs[actualFields.direction];
@@ -155,22 +135,18 @@ function runScenarioAfterCreate(itemId) {
   const secText = firstSec && secDef ? (secDef.items.find(i => String(i.ID) === String(firstSec)) || {}).VALUE : '';
   const dirText = firstDir && dirDef ? (dirDef.items.find(i => String(i.ID) === String(firstDir)) || {}).VALUE : '';
   const combinedText = (secText && dirText) ? `${secText} / ${dirText}` : secText;
-  
   let targetStageName = '';
   if (currentScenario === 'upload') targetStageName = 'загрузка';
   else if (currentScenario === 'approval') targetStageName = 'согласование';
   else if (currentScenario === 'full') targetStageName = 'сбор данных';
-  
   const targetStageId = getStageIdByName(targetStageName);
   if (!targetStageId) {
     logAction(`Не найдена стадия "${targetStageName}" для сценария`, 'error');
     return;
   }
-  
   const fields = { stageId: targetStageId };
   if (actualFields.manager && fieldDefs[actualFields.manager]) fields[actualFields.manager] = [String(currentUser.ID)];
   if (actualFields.deptHead && fieldDefs[actualFields.deptHead]) fields[actualFields.deptHead] = [String(currentUser.ID)];
-  
   if (currentScenario === 'upload' || currentScenario === 'approval') {
     if (firstSec) fields[actualFields.section] = firstSec;
     if (firstDir) fields[actualFields.direction] = firstDir;
@@ -179,7 +155,6 @@ function runScenarioAfterCreate(itemId) {
       fields[actualFields.amountProduct] = 10000;
     }
   }
-  
   logAction(`Автопроход до стадии "${targetStageName}" (ID: ${targetStageId})...`, 'info');
   BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: parseInt(itemId), fields: fields }, (res) => {
     if (res.error()) {
@@ -192,7 +167,6 @@ function runScenarioAfterCreate(itemId) {
   });
 }
 
-// Синхронизация менеджера из соисполнителей задачи
 function syncManagersFromTasks(done) {
   done = done || function () {};
 
@@ -285,9 +259,6 @@ function syncManagersFromTasks(done) {
 
         if (!f.item[actualFields.taskSbor]) {
           const shortDescText = cleanText(f.item[actualFields.shortDesc]) || f.item.title;
-
-          // 🔥 ГЛАВНОЕ ИСПРАВЛЕНИЕ: Создаем задачу от имени АДМИНИСТРАТОРА (systemUserId), 
-          // чтобы избежать ERROR_CORE при создании задачи обычным сотрудником.
           const adminUserId = parseInt(settings.systemUserId) || 1;
           const responsibleUserId = parseInt(f.mgrId);
 
@@ -300,7 +271,7 @@ function syncManagersFromTasks(done) {
           const taskPayload = {
             TITLE: '[🛒] Сбор данных и расчет по закупке',
             RESPONSIBLE_ID: responsibleUserId,
-            CREATED_BY: adminUserId, // <-- Жёстко задаем админа как постановщика
+            CREATED_BY: adminUserId,
             DESCRIPTION: `Необходимо собрать данные и рассчитать стоимость по закупке "${shortDescText}".`,
             STATUS: 2,
             ADD_IN_REPORT: 'Y'
@@ -349,7 +320,6 @@ function syncManagersFromTasks(done) {
   });
 }
 
-// Обработка параметров из URL
 function handleUrlParams() {
   const urlParams = new URLSearchParams(window.location.search);
   const action = urlParams.get('action');
@@ -397,7 +367,6 @@ function getNextStageId(currentStageId) {
   return null;
 }
 
-// Автообновление при возврате во вкладку (с троттлингом)
 (function setupAutoRefreshOnFocus() {
   let lastSyncTime = 0;
   const MIN_INTERVAL = 15000;

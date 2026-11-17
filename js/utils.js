@@ -66,7 +66,6 @@ function cleanText(text) {
 // 🔥 ВОССТАНОВЛЕННЫЕ ФУНКЦИИ
 // ============================================================
 
-// Расчёт итоговой суммы закупки (товары + доставка)
 function calculateTotalAmount(item) {
   if (!item) return 0;
   const productField = actualFields.amountProduct;
@@ -76,7 +75,6 @@ function calculateTotalAmount(item) {
   return product + delivery;
 }
 
-// Форматирование суммы в деньги (12300 → "12 300 ₽")
 function formatMoney(amount) {
   if (amount === undefined || amount === null || isNaN(amount)) return '0 ₽';
   return Number(amount).toLocaleString('ru-RU', {
@@ -85,12 +83,10 @@ function formatMoney(amount) {
   }) + ' ₽';
 }
 
-// 🔥 cleanMoney — алиас для formatMoney (используется в openViewModal)
 function cleanMoney(amount) {
   return formatMoney(amount);
 }
 
-// Получение отображаемого значения поля (enum/список или отдел)
 function getDisplayValue(item, fieldCode, type) {
   if (!fieldCode || !item || item[fieldCode] === undefined || item[fieldCode] === null) return '—';
   const raw = item[fieldCode];
@@ -112,7 +108,6 @@ function getDisplayValue(item, fieldCode, type) {
   return String(val);
 }
 
-// Форматирование дедлайна с цветовой подсветкой
 function getDeadlineDisplay(dateStr) {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
@@ -132,7 +127,6 @@ function getDeadlineDisplay(dateStr) {
   return dateText;
 }
 
-// Извлечение имени файла и URL из файлового UF-поля
 function getFileInfo(item, fileFieldCode) {
   if (!fileFieldCode || !item || !item[fileFieldCode]) return null;
   const raw = item[fileFieldCode];
@@ -145,10 +139,9 @@ function getFileInfo(item, fileFieldCode) {
 }
 
 // ============================================================
-// 🔥 ПАНЕЛЬ ЛОГОВ (умная инициализация — не создаёт дубль)
+// 🔥 ПАНЕЛЬ ЛОГОВ (только логика, без создания кнопки)
 // ============================================================
 
-// Функция переключения панели логов (вызывается и старой, и новой кнопкой)
 function toggleLogPanel() {
   const panel = document.getElementById('app-logs');
   if (!panel) return;
@@ -156,7 +149,6 @@ function toggleLogPanel() {
   const isVisible = panel.style.display === 'block';
   panel.style.display = isVisible ? 'none' : 'block';
 
-  // Обновляем фон ЛЮБОЙ кнопки логов (и старой, и новой)
   document.querySelectorAll('#log-toggle-btn, .log-toggle-btn, [onclick*="toggleLogPanel"]').forEach(btn => {
     btn.style.background = isVisible ? '#1e293b' : '#334155';
   });
@@ -164,7 +156,7 @@ function toggleLogPanel() {
   if (!isVisible) panel.scrollTop = panel.scrollHeight;
 }
 
-// Автоинициализация панели логов — ТОЛЬКО если её ещё нет
+// Автоинициализация панели логов (только панель, без кнопки)
 (function initLogPanel() {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', buildLogPanel);
@@ -173,36 +165,9 @@ function toggleLogPanel() {
   }
 
   function buildLogPanel() {
-    // ✅ ПРОВЕРКА: если панель уже есть в DOM — не создаём дубль
+    // Создаём панель только если её нет
     if (document.getElementById('app-logs')) return;
 
-    // Кнопка-триггер
-    const btn = document.createElement('button');
-    btn.id = 'log-toggle-btn';
-    btn.className = 'log-toggle-btn';
-    btn.innerHTML = '≡';
-    btn.title = 'Открыть/закрыть панель логов';
-    btn.onclick = toggleLogPanel;
-    btn.style.cssText = `
-      position: fixed;
-      left: 20px;
-      bottom: 20px;
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      background: #1e293b;
-      color: #fff;
-      border: none;
-      font-size: 22px;
-      cursor: pointer;
-      z-index: 9998;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    `;
-
-    // Панель логов
     const panel = document.createElement('div');
     panel.id = 'app-logs';
     panel.style.cssText = `
@@ -231,7 +196,6 @@ function toggleLogPanel() {
     panel.appendChild(header);
 
     document.body.appendChild(panel);
-    document.body.appendChild(btn);
 
     document.getElementById('log-clear-btn').addEventListener('click', () => {
       const entries = panel.querySelectorAll('.log-entry');
