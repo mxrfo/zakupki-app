@@ -53,6 +53,7 @@ function getPortalDomain() {
 }
 
 // ✅ Построение ссылки, открывающей приложение ЧЕРЕЗ ПОРТАЛ (с авторизацией).
+//    tab — целевая вкладка ('my_requests' или 'inbox').
 function buildAppLink(action, itemId, tab) {
   const domain = getPortalDomain();
   if (!domain || !itemId) {
@@ -307,7 +308,6 @@ function isUserUnavailable(userId) {
   userId = String(userId);
   if (!settings.unavailableUsers) return false;
   if (settings.unavailableUsers.some(id => String(id) === userId)) return true;
-  // Дополнительно: неактивный сотрудник тоже недоступен
   const u = allUsers.find(x => String(x.ID) === userId);
   if (u && String(u.ACTIVE) === 'N') return true;
   return false;
@@ -344,7 +344,6 @@ function delegatePurchase(itemId, toUserId, note, cb) {
   const stamp = new Date().toLocaleString('ru-RU');
   const line = `[ДЕЛЕГ] ${stamp}: ${fromName} → ${toName}` + (note ? ` (${note})` : '');
 
-  // Формируем историю: существующая строка поля + новая
   const histField = actualFields.delegateHistory;
   let existing = histField && item[histField] ? String(item[histField]) : '';
   const newHist = existing ? (existing + '\n' + line) : line;
@@ -363,16 +362,13 @@ function delegatePurchase(itemId, toUserId, note, cb) {
       return;
     }
 
-    // Обновляем локально
     item[actualFields.manager] = [String(toUserId)];
     if (histField) item[histField] = newHist;
     delegateHistory[itemId] = newHist;
     try { localStorage.setItem('purchase_delegate_history_1088', JSON.stringify(delegateHistory)); } catch (e) {}
 
-    // Переназначаем задачу по сбору данных (если есть)
     const taskSborId = item[actualFields.taskSbor];
     const afterTask = function() {
-      // Уведомляем нового исполнителя
       try {
         const meta = buildPurchaseMeta(item);
         const title = 'Закупка делегирована вам: №' + meta.no + ' от ' + meta.dateStr;
@@ -406,6 +402,128 @@ function delegatePurchase(itemId, toUserId, note, cb) {
       afterTask();
     }
   });
+}
+
+// ✅ ПОЛНАЯ ОЧИСТКА ПРИ УДАЛЕНИИ ЗАКУПКИ
+// Удаляет: задачи (выбор сотрудника, сбор данных, загрузка счёта), связанные входящие счета, саму закупку.
+// Сообщения бота не удаляются (API Битрикса не позволяет), но ссылки на удалённую закупку будут вести на 404.
+function deletePurchaseWithCleanup(id, done) {
+  id = parseInt(id);
+  if (!id) {
+    logAction('deletePurchaseWithCleanup: invalid id', 'error');
+    if (done) done(false);
+    return;
+  }
+
+  const item = items.find(function(i) { return i.id === id; });
+  if (!item) {
+    logAction('deletePurchaseWithCleanup: закупка ID ' + id + ' не найдена', 'error');
+    if (done) done(false);
+    return;
+  }
+
+  logAction('Удаление закупки ID ' + id + ' с полной очисткой...', 'info');
+
+  var tasksToDelete = [];
+  if (actualFields.taskVyborSotr && item[actualFields.taskVyborSotr]) {
+    var tvs = String(item[actualFields.taskVyborSotr]);
+    if (/^\d+$/.test(tvs)) tasksToDelete.push(parseInt(tvs));
+  }
+  if (actualFields.taskSbor && item[actualFields.taskSbor]) {
+    var tsb = String(item[actualFields.taskSbor]);
+    if (/^\d+$/.test(tsb)) tasksToDelete.push(parseInt(tsb));
+  }
+  if (actualFields.taskZagruz && item[actualFields.taskZagruz]) {
+    var tzg = String(item[actualFields.taskZagruz]);
+    if (/^\d+$/.test(tzg)) tasksToDelete.push(parseInt(tzg));
+  }
+
+  var totalSteps = 1 + (tasksToDelete.length > 0 ? 1 : 0) + (INVOICE_ENTITY_ID ? 1 : 0);
+  var completed = 0;
+
+  function stepDone(ok, msg) {
+    completed++;
+    if (!ok) logAction('deletePurchaseWithCleanup: ' + msg, 'error');
+    else logAction('deletePurchaseWithCleanup: ' + msg, 'success');
+    if (completed >= totalSteps) {
+      BX24.callMethod('crm.item.delete', { entityTypeId: ENTITY_TYPE_ID, id: id }, function(res) {
+        if (res.error()) {
+          logAction('Ошибка удаления закупки ID ' + id + ': ' + getApiErrorMessage(res), 'error');
+          if (done) done(false);
+        } else {
+          logAction('Закупка ID ' + id + ' удалена', 'success');
+          items = items.filter(function(i) { return i.id !== id; });
+          render();
+          if (done) done(true);
+        }
+      });
+    }
+  }
+
+  // Шаг 1: удаление задач
+  if (tasksToDelete.length > 0) {
+    logAction('Удаление задач: ' + tasksToDelete.join(', '), 'info');
+    var taskBatch = {};
+    tasksToDelete.forEach(function(tid, idx) {
+      taskBatch['t' + idx] = ['tasks.task.delete', { taskId: tid }];
+    });
+    BX24.callBatch(taskBatch, function(res) {
+      var allOk = true;
+      tasksToDelete.forEach(function(tid, idx) {
+        var r = res['t' + idx];
+        if (r && r.error && r.error()) {
+          logAction('Ошибка удаления задачи ' + tid + ': ' + getApiErrorMessage(r), 'error');
+          allOk = false;
+        } else {
+          logAction('Задача ' + tid + ' удалена', 'success');
+        }
+      });
+      stepDone(allOk, 'Задачи удалены: ' + tasksToDelete.join(', '));
+    });
+  } else {
+    stepDone(true, 'Нет задач для удаления');
+  }
+
+  // Шаг 2: поиск и удаление связанных входящих счетов
+  if (INVOICE_ENTITY_ID) {
+    logAction('Поиск связанных входящих счетов для закупки ID ' + id + '...', 'info');
+    BX24.callMethod('crm.item.list', {
+      entityTypeId: INVOICE_ENTITY_ID,
+      filter: { title: '%№' + id + '%' },
+      select: ['id', 'title']
+    }, function(res) {
+      if (res.error()) {
+        logAction('Ошибка поиска входящих счетов: ' + getApiErrorMessage(res), 'error');
+        stepDone(false, 'Ошибка поиска входящих счетов');
+        return;
+      }
+      var invItems = res.data().items || [];
+      if (invItems.length === 0) {
+        stepDone(true, 'Нет связанных входящих счетов');
+        return;
+      }
+      logAction('Найдено входящих счетов: ' + invItems.length, 'info');
+      var invBatch = {};
+      invItems.forEach(function(inv, idx) {
+        invBatch['i' + idx] = ['crm.item.delete', { entityTypeId: INVOICE_ENTITY_ID, id: inv.id }];
+      });
+      BX24.callBatch(invBatch, function(invRes) {
+        var allOk = true;
+        invItems.forEach(function(inv, idx) {
+          var r = invRes['i' + idx];
+          if (r && r.error && r.error()) {
+            logAction('Ошибка удаления входящего счета ' + inv.id + ': ' + getApiErrorMessage(r), 'error');
+            allOk = false;
+          } else {
+            logAction('Входящий счет ' + inv.id + ' (' + inv.title + ') удалён', 'success');
+          }
+        });
+        stepDone(allOk, 'Входящие счета удалены: ' + invItems.length + ' шт.');
+      });
+    });
+  } else {
+    stepDone(true, 'INVOICE_ENTITY_ID не задан — пропуск');
+  }
 }
 
 // Загрузка списка закупок
