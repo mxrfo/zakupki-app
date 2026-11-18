@@ -3,9 +3,9 @@ const path = require('path');
 const archiver = require('archiver');
 
 // === НАСТРОЙКИ ===
-const INPUT_HTML = 'index.html';
+const INPUT_HTML = 'src/index.html';
 const OUTPUT_HTML = 'dist/index.html';
-const CSS_FILE = 'css/styles.css';
+const CSS_FILE = 'src/css/styles.css';
 
 // Генерируем временную метку для имени файла: YYYYMMDD_HHMMSS
 const now = new Date();
@@ -21,21 +21,22 @@ const ZIP_OUTPUT = `dist/releases/app_${timestamp}.zip`;
 
 // ВАЖНО: порядок подключения скриптов!
 // Зависимости: config → state → utils → bot → api → cache → roles → dragdrop → render → modals → forms → actions → settings → init
+// Файлы сгруппированы по папкам (core/api/ui/logic), но ПОРЯДОК сборки задаётся именно этим массивом.
 const JS_FILES_ORDER = [
-  'js/config.js',
-  'js/state.js',
-  'js/utils.js',
-  'js/bot.js',
-  'js/api.js',
-  'js/cache.js',
-  'js/roles.js',
-  'js/dragdrop.js',
-  'js/render.js',
-  'js/modals.js',
-  'js/forms.js',
-  'js/actions.js',
-  'js/settings.js',
-  'js/init.js'
+  'src/js/core/config.js',
+  'src/js/core/state.js',
+  'src/js/core/utils.js',
+  'src/js/api/bot.js',
+  'src/js/api/api.js',
+  'src/js/api/cache.js',
+  'src/js/logic/roles.js',
+  'src/js/ui/dragdrop.js',
+  'src/js/ui/render.js',
+  'src/js/ui/modals.js',
+  'src/js/ui/forms.js',
+  'src/js/logic/actions.js',
+  'src/js/logic/settings.js',
+  'src/js/core/init.js'
 ];
 
 // === ФУНКЦИИ ===
@@ -83,8 +84,8 @@ function build() {
     '<style>\n' + css + '\n</style>'
   );
 
-  // 5. Удаляем все <script src="js/..."> теги
-  html = html.replace(/<script\s+src=["']js\/[^"']+["'][^>]*><\/script>/gi, '');
+  // 5. Удаляем все <script src="..."> теги (включая подпапки src/js/core, src/js/api и т.д.)
+  html = html.replace(/<script\s+src=["'][^"']+["'][^>]*><\/script>/gi, '');
 
   // 6. Вставляем объединённый JS перед </body>
   html = html.replace(
@@ -106,11 +107,11 @@ function build() {
 
   // 8. Создаем ZIP-архив с версионированием для загрузки в Битрикс24
   console.log('\n🗜️  Начинаю создание ZIP-архива с временной меткой...');
-  ensureDir('dist/releases'); // Создаём папку для истории сборок
-  
+  ensureDir('dist/releases');
+
   const output = fs.createWriteStream(ZIP_OUTPUT);
   const archive = archiver('zip', {
-    zlib: { level: 9 } // Максимальное сжатие
+    zlib: { level: 9 }
   });
 
   output.on('close', function() {
@@ -124,10 +125,7 @@ function build() {
   });
 
   archive.pipe(output);
-  
-  // Добавляем файл index.html в корень архива строго под именем index.html
   archive.file(OUTPUT_HTML, { name: 'index.html' });
-
   archive.finalize();
 }
 
