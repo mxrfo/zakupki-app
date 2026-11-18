@@ -148,9 +148,9 @@ ${shortDescText}`,
         const taskId = taskRes.data().task.id;
         logAction(`Задача для руководителя создана (ID: ${taskId})`, 'success');
 
-        // ✅ Уведомление руководителю: карточка «выбрать исполнителя» (без упоминания задачи), кнопка «Открыть закупку» → inbox
+        // ✅ Уведомление руководителю: карточка + кнопки «Открыть закупку» (my_requests) и «Открыть задачу»
         try {
-          notifySelectExecutor(headIdNum, item);
+          notifySelectExecutor(headIdNum, item, taskId);
         } catch (e) {
           logAction('Ошибка при отправке уведомления руководителю: ' + e.message, 'error');
         }

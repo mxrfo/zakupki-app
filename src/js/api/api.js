@@ -55,7 +55,7 @@ function getPortalDomain() {
 }
 
 // ✅ Построение ссылки, открывающей приложение ЧЕРЕЗ ПОРТАЛ (с авторизацией).
-//    tab — целевая вкладка (по умолчанию не добавляется; в уведомлениях ставим 'inbox').
+//    tab — целевая вкладка ('my_requests' или 'inbox').
 function buildAppLink(action, itemId, tab) {
   const domain = getPortalDomain();
   if (!domain || !itemId) return '';
@@ -138,30 +138,38 @@ function sendBotNotification(userId, title, message, links, cb) {
   });
 }
 
-// ✅ Уведомление №1: руководителю — выбрать исполнителя (без упоминания задачи)
-function notifySelectExecutor(userId, item) {
+// ✅ Уведомление №1: руководителю — выбрать исполнителя (вкладка "Мои запросы" + ссылка на задачу)
+function notifySelectExecutor(userId, item, taskId) {
   userId = parseInt(userId);
   if (!userId || !item) return;
   const meta = buildPurchaseMeta(item);
   const title = 'Необходимо выбрать исполнителя для закупки №' + meta.no + ' от ' + meta.dateStr;
   const message = formatPurchaseBody(meta);
+  
+  const domain = getPortalDomain();
+  const taskLink = taskId ? (domain ? domain + '/company/personal/user/' + userId + '/tasks/task/view/' + taskId + '/' : '') : '';
+  
   const links = [
-    { text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'inbox') }
-  ].filter(function(l) { return l.url; });
+    { text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'my_requests') },
+    taskLink ? { text: '✅ Открыть задачу', url: taskLink } : null
+  ].filter(function(l) { return l && l.url; });
+  
   sendBotNotification(userId, title, message, links);
 }
 
-// ✅ Уведомление №2: менеджеру — собрать данные (без «Начать выполнение», с кнопкой заполнения)
+// ✅ Уведомление №2: менеджеру — собрать данные (вкладка "Входящие", без ссылки на задачу)
 function notifyCollectData(userId, item) {
   userId = parseInt(userId);
   if (!userId || !item) return;
   const meta = buildPurchaseMeta(item);
   const title = 'Необходимо собрать данные и рассчитать стоимость по закупке №' + meta.no + ' от ' + meta.dateStr;
   const message = formatPurchaseBody(meta);
+  
   const links = [
     { text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'inbox') },
     { text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }
-  ].filter(function(l) { return l.url; });
+  ].filter(function(l) { return l && l.url; });
+  
   sendBotNotification(userId, title, message, links);
 }
 
@@ -512,10 +520,10 @@ function syncManagersFromTasks(done) {
               logAction('Задача менеджеру создана (ID: ' + newTaskId + '), постановщик: админ ' + createdBy + ', наблюдатель: ' + (headId || 'нет'), 'success');
 
               try {
-                // ✅ Уведомление менеджеру: карточка + кнопки «Открыть закупку» (inbox) и «Заполнить данные»
-                notifyCollectData(parseInt(f.mgrId), f.item);
+                // ✅ Уведомление руководителю: карточка + кнопки «Открыть закупку» (my_requests) и «Открыть задачу»
+                notifySelectExecutor(headId, f.item, newTaskId);
               } catch (e) {
-                logAction('Ошибка при отправке уведомления менеджеру: ' + e.message, 'error');
+                logAction('Ошибка при отправке уведомления руководителю: ' + e.message, 'error');
               }
 
               BX24.callMethod('crm.item.update', {
@@ -558,7 +566,7 @@ function handleUrlParams() {
         if (items.length > 0) {
           var id = parseInt(itemId);
 
-          // ✅ Переключаем целевую вкладку (например, Входящие) ДО открытия модалки
+          // ✅ Переключаем целевую вкладку (например, Входящие или Мои запросы) ДО открытия модалки
           if (tab) {
             try {
               if (typeof switchTab === 'function') switchTab(tab);
