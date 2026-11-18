@@ -1,5 +1,21 @@
 // js/render.js — Рендер карточек и таблицы
 
+// ✅ Удаление закупки с полной очисткой (задачи, счета, сама закупка)
+function deleteItem(id, event) {
+  if (event) event.stopPropagation();
+  if (!confirm('Удалить закупку и все связанные данные (задачи, входящие счета)? Это действие необратимо.')) return;
+  
+  logAction(`Инициализация удаления закупки ID ${id}...`, 'info');
+  
+  deletePurchaseWithCleanup(id, function(ok) {
+    if (ok) {
+      showToast('Закупка и связанные данные успешно удалены', 'success');
+    } else {
+      showToast('Ошибка при удалении закупки', 'error');
+    }
+  });
+}
+
 // Переключение вкладок
 function switchTab(tab) {
   activeTab = tab;
