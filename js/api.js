@@ -2,35 +2,6 @@
 // МОДУЛЬ: api.js — Обёртки над BX24 API
 // ============================================================
 
-// Регистрация бота для отправки уведомлений
-function registerNotificationBot(callback) {
-  const savedBotId = localStorage.getItem('notification_bot_id');
-  if (savedBotId) {
-    logAction(`Бот уже зарегистрирован (ID: ${savedBotId})`, 'info');
-    if (callback) callback(savedBotId);
-    return;
-  }
-  logAction('Регистрация бота для уведомлений...', 'info');
-  BX24.callMethod('im.bot.register', {
-    CODE: 'purchase_app_bot',
-    TYPE: 'R',
-    NAME: 'Альтернатива (Закупки)',
-    FIRST_NAME: 'Альтернатива',
-    LAST_NAME: 'Бот',
-    CONTEXT: 'PURCHASE_APP'
-  }, (res) => {
-    if (res.error()) {
-      logAction('Ошибка регистрации бота: ' + getApiErrorMessage(res), 'error');
-      if (callback) callback(null);
-      return;
-    }
-    const botId = res.data().user_id;
-    localStorage.setItem('notification_bot_id', botId);
-    logAction(`Бот успешно зарегистрирован (ID: ${botId})`, 'success');
-    if (callback) callback(botId);
-  });
-}
-
 // ✅ Утилита: полный URL портала (надежное определение домена)
 function getPortalOrigin() {
   const m = window.location.search.match(/[?&]DOMAIN=([^&]+)/);
@@ -46,7 +17,7 @@ function getPortalOrigin() {
   return window.location.origin;
 }
 
-// ✅ ИСПРАВЛЕНО: уведомления с кликабельными гиперссылками через BB-коды
+// ✅ ОБНОВЛЕНО: уведомления теперь гарантированно приходят в чат через бота
 function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, linkText = 'Начать выполнение') {
   userId = parseInt(userId);
   if (!userId) return;
@@ -55,48 +26,36 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, l
   const fullTaskUrl = taskUrl ? (taskUrl.startsWith('http') ? taskUrl : portalOrigin + taskUrl) : '';
   const fullItemUrl = itemUrl ? (itemUrl.startsWith('http') ? itemUrl : portalOrigin + itemUrl) : '';
 
-  // 1. Колокольчик: текст с BB-кодами для гиперссылок
-  let notifyText = `${title}\n${message}`;
-  if (fullTaskUrl) {
-    notifyText += `\n[url=${fullTaskUrl}]${linkText}[/url]`;
-  } else if (fullItemUrl) {
-    notifyText += `\n[url=${fullItemUrl}]Открыть закупку[/url]`;
-  }
+  const links = [
+    fullItemUrl ? { text: '📋 Открыть закупку', url: fullItemUrl } : null,
+    fullTaskUrl ? { text: '✅ ' + linkText, url: taskUrl } : null
+  ].filter(function(l) { return l !== null; });
 
-  BX24.callMethod('im.notify', {
-    to: userId,
-    message: notifyText,
-    type: 'SYSTEM',
-    link: fullTaskUrl || fullItemUrl || '',
-    button_text: (fullTaskUrl || fullItemUrl) ? 'Открыть' : ''
-  }, (r) => {
-    if (r.error()) {
-      logAction(`im.notify (ID ${userId}) не прошёл: ` + getApiErrorMessage(r), 'error');
-    } else {
-      logAction(`Колокольчик отправлен пользователю ID ${userId}`, 'success');
-    }
-  });
-
-  // 2. Сообщение в чат — только если диалог УЖЕ существует.
-  BX24.callMethod('im.dialog.get', { USER_ID: userId }, (r) => {
-    if (r.error() || !r.data() || !r.data().id) {
-      logAction(`Диалог с ID ${userId} не найден — в чат не пишем (колокольчика достаточно)`, 'info');
-      return;
-    }
-    let chatMessage = `[B]${title}[/B]\n${message}`;
-    if (fullItemUrl) chatMessage += `\n[URL=${fullItemUrl}]📋 Открыть закупку[/URL]`;
-    if (fullTaskUrl) chatMessage += `\n[URL=${fullTaskUrl}]✅ ${linkText}[/URL]`;
-
-    BX24.callMethod('im.message.add', {
-      DIALOG_ID: r.data().id,
-      MESSAGE: chatMessage
-    }, (mr) => {
-      if (mr.error()) {
-        logAction(`im.message.add (ID ${userId}) не прошёл: ` + getApiErrorMessage(mr), 'error');
-      } else {
-        logAction(`Сообщение отправлено в существующий диалог с ID ${userId}`, 'success');
+  // 1. Основная отправка через чат-бота (создаст ЛС, если её нет, и даст push/unread)
+  notifyUserViaBot(userId, title, message, links, function(success) {
+    if (!success) {
+      // 2. Fallback: если бот по какой-то причине не сработал, пробуем старый метод (колокольчик)
+      logAction('Fallback: отправка через im.notify', 'info');
+      
+      let notifyText = title + '\n' + message;
+      if (fullTaskUrl) {
+        notifyText += '\n[url=' + fullTaskUrl + ']' + linkText + '[/url]';
+      } else if (fullItemUrl) {
+        notifyText += '\n[url=' + fullItemUrl + ']Открыть закупку[/url]';
       }
-    });
+
+      BX24.callMethod('im.notify', {
+        to: userId,
+        message: notifyText,
+        type: 'SYSTEM',
+        link: fullTaskUrl || fullItemUrl || '',
+        button_text: (fullTaskUrl || fullItemUrl) ? 'Открыть' : ''
+      }, function(r) {
+        if (r.error()) {
+          logAction('im.notify (ID ' + userId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
+        }
+      });
+    }
   });
 }
 
@@ -111,16 +70,16 @@ function loadAllData() {
   if (items.length === 0) {
     document.getElementById('app-container').innerHTML = '<div class="loading" style="grid-column: 1/-1;">Загрузка данных...</div>';
   }
-  BX24.callMethod('crm.item.list', { entityTypeId: ENTITY_TYPE_ID, select: ['*', 'UF_*'] }, (res) => {
+  BX24.callMethod('crm.item.list', { entityTypeId: ENTITY_TYPE_ID, select: ['*', 'UF_*'] }, function(res) {
     loadAllDataInProgress = false;
     if (res.error()) {
       logAction('Ошибка загрузки данных: ' + getApiErrorMessage(res), 'error');
-      document.getElementById('app-container').innerHTML = `<div class="error-box">Ошибка загрузки: ${getApiErrorMessage(res)}</div>`;
+      document.getElementById('app-container').innerHTML = '<div class="error-box">Ошибка загрузки: ' + getApiErrorMessage(res) + '</div>';
       return;
     }
     items = res.data().items || [];
-    logAction(`Данные загружены. Всего записей: ${items.length}`, 'success');
-    syncManagersFromTasks(() => {
+    logAction('Данные загружены. Всего записей: ' + items.length, 'success');
+    syncManagersFromTasks(function() {
       render();
       handleUrlParams();
     });
@@ -131,14 +90,14 @@ function loadAllData() {
 function changeScenario(val) {
   currentScenario = val;
   localStorage.setItem('purchase_scenario', val);
-  logAction(`Сценарий изменён: ${val}`, 'info');
-  const labels = {
+  logAction('Сценарий изменён: ' + val, 'info');
+  var labels = {
     none: 'Обычный тест',
     full: 'Полный проход (все роли)',
     upload: 'Тест загрузки счёта',
     approval: 'Тест согласования'
   };
-  showToast(`Сценарий: ${labels[val] || val}`);
+  showToast('Сценарий: ' + (labels[val] || val));
 }
 
 // Автопроход сценария после создания закупки
@@ -146,28 +105,35 @@ function runScenarioAfterCreate(itemId) {
   if (!isTestMode || currentScenario === 'none') return;
   if (scenarioRunning[itemId]) return;
   scenarioRunning[itemId] = true;
-  const item = items.find(i => i.id === itemId);
+  var item = items.find(function(i) { return i.id === itemId; });
   if (!item) return;
-  logAction(`Запуск сценария "${currentScenario}" для закупки ID ${itemId}...`, 'info');
-  const secDef = fieldDefs[actualFields.section];
-  const dirDef = fieldDefs[actualFields.direction];
-  const firstSec = secDef && secDef.items && secDef.items.length > 0 ? secDef.items[0].ID : null;
-  const firstDir = dirDef && dirDef.items && dirDef.items.length > 0 ? dirDef.items[0].ID : null;
-  const secText = firstSec && secDef ? (secDef.items.find(i => String(i.ID) === String(firstSec)) || {}).VALUE : '';
-  const dirText = firstDir && dirDef ? (dirDef.items.find(i => String(i.ID) === String(firstDir)) || {}).VALUE : '';
-  const combinedText = (secText && dirText) ? `${secText} / ${dirText}` : secText;
-  let targetStageName = '';
+  
+  logAction('Запуск сценария "' + currentScenario + '" для закупки ID ' + itemId + '...', 'info');
+  
+  var secDef = fieldDefs[actualFields.section];
+  var dirDef = fieldDefs[actualFields.direction];
+  var firstSec = secDef && secDef.items && secDef.items.length > 0 ? secDef.items[0].ID : null;
+  var firstDir = dirDef && dirDef.items && dirDef.items.length > 0 ? dirDef.items[0].ID : null;
+  
+  var secText = firstSec && secDef ? (secDef.items.find(function(i) { return String(i.ID) === String(firstSec); }) || {}).VALUE : '';
+  var dirText = firstDir && dirDef ? (dirDef.items.find(function(i) { return String(i.ID) === String(firstDir); }) || {}).VALUE : '';
+  var combinedText = (secText && dirText) ? (secText + ' / ' + dirText) : secText;
+  
+  var targetStageName = '';
   if (currentScenario === 'upload') targetStageName = 'загрузка';
   else if (currentScenario === 'approval') targetStageName = 'согласование';
   else if (currentScenario === 'full') targetStageName = 'сбор данных';
-  const targetStageId = getStageIdByName(targetStageName);
+  
+  var targetStageId = getStageIdByName(targetStageName);
   if (!targetStageId) {
-    logAction(`Не найдена стадия "${targetStageName}" для сценария`, 'error');
+    logAction('Не найдена стадия "' + targetStageName + '" для сценария', 'error');
     return;
   }
-  const fields = { stageId: targetStageId };
+  
+  var fields = { stageId: targetStageId };
   if (actualFields.manager && fieldDefs[actualFields.manager]) fields[actualFields.manager] = [String(currentUser.ID)];
   if (actualFields.deptHead && fieldDefs[actualFields.deptHead]) fields[actualFields.deptHead] = [String(currentUser.ID)];
+  
   if (currentScenario === 'upload' || currentScenario === 'approval') {
     if (firstSec) fields[actualFields.section] = firstSec;
     if (firstDir) fields[actualFields.direction] = firstDir;
@@ -176,13 +142,14 @@ function runScenarioAfterCreate(itemId) {
       fields[actualFields.amountProduct] = 10000;
     }
   }
-  logAction(`Автопроход до стадии "${targetStageName}" (ID: ${targetStageId})...`, 'info');
-  BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: parseInt(itemId), fields: fields }, (res) => {
+  
+  logAction('Автопроход до стадии "' + targetStageName + '" (ID: ' + targetStageId + ')...', 'info');
+  BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: parseInt(itemId), fields: fields }, function(res) {
     if (res.error()) {
       logAction('Ошибка автопрохода сценария: ' + getApiErrorMessage(res), 'error');
     } else {
-      logAction(`Сценарий "${currentScenario}" выполнен`, 'success');
-      showToast(`Сценарий: закупка на стадии "${targetStageName}"`);
+      logAction('Сценарий "' + currentScenario + '" выполнен', 'success');
+      showToast('Сценарий: закупка на стадии "' + targetStageName + '"');
       loadAllData();
     }
   });
@@ -192,56 +159,56 @@ function runScenarioAfterCreate(itemId) {
 function syncManagersFromTasks(done) {
   done = done || function () {};
 
-  const need = items.filter(i => {
+  var need = items.filter(function(i) {
     if (syncManagersInProgress[i.id]) return false;
-    const mgr = i[actualFields.manager];
-    const has = Array.isArray(mgr) ? mgr.length > 0 : !!mgr;
-    const taskId = i[actualFields.taskVyborSotr];
+    var mgr = i[actualFields.manager];
+    var has = Array.isArray(mgr) ? mgr.length > 0 : !!mgr;
+    var taskId = i[actualFields.taskVyborSotr];
     return !has && taskId && String(taskId).match(/^\d+$/);
   });
 
   if (need.length === 0) { done(); return; }
 
-  need.forEach(i => { syncManagersInProgress[i.id] = true; });
-  logAction(`Проверяем соисполнителей задач для ${need.length} закупки(ок)...`, 'info');
+  need.forEach(function(i) { syncManagersInProgress[i.id] = true; });
+  logAction('Проверяем соисполнителей задач для ' + need.length + ' закупки(ок)...', 'info');
 
-  const batch = {};
-  need.forEach(i => {
+  var batch = {};
+  need.forEach(function(i) {
     batch['t' + i.id] = ['tasks.task.get', { taskId: parseInt(i[actualFields.taskVyborSotr]) }];
   });
 
-  BX24.callBatch(batch, (res) => {
-    logAction(`Ответ batch получен. Тип: ${Array.isArray(res) ? 'массив' : 'объект'}, ключей: ${Object.keys(res).length}`, 'info');
+  BX24.callBatch(batch, function(res) {
+    logAction('Ответ batch получен. Тип: ' + (Array.isArray(res) ? 'массив' : 'объект') + ', ключей: ' + Object.keys(res).length, 'info');
 
-    const found = [];
+    var found = [];
 
-    need.forEach((i, idx) => {
-      const r = (res['t' + i.id]) || (Array.isArray(res) ? res[idx] : null);
+    need.forEach(function(i, idx) {
+      var r = (res['t' + i.id]) || (Array.isArray(res) ? res[idx] : null);
       if (!r) {
-        logAction(`Batch: нет ответа по ключу t${i.id} (закупка ID ${i.id})`, 'error');
+        logAction('Batch: нет ответа по ключу t' + i.id + ' (закупка ID ' + i.id + ')', 'error');
         syncManagersInProgress[i.id] = false;
         return;
       }
       if (r.error && r.error()) {
-        logAction(`Не удалось получить задачу для закупки ID ${i.id}: ` + getApiErrorMessage(r), 'error');
+        logAction('Не удалось получить задачу для закупки ID ' + i.id + ': ' + getApiErrorMessage(r), 'error');
         syncManagersInProgress[i.id] = false;
         return;
       }
-      const taskData = r.data();
-      const task = (taskData && taskData.task) || taskData || {};
+      var taskData = r.data();
+      var task = (taskData && taskData.task) || taskData || {};
 
-      const accomplices = task.accomplices || [];
-      const status = task.status;
-      const responsibleId = task.responsibleId;
+      var accomplices = task.accomplices || [];
+      var status = task.status;
+      var responsibleId = task.responsibleId;
 
-      logAction(`Задача ${i[actualFields.taskVyborSotr]} (закупка ${i.id}): accomplices=${JSON.stringify(accomplices)}, status=${status}, responsibleId=${responsibleId}`, 'info');
+      logAction('Задача ' + i[actualFields.taskVyborSotr] + ' (закупка ' + i.id + '): accomplices=' + JSON.stringify(accomplices) + ', status=' + status + ', responsibleId=' + responsibleId, 'info');
 
-      const isCompleted = String(status) === '5';
+      var isCompleted = String(status) === '5';
 
       if (accomplices.length > 0) {
         found.push({ item: i, mgrId: String(accomplices[0]) });
       } else if (isCompleted && responsibleId) {
-        logAction(`Задача завершена без соисполнителей — используем ответственного ${responsibleId}`, 'info');
+        logAction('Задача завершена без соисполнителей — используем ответственного ' + responsibleId, 'info');
         found.push({ item: i, mgrId: String(responsibleId) });
       } else {
         syncManagersInProgress[i.id] = false;
@@ -250,59 +217,61 @@ function syncManagersFromTasks(done) {
 
     if (found.length === 0) { done(); return; }
 
-    let pending = found.length;
-    const finish = (itemId) => {
+    var pending = found.length;
+    var finish = function(itemId) {
       syncManagersInProgress[itemId] = false;
       pending--;
       if (pending === 0) done();
     };
 
-    found.forEach(f => {
-      const sborStageId = getStageIdByName('сбор данных');
-      const updFields = { [actualFields.manager]: [f.mgrId] };
+    found.forEach(function(f) {
+      var sborStageId = getStageIdByName('сбор данных');
+      var updFields = {};
+      updFields[actualFields.manager] = [f.mgrId];
       if (sborStageId) updFields.stageId = sborStageId;
 
-      logAction(`Запись менеджера ${userNames[f.mgrId] || f.mgrId} в закупку ID ${f.item.id}, поля: ${JSON.stringify(updFields)}`, 'info');
+      logAction('Запись менеджера ' + (userNames[f.mgrId] || f.mgrId) + ' в закупку ID ' + f.item.id + ', поля: ' + JSON.stringify(updFields), 'info');
 
       BX24.callMethod('crm.item.update', {
         entityTypeId: ENTITY_TYPE_ID,
         id: parseInt(f.item.id),
         fields: updFields
-      }, (r2) => {
+      }, function(r2) {
         if (r2.error()) {
-          logAction(`Ошибка записи менеджера для ID ${f.item.id}: ` + getApiErrorMessage(r2), 'error');
+          logAction('Ошибка записи менеджера для ID ' + f.item.id + ': ' + getApiErrorMessage(r2), 'error');
           finish(f.item.id);
           return;
         }
         f.item[actualFields.manager] = [f.mgrId];
         if (sborStageId) f.item.stageId = sborStageId;
-        logAction(`Менеджер ${userNames[f.mgrId] || f.mgrId} записан в закупку ID ${f.item.id}`, 'success');
-        if (sborStageId) logAction(`Стадия изменена на "Сбор данных" (ID: ${sborStageId})`, 'success');
+        logAction('Менеджер ' + (userNames[f.mgrId] || f.mgrId) + ' записан в закупку ID ' + f.item.id, 'success');
+        if (sborStageId) logAction('Стадия изменена на "Сбор данных" (ID: ' + sborStageId + ')', 'success');
 
         if (!f.item[actualFields.taskSbor]) {
-          const shortDescText = cleanText(f.item[actualFields.shortDesc]) || f.item.title;
-          const headArr = Array.isArray(f.item[actualFields.deptHead]) ? f.item[actualFields.deptHead] : (f.item[actualFields.deptHead] ? [f.item[actualFields.deptHead]] : []);
-          const createdBy = headArr.length > 0 ? parseInt(headArr[0]) : parseInt(currentUser.ID);
-          const taskPayload = {
+          var shortDescText = cleanText(f.item[actualFields.shortDesc]) || f.item.title;
+          var headArr = Array.isArray(f.item[actualFields.deptHead]) ? f.item[actualFields.deptHead] : (f.item[actualFields.deptHead] ? [f.item[actualFields.deptHead]] : []);
+          var createdBy = headArr.length > 0 ? parseInt(headArr[0]) : parseInt(currentUser.ID);
+          var taskPayload = {
             TITLE: '[🛒] Сбор данных и расчет по закупке',
             RESPONSIBLE_ID: parseInt(f.mgrId),
             CREATED_BY: createdBy,
-            DESCRIPTION: `Необходимо собрать данные и рассчитать стоимость по закупке "${shortDescText}".`,
+            DESCRIPTION: 'Необходимо собрать данные и рассчитать стоимость по закупке "' + shortDescText + '".',
             STATUS: 2,
             ADD_IN_REPORT: 'Y'
           };
-          BX24.callMethod('tasks.task.add', { fields: taskPayload }, (tr) => {
+          
+          BX24.callMethod('tasks.task.add', { fields: taskPayload }, function(tr) {
             if (!tr.error()) {
-              const newTaskId = tr.data().task.id;
-              logAction(`Задача менеджеру создана (ID: ${newTaskId})`, 'success');
+              var newTaskId = tr.data().task.id;
+              logAction('Задача менеджеру создана (ID: ' + newTaskId + ')', 'success');
 
               try {
-                const itemUrl = `${appBaseUrl}?action=view&id=${f.item.id}`;
-                const taskUrl = `/company/personal/user/${f.mgrId}/tasks/task/view/${newTaskId}/`;
+                var itemUrl = appBaseUrl + '?action=view&id=' + f.item.id;
+                var taskUrl = '/company/personal/user/' + f.mgrId + '/tasks/task/view/' + newTaskId + '/';
                 sendNotificationWithMessage(
                   parseInt(f.mgrId),
                   'Назначена задача по закупке',
-                  `Необходимо собрать данные и рассчитать стоимость по закупке: ${shortDescText}`,
+                  'Необходимо собрать данные и рассчитать стоимость по закупке: ' + shortDescText,
                   itemUrl,
                   taskUrl,
                   'Начать выполнение'
@@ -315,7 +284,7 @@ function syncManagersFromTasks(done) {
                 entityTypeId: ENTITY_TYPE_ID,
                 id: parseInt(f.item.id),
                 fields: { [actualFields.taskSbor]: String(newTaskId) }
-              }, () => {
+              }, function() {
                 f.item[actualFields.taskSbor] = String(newTaskId);
                 finish(f.item.id);
               });
@@ -329,31 +298,31 @@ function syncManagersFromTasks(done) {
         }
       });
     });
-  }, () => {
-    need.forEach(i => { syncManagersInProgress[i.id] = false; });
+  }, function() {
+    need.forEach(function(i) { syncManagersInProgress[i.id] = false; });
     done();
   });
 }
 
 // Обработка параметров из URL
 function handleUrlParams() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const action = urlParams.get('action');
-  const itemId = urlParams.get('id');
+  var urlParams = new URLSearchParams(window.location.search);
+  var action = urlParams.get('action');
+  var itemId = urlParams.get('id');
   if (itemId) {
-    let attempts = 0;
-    const maxAttempts = 20;
-    const checkItemsInterval = setInterval(() => {
+    var attempts = 0;
+    var maxAttempts = 20;
+    var checkItemsInterval = setInterval(function() {
       attempts++;
       if (items.length > 0 || attempts >= maxAttempts) {
         clearInterval(checkItemsInterval);
         if (items.length > 0) {
-          const id = parseInt(itemId);
+          var id = parseInt(itemId);
           if (action === 'fill') openDataModal(id);
           else if (action === 'upload') openUploadModal(id);
           else if (action === 'approve') openActionModal(id, 'approve_terms');
           else openViewModal(id);
-          const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+          var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
           window.history.replaceState({ path: newUrl }, '', newUrl);
         } else {
           showToast('Не удалось загрузить данные для автоматического перехода.', 'error');
@@ -364,18 +333,18 @@ function handleUrlParams() {
 }
 
 function getStageIdByName(keyword) {
-  const search = keyword.toLowerCase().replace(/ё/g, 'е');
-  let stage = spStagesSorted.find(s => s.name.toLowerCase().replace(/ё/g, 'е') === search);
+  var search = keyword.toLowerCase().replace(/ё/g, 'е');
+  var stage = spStagesSorted.find(function(s) { return s.name.toLowerCase().replace(/ё/g, 'е') === search; });
   if (stage) return stage.id;
-  stage = spStagesSorted.find(s => s.name.toLowerCase().replace(/ё/g, 'е').includes(search));
+  stage = spStagesSorted.find(function(s) { return s.name.toLowerCase().replace(/ё/g, 'е').includes(search); });
   return stage ? stage.id : null;
 }
 
 function getNextStageId(currentStageId) {
-  const currentIndex = spStagesSorted.findIndex(s => s.id === currentStageId);
+  var currentIndex = spStagesSorted.findIndex(function(s) { return s.id === currentStageId; });
   if (currentIndex === -1) return null;
-  for (let i = currentIndex + 1; i < spStagesSorted.length; i++) {
-    const stName = spStagesSorted[i].name.toLowerCase().replace(/ё/g, 'е');
+  for (var i = currentIndex + 1; i < spStagesSorted.length; i++) {
+    var stName = spStagesSorted[i].name.toLowerCase().replace(/ё/g, 'е');
     if (!stName.includes('успех') && !stName.includes('провал') && !stName.includes('отмен')) {
       return spStagesSorted[i].id;
     }
@@ -385,17 +354,17 @@ function getNextStageId(currentStageId) {
 
 // Автообновление при возврате во вкладку (с троттлингом)
 (function setupAutoRefreshOnFocus() {
-  let lastSyncTime = 0;
-  const MIN_INTERVAL = 15000;
-  const tryReload = () => {
-    const now = Date.now();
+  var lastSyncTime = 0;
+  var MIN_INTERVAL = 15000;
+  var tryReload = function() {
+    var now = Date.now();
     if (now - lastSyncTime < MIN_INTERVAL) return;
     lastSyncTime = now;
     logAction('Возврат во вкладку приложения — автообновление данных...', 'info');
     loadAllData();
   };
   window.addEventListener('focus', tryReload);
-  document.addEventListener('visibilitychange', () => {
+  document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible') tryReload();
   });
 })();

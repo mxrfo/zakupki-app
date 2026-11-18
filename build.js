@@ -7,11 +7,12 @@ const OUTPUT_HTML = 'dist/index.html';
 const CSS_FILE = 'css/styles.css';
 
 // ВАЖНО: порядок подключения скриптов!
-// Зависимости: config → state → utils → api → cache → roles → dragdrop → render → modals → forms → actions → settings → init
+// Зависимости: config → state → utils → bot → api → cache → roles → dragdrop → render → modals → forms → actions → settings → init
 const JS_FILES_ORDER = [
   'js/config.js',
   'js/state.js',
   'js/utils.js',
+  'js/bot.js',       // <-- ДОБАВЛЕНО: модуль чат-бота должен быть загружен до api.js
   'js/api.js',
   'js/cache.js',
   'js/roles.js',
