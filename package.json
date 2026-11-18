@@ -8,6 +8,6 @@
     "watch": "npx nodemon --watch js --watch css --ext js,css,html -x \"node build.js\""
   },
   "devDependencies": {
-    "archiver": "^8.0.0"
+    "archiver": "^7.0.1"
   }
 }
