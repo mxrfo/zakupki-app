@@ -1,6 +1,8 @@
 // js/roles.js — Роли и права доступа
 
-// Переключение тестового режима
+// 🆕 Отдел, за которым «симулируется» руководитель (для currentRole==='head')
+let simulatedHeadDeptId = '';
+
 function toggleTestMode(val) {
   isTestMode = val;
   localStorage.setItem('purchase_test_mode', isTestMode);
@@ -9,13 +11,12 @@ function toggleTestMode(val) {
   render();
 }
 
-// Проверка ролей текущего пользователя
 function checkUserRoles() {
   if (!currentUser) return;
 
   actualRoles.isEcon = actualRoles.isAdmin;
   let userDeptIds = currentUser.UF_DEPARTMENT || [];
-  if (!Array.isArray(userDeptIds)) userDeptIds = [userDeptIds];
+  if (!Array.isArray(userDeptIds)) userDeptIds = userDeptIds ? [userDeptIds] : [];
   userDeptIds.forEach(dId => {
     if (settings.econDepts.includes(String(dId))) actualRoles.isEcon = true;
   });
@@ -29,6 +30,7 @@ function checkUserRoles() {
   if (currentRole === 'admin') roleName = 'Администратор';
   else if (currentRole === 'econ') roleName = 'Экономист';
   else if (currentRole === 'manager') roleName = 'Менеджер';
+  else if (currentRole === 'head') roleName = 'Руководитель';
 
   let userDeptName = userDepts[currentUser.ID] || '';
   if (userDeptIds.length > 0 && !userDeptName) {
@@ -40,15 +42,20 @@ function checkUserRoles() {
     `<b>${currentUser.NAME} ${currentUser.LAST_NAME}</b> (${roleName}${userDeptName ? ' • ' + userDeptName : ''})`;
 }
 
-// Симуляция роли (для админа)
+// ✅ Симуляция роли: для head подставляем отдел пользователя как «ведомый»
 function simulateRole(role) {
   currentRole = role;
+  if (role === 'head') {
+    let d = currentUser && currentUser.UF_DEPARTMENT ? (Array.isArray(currentUser.UF_DEPARTMENT) ? currentUser.UF_DEPARTMENT[0] : currentUser.UF_DEPARTMENT) : '';
+    if (!d && settings.visibleDepts && settings.visibleDepts.length) d = settings.visibleDepts[0];
+    simulatedHeadDeptId = d ? String(d) : '';
+  } else {
+    simulatedHeadDeptId = '';
+  }
   checkUserRoles();
   render();
 }
 
-// ✅ ПЕРЕПИСАНО: менеджер = значение поля "Менеджер отдела" (UF_CRM_17_OTDEL_ISPOL_SOTR),
-// а НЕ assignedById. assignedById — системное поле CRM, там всегда создатель.
 function isManagerRole(item) {
   if (currentRole === 'admin') return true;
   if (currentRole === 'manager') return true;

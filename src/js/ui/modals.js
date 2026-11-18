@@ -1,11 +1,9 @@
 // js/modals.js — Открытие/закрытие модалок
 
-// Закрытие модалки
 function closeModal(id) {
   document.getElementById(id).style.display = 'none';
 }
 
-// Удаление закупки с полной очисткой (задачи, входящие счета, закупка)
 function deleteItem(id, event) {
   if (event) event.stopPropagation();
   if (!confirm('Удалить закупку и все связанные данные (задачи, входящие счета)? Это действие необратимо.')) return;
@@ -16,7 +14,7 @@ function deleteItem(id, event) {
   });
 }
 
-// ✅ Открытие модалки делегирования
+// ✅ Открытие модалки делегирования (с fallback для пустых manager/dept)
 function openDelegateModal(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
@@ -24,39 +22,54 @@ function openDelegateModal(id) {
   document.getElementById('delegate-id').value = id;
   document.getElementById('delegate-note').value = '';
 
+  // Отдел: из поля dept, иначе — отдел создателя
+  let deptId = '';
   const deptVal = item[actualFields.dept];
-  const deptId = Array.isArray(deptVal) ? deptVal[0] : deptVal;
-  const deptObj = departments.find(d => String(d.ID) === String(deptId));
+  if (deptVal) deptId = String(Array.isArray(deptVal) ? deptVal[0] : deptVal);
+  if (!deptId) {
+    const creatorId = item.createdBy;
+    const cu = allUsers.find(u => String(u.ID) === String(creatorId));
+    if (cu && cu.UF_DEPARTMENT) deptId = String(Array.isArray(cu.UF_DEPARTMENT) ? cu.UF_DEPARTMENT[0] : cu.UF_DEPARTMENT);
+  }
+  const deptObj = departments.find(d => String(d.ID) === deptId);
 
+  // Текущий исполнитель: manager, иначе createdBy
   const mgrVal = item[actualFields.manager];
   const mgrIds = Array.isArray(mgrVal) ? mgrVal : (mgrVal ? [mgrVal] : []);
   const currentMgr = mgrIds[0] || '';
+  const displayMgr = currentMgr ? (userNames[currentMgr] || currentMgr) : (userNames[item.createdBy] || '—');
 
   document.getElementById('delegate-title').innerText = 'Делегировать закупку №' + item.id;
-  document.getElementById('delegate-from').innerText = currentMgr ? (userNames[currentMgr] || currentMgr) : '—';
+  document.getElementById('delegate-from').value = displayMgr;
+  document.getElementById('delegate-dept').value = deptObj ? deptObj.NAME : (deptId || '—');
 
-  // Получатели: сотрудники отдела (UF_DEPARTMENT включает deptId), исключая текущего менеджера
   const sel = document.getElementById('delegate-to');
   sel.innerHTML = '<option value="">-- Выберите сотрудника --</option>';
+  let added = 0;
   allUsers.forEach(u => {
     if (String(u.ID) === String(currentMgr)) return;
     if (String(u.ACTIVE) === 'N') return;
     const depts = Array.isArray(u.UF_DEPARTMENT) ? u.UF_DEPARTMENT : (u.UF_DEPARTMENT ? [u.UF_DEPARTMENT] : []);
-    const inDept = depts.some(d => String(d) === String(deptId));
+    const inDept = deptId ? depts.some(d => String(d) === deptId) : true;
     if (inDept) {
       const unav = isUserUnavailable(u.ID) ? ' (недоступен)' : '';
       sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${unav}</option>`;
+      added++;
     }
   });
-
-  if (deptObj) {
-    document.getElementById('delegate-dept').innerText = deptObj.NAME;
+  if (added === 0) {
+    // fallback: все активные
+    allUsers.forEach(u => {
+      if (String(u.ID) === String(currentMgr)) return;
+      if (String(u.ACTIVE) === 'N') return;
+      const unav = isUserUnavailable(u.ID) ? ' (недоступен)' : '';
+      sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${unav}</option>`;
+    });
   }
 
   document.getElementById('modal-delegate').style.display = 'flex';
 }
 
-// Просмотр деталей
 function openViewModal(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
@@ -153,7 +166,6 @@ function openViewModal(id) {
     html += `<div class="note-comment-box" style="margin-top:20px;"><b>Комментарий (${commentAuthorName}):</b> ${econComment}</div>`;
   }
 
-  // ✅ История делегирований
   const histField = actualFields.delegateHistory;
   const hist = (histField && item[histField]) ? String(item[histField]) : '';
   if (hist) {
@@ -168,7 +180,6 @@ function openViewModal(id) {
   document.getElementById('modal-view').style.display = 'flex';
 }
 
-// Открытие модалки редактирования
 function openEditModal(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
@@ -221,7 +232,6 @@ function openEditModal(id) {
   document.getElementById('modal-create').style.display = 'flex';
 }
 
-// Открытие модалки сбора данных
 function openDataModal(id) {
   document.getElementById('form-data').reset();
   document.getElementById('data-id').value = id;
@@ -279,7 +289,6 @@ function openDataModal(id) {
   document.getElementById('modal-data').style.display = 'flex';
 }
 
-// Открытие модалки изменения суммы
 function openEditAmountModal(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
@@ -288,7 +297,6 @@ function openEditAmountModal(id) {
   document.getElementById('modal-edit-amount').style.display = 'flex';
 }
 
-// Открытие модалки загрузки счёта
 function openUploadModal(id) {
   document.getElementById('form-upload').reset();
   document.getElementById('upload-id').value = id;
@@ -297,7 +305,6 @@ function openUploadModal(id) {
   document.getElementById('modal-upload').style.display = 'flex';
 }
 
-// Открытие модалки действия
 function openActionModal(id, type) {
   document.getElementById('form-action').reset();
   document.getElementById('action-id').value = id;
@@ -322,7 +329,6 @@ function openActionModal(id, type) {
       document.getElementById('modal-action').style.display = 'flex';
       return;
     }
-
     title.innerText = 'Отправить в работу';
     label.innerText = 'Комментарий';
     btnHtml += `<button type="submit" class="btn btn-primary">Отправить</button>`;

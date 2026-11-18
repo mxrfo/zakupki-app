@@ -2,16 +2,13 @@
 // МОДУЛЬ: api.js — Обёртки над BX24 API
 // ============================================================
 
-// Флаг: BX24 SDK загружен и init() успешно отработал
 let b24Ready = false;
-
-// 🆕 Защита от повторного входа в очистку (двойной клик по «Удалить»)
 var deleteInProgress = {};
+// 🆕 Флаг: параметры URL/placement обработаны один раз за загрузку iframe
+var urlParamsProcessed = false;
 
-// ✅ Утилита: домен портала (надёжно, через BX24.getDomain + кэш из init, а не через CDN)
 function getPortalDomain() {
   if (window.__portalDomain) return window.__portalDomain;
-
   try {
     if (typeof BX24 !== 'undefined' && typeof BX24.getDomain === 'function') {
       const d = BX24.getDomain();
@@ -23,7 +20,6 @@ function getPortalDomain() {
       }
     }
   } catch (e) {}
-
   try {
     const m = window.location.search.match(/[?&]DOMAIN=([^&]+)/);
     if (m) {
@@ -34,7 +30,6 @@ function getPortalDomain() {
       }
     }
   } catch (e) {}
-
   try {
     if (document.referrer) {
       const o = new URL(document.referrer).origin;
@@ -44,18 +39,15 @@ function getPortalDomain() {
       }
     }
   } catch (e) {}
-
   const origin = window.location.origin;
   if (origin && origin.indexOf('cdn') === -1) {
     window.__portalDomain = origin;
     return origin;
   }
-
   logAction('getPortalDomain: не удалось определить домен портала (все источники — CDN)', 'error');
   return '';
 }
 
-// ✅ Построение ссылки, открывающей приложение ЧЕРЕЗ ПОРТАЛ (с авторизацией).
 function buildAppLink(action, itemId, tab) {
   const domain = getPortalDomain();
   if (!domain || !itemId) {
@@ -72,7 +64,6 @@ function buildAppLink(action, itemId, tab) {
   return domain + '/crm/smartprocess/' + ENTITY_TYPE_ID + '/item/' + itemId + '/';
 }
 
-// ✅ Форматирование даты создания (createdTime → dd.mm.yyyy)
 function formatCreatedDate(v) {
   if (!v) return '—';
   try {
@@ -82,7 +73,6 @@ function formatCreatedDate(v) {
   return '—';
 }
 
-// ✅ Форматирование крайнего срока ('YYYY-MM-DD' → dd.mm.yyyy)
 function formatDeadline(v) {
   if (!v) return 'не указан';
   const s = String(v);
@@ -95,7 +85,7 @@ function formatDeadline(v) {
   return s;
 }
 
-// ✅ Извлечение меты закупки из карточки
+// ✅ buildPurchaseMeta: creator с fallback на системное createdBy
 function buildPurchaseMeta(item) {
   const no = item.id;
   const dateStr = formatCreatedDate(item.createdTime);
@@ -106,20 +96,21 @@ function buildPurchaseMeta(item) {
     shortDesc = item.title || '—';
   }
   const deadlineStr = formatDeadline(item[actualFields.deadlineZakup]);
-  const creatorRaw = item[actualFields.creator];
-  const creatorId = Array.isArray(creatorRaw) ? creatorRaw[0] : creatorRaw;
+  let creatorId = '';
+  if (actualFields.creator && item[actualFields.creator]) {
+    creatorId = Array.isArray(item[actualFields.creator]) ? item[actualFields.creator][0] : item[actualFields.creator];
+  }
+  if (!creatorId) creatorId = item.createdBy;
   const creatorName = creatorId ? (userNames[creatorId] || creatorId) : '—';
-  return { no, dateStr, shortDesc, deadlineStr, creatorName };
+  return { no, dateStr, shortDesc, deadlineStr, creatorName, creatorId };
 }
 
-// ✅ Единое тело уведомления-карточки
 function formatPurchaseBody(meta) {
   return 'Что нужно закупить: ' + meta.shortDesc + '\n' +
          'Крайний срок закупки: ' + meta.deadlineStr + '\n' +
          'Кто создал запрос: ' + meta.creatorName;
 }
 
-// ✅ Универсальная отправка уведомления через бота с fallback на im.notify
 function sendBotNotification(userId, title, message, links, cb) {
   notifyUserViaBot(userId, title, message, links, function(success) {
     if (!success) {
@@ -140,13 +131,13 @@ function sendBotNotification(userId, title, message, links, cb) {
   });
 }
 
-// ✅ Уведомление №1: руководителю — выбрать исполнителя (вкладка "Мои запросы" + ссылка на задачу)
+// ✅ notifySelectExecutor: добавить кто отправил в работу (создатель)
 function notifySelectExecutor(userId, item, taskId) {
   userId = parseInt(userId);
   if (!userId || !item) return;
   const meta = buildPurchaseMeta(item);
   const title = 'Необходимо выбрать исполнителя для закупки №' + meta.no + ' от ' + meta.dateStr;
-  const message = formatPurchaseBody(meta);
+  const message = formatPurchaseBody(meta) + '\n\nДействие выполнил: ' + meta.creatorName;
 
   const domain = getPortalDomain();
   const taskLink = taskId ? (domain ? domain + '/company/personal/user/' + userId + '/tasks/task/view/' + taskId + '/' : '') : '';
@@ -159,24 +150,23 @@ function notifySelectExecutor(userId, item, taskId) {
   sendBotNotification(userId, title, message, links);
 }
 
-// ✅ Уведомление №2: менеджеру — собрать данные (вкладка "Входящие", без ссылки на задачу)
-function notifyCollectData(userId, item) {
+// ✅ notifyCollectData: УБРАТЬ кнопку «Открыть закупку», оставить только «Заполнить данные»
+function notifyCollectData(userId, item, actorName) {
   userId = parseInt(userId);
   if (!userId || !item) return;
   const meta = buildPurchaseMeta(item);
   const title = 'Необходимо собрать данные и рассчитать стоимость по закупке №' + meta.no + ' от ' + meta.dateStr;
-  const message = formatPurchaseBody(meta);
+  const message = formatPurchaseBody(meta) + (actorName ? ('\n\nДействие выполнил: ' + actorName) : '');
 
   const links = [
-    { text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'inbox') },
     { text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }
   ].filter(function(l) { return l && l.url; });
 
   sendBotNotification(userId, title, message, links);
 }
 
-// ✅ Карточка согласования: текст + кнопки-ссылки (Согласовать/Отклонить/Открыть)
-function buildApprovalCard(item) {
+// ✅ buildApprovalCard: добавить кто отправил на согласование (менеджер)
+function buildApprovalCard(item, actorName) {
   const shortDesc = cleanText(item[actualFields.shortDesc]) || item.title || '';
   const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
   const deadline = item[actualFields.deadlineZakup] || 'не указан';
@@ -196,8 +186,9 @@ function buildApprovalCard(item) {
     `Исполнитель: ${mgrName}\n` +
     `Сумма: ${amount}\n` +
     `Раздел/Напр: ${combined}\n` +
-    `Комментарий: ${comment}\n\n` +
-    `Требуется согласование условий.`;
+    `Комментарий: ${comment}` +
+    (actorName ? (`\nДействие выполнил: ${actorName}`) : '') +
+    `\n\nТребуется согласование условий.`;
 
   const links = [
     { text: '✅ Согласовать', url: buildAppLink('approve', item.id, 'inbox') },
@@ -208,11 +199,11 @@ function buildApprovalCard(item) {
   return { text, links };
 }
 
-// ✅ Уведомление руководителю о поступлении на согласование
-function notifyApprovalNeeded(headId, item) {
+// ✅ notifyApprovalNeeded: принимать actorName
+function notifyApprovalNeeded(headId, item, actorName) {
   headId = parseInt(headId);
   if (!headId || !item) return;
-  const card = buildApprovalCard(item);
+  const card = buildApprovalCard(item, actorName);
   notifyUserViaBot(headId, 'Закупка на согласовании', card.text, card.links, function(success) {
     if (!success) {
       logAction('Fallback: im.notify о согласовании', 'info');
@@ -229,8 +220,8 @@ function notifyApprovalNeeded(headId, item) {
   });
 }
 
-// ✅ Уведомление менеджеру после согласования/отклонения
-function notifyAfterDecision(managerId, item, approved) {
+// ✅ notifyAfterDecision: принимать actorName (кто согласовал/отклонил)
+function notifyAfterDecision(managerId, item, approved, actorName) {
   managerId = parseInt(managerId);
   if (!managerId || !item) return;
   const shortDesc = cleanText(item[actualFields.shortDesc]) || item.title || '';
@@ -239,6 +230,7 @@ function notifyAfterDecision(managerId, item, approved) {
   const message = approved
     ? `Условия по закупке "${shortDesc}" (сумма ${amount}) согласованы.\nНеобходимо загрузить входящий счёт.`
     : `Закупка "${shortDesc}" отклонена на этапе согласования.\nТребуется корректировка.`;
+  if (actorName) message += '\n\nДействие выполнил: ' + actorName;
   const links = [
     { text: approved ? '📄 Загрузить счёт' : '📋 Открыть закупку', url: buildAppLink(approved ? 'upload' : 'view', item.id, 'inbox') }
   ].filter(l => l.url);
@@ -258,34 +250,28 @@ function notifyAfterDecision(managerId, item, approved) {
   });
 }
 
-// ✅ Legacy-обёртка (сохранена для совместимости). Ссылки строятся НА ПОРТАЛ, битые кнопки отсекаются.
 function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, linkText = 'Начать выполнение') {
   userId = parseInt(userId);
   if (!userId) return;
   const domain = getPortalDomain();
-
   let itemId = '';
   if (itemUrl) {
     const m = String(itemUrl).match(/[?&]id=(\d+)/);
     if (m) itemId = m[1];
   }
-
   let fullItemUrl = '';
   if (itemId) fullItemUrl = buildAppLink('view', itemId, 'inbox');
   else if (itemUrl && domain) fullItemUrl = itemUrl.startsWith('http') ? itemUrl : domain + itemUrl;
-
   let fullTaskUrl = '';
   if (taskUrl) {
     if (taskUrl.startsWith('http')) fullTaskUrl = taskUrl;
     else if (domain) fullTaskUrl = domain + taskUrl;
     else fullTaskUrl = '';
   }
-
   const links = [
     fullItemUrl ? { text: '📋 Открыть закупку', url: fullItemUrl } : null,
     fullTaskUrl ? { text: '✅ ' + linkText, url: fullTaskUrl } : null
   ].filter(function(l) { return l && l.url; });
-
   notifyUserViaBot(userId, title, message, links, function(success) {
     if (!success) {
       logAction('Fallback: отправка через im.notify', 'info');
@@ -305,7 +291,6 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, l
   });
 }
 
-// ✅ Проверка: пользователь недоступен (отпуск/больничный) — по списку из админ-панели
 function isUserUnavailable(userId) {
   userId = String(userId);
   if (!settings.unavailableUsers) return false;
@@ -315,7 +300,6 @@ function isUserUnavailable(userId) {
   return false;
 }
 
-// ✅ Делегирование закупки другому сотруднику с сохранением истории
 function delegatePurchase(itemId, toUserId, note, cb) {
   itemId = parseInt(itemId);
   toUserId = parseInt(toUserId);
@@ -324,27 +308,25 @@ function delegatePurchase(itemId, toUserId, note, cb) {
     if (cb) cb(false);
     return;
   }
-
   const item = items.find(i => i.id === itemId);
   if (!item) {
     logAction('delegatePurchase: закупка не найдена', 'error');
     if (cb) cb(false);
     return;
   }
-
   if (isUserUnavailable(toUserId)) {
     logAction('delegatePurchase: получатель недоступен', 'error');
     showToast('Получатель отмечен как недоступный (отпуск/больничный)', 'error');
     if (cb) cb(false);
     return;
   }
-
   const mgrVal = item[actualFields.manager];
   const fromId = Array.isArray(mgrVal) ? mgrVal[0] : (mgrVal || '');
   const fromName = fromId ? (userNames[fromId] || fromId) : '—';
   const toName = userNames[toUserId] || toUserId;
   const stamp = new Date().toLocaleString('ru-RU');
-  const line = `[ДЕЛЕГ] ${stamp}: ${fromName} → ${toName}` + (note ? ` (${note})` : '');
+  const actorName = currentUser ? (currentUser.NAME + ' ' + (currentUser.LAST_NAME || '')) : '—';
+  const line = `[ДЕЛЕГ] ${stamp}: ${fromName} → ${toName} (делегировал: ${actorName})` + (note ? ` | ${note}` : '');
 
   const histField = actualFields.delegateHistory;
   let existing = histField && item[histField] ? String(item[histField]) : '';
@@ -354,7 +336,7 @@ function delegatePurchase(itemId, toUserId, note, cb) {
   updFields[actualFields.manager] = [String(toUserId)];
   if (histField && fieldDefs[histField]) updFields[histField] = newHist;
 
-  logAction(`Делегирование закупки ID ${itemId}: ${fromName} → ${toName}`, 'info');
+  logAction(`Делегирование закупки ID ${itemId}: ${fromName} → ${toName} (делегировал ${actorName})`, 'info');
 
   BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: itemId, fields: updFields }, function(res) {
     if (res.error()) {
@@ -363,7 +345,6 @@ function delegatePurchase(itemId, toUserId, note, cb) {
       if (cb) cb(false);
       return;
     }
-
     item[actualFields.manager] = [String(toUserId)];
     if (histField) item[histField] = newHist;
     delegateHistory[itemId] = newHist;
@@ -374,9 +355,8 @@ function delegatePurchase(itemId, toUserId, note, cb) {
       try {
         const meta = buildPurchaseMeta(item);
         const title = 'Закупка делегирована вам: №' + meta.no + ' от ' + meta.dateStr;
-        const message = formatPurchaseBody(meta) + '\n\nДелегировал: ' + (fromName || '—') + (note ? ('\nПричина: ' + note) : '');
+        const message = formatPurchaseBody(meta) + '\n\nДелегировал: ' + (fromName || '—') + (actorName && actorName !== fromName ? (' (от имени ' + actorName + ')') : '') + (note ? ('\nПричина: ' + note) : '');
         const links = [
-          { text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'inbox') },
           { text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }
         ].filter(l => l.url);
         notifyUserViaBot(toUserId, title, message, links, function(ok) {
@@ -406,9 +386,6 @@ function delegatePurchase(itemId, toUserId, note, cb) {
   });
 }
 
-// ✅ ПОЛНАЯ ОЧИСТКА ПРИ УДАЛЕНИИ ЗАКУПКИ (исправлена логика счётчика + подробное логирование)
-// Удаляет: задачи (выбор сотрудника, сбор данных, загрузка счёта), связанные входящие счета, саму закупку.
-// Сообщения бота не удаляются (API Битрикса не позволяет), но ссылки на удалённую закупку будут вести на 404.
 function deletePurchaseWithCleanup(id, done) {
   id = parseInt(id);
   if (!id) {
@@ -416,8 +393,6 @@ function deletePurchaseWithCleanup(id, done) {
     if (done) done(false);
     return;
   }
-
-  // 🆕 Защита от повторного входа (двойной клик)
   if (deleteInProgress[id]) {
     logAction('[ОЧИСТКА] закупка ID ' + id + ' уже удаляется — повторный вызов пропущен', 'info');
     return;
@@ -434,7 +409,6 @@ function deletePurchaseWithCleanup(id, done) {
 
   logAction('[ОЧИСТКА] начало: закупка ID ' + id, 'info');
 
-  // Собираем задачи
   var tasksToDelete = [];
   if (actualFields.taskVyborSotr && item[actualFields.taskVyborSotr]) {
     var tvs = String(item[actualFields.taskVyborSotr]);
@@ -450,8 +424,6 @@ function deletePurchaseWithCleanup(id, done) {
   }
   logAction('[ОЧИСТКА] задач к удалению: ' + tasksToDelete.length + (tasksToDelete.length ? ' [' + tasksToDelete.join(', ') + ']' : ''), 'info');
 
-  // ✅ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: totalSteps = только подготовительные шаги (задачи, счета).
-  //    Финальный шаг (crm.item.delete) запускается ПОСЛЕ их завершения, а не учитывается в счётчике.
   var prepSteps = 0;
   if (tasksToDelete.length > 0) prepSteps++;
   if (INVOICE_ENTITY_ID) prepSteps++;
@@ -476,19 +448,15 @@ function deletePurchaseWithCleanup(id, done) {
   function stepDone(ok, msg) {
     completed++;
     logAction('[ОЧИСТКА] шаг ' + completed + '/' + prepSteps + ' завершён (' + (ok ? 'ok' : 'err') + '): ' + msg, ok ? 'info' : 'error');
-    if (completed >= prepSteps) {
-      finalizeDelete();
-    }
+    if (completed >= prepSteps) finalizeDelete();
   }
 
-  // Нет подготовительных шагов — сразу удаляем закупку
   if (prepSteps === 0) {
     logAction('[ОЧИСТКА] нет подготовительных шагов → сразу удаляю закупку', 'info');
     finalizeDelete();
     return;
   }
 
-  // Шаг 1: удаление задач
   if (tasksToDelete.length > 0) {
     logAction('[ОЧИСТКА] шаг задач: вызов batch tasks.task.delete', 'info');
     var taskBatch = {};
@@ -501,7 +469,6 @@ function deletePurchaseWithCleanup(id, done) {
         var r = res['t' + idx];
         if (r && r.error && r.error()) {
           var errStr = getApiErrorMessage(r);
-          // 🆕 UNKNOWN при удалении = задача уже удалена → считаем успехом
           if (/UNKNOWN/i.test(errStr)) {
             logAction('[ОЧИСТКА] задача ' + tid + ' уже удалена (UNKNOWN) — ок', 'info');
           } else {
@@ -514,12 +481,8 @@ function deletePurchaseWithCleanup(id, done) {
       });
       stepDone(allOk, 'Задачи: ' + tasksToDelete.join(', '));
     });
-  } else {
-    // задач нет, но INVOICE_ENTITY_ID задан — шаг задач пропускаем, но счётчик не инкрементим
-    // (prepSteps уже не включает задачи, т.к. tasksToDelete.length===0)
   }
 
-  // Шаг 2: поиск и удаление связанных входящих счетов
   if (INVOICE_ENTITY_ID) {
     logAction('[ОЧИСТКА] шаг счетов: вызов crm.item.list для entityTypeId ' + INVOICE_ENTITY_ID, 'info');
     BX24.callMethod('crm.item.list', {
@@ -562,12 +525,9 @@ function deletePurchaseWithCleanup(id, done) {
         stepDone(allOk, 'Входящие счета удалены: ' + invItems.length + ' шт.');
       });
     });
-  } else {
-    // INVOICE_ENTITY_ID не задан — шаг счетов не участвует в prepSteps
   }
 }
 
-// Загрузка списка закупок
 function loadAllData() {
   if (!b24Ready) {
     logAction('loadAllData вызван до инициализации BX24 — пропуск (ждём init)', 'info');
@@ -598,7 +558,6 @@ function loadAllData() {
   });
 }
 
-// Функция смены сценария
 function changeScenario(val) {
   currentScenario = val;
   localStorage.setItem('purchase_scenario', val);
@@ -612,7 +571,6 @@ function changeScenario(val) {
   showToast('Сценарий: ' + (labels[val] || val));
 }
 
-// Автопроход сценария после создания закупки
 function runScenarioAfterCreate(itemId) {
   if (!isTestMode || currentScenario === 'none') return;
   if (scenarioRunning[itemId]) return;
@@ -667,7 +625,6 @@ function runScenarioAfterCreate(itemId) {
   });
 }
 
-// Синхронизация менеджера из соисполнителей задачи
 function syncManagersFromTasks(done) {
   done = done || function () {};
 
@@ -800,7 +757,7 @@ function syncManagersFromTasks(done) {
               logAction('Задача менеджеру создана (ID: ' + newTaskId + '), постановщик: админ ' + createdBy + ', наблюдатель: ' + (headId || 'нет'), 'success');
 
               try {
-                notifyCollectData(parseInt(f.mgrId), f.item);
+                notifyCollectData(parseInt(f.mgrId), f.item, headId ? (userNames[headId] || headId) : '');
               } catch (e) {
                 logAction('Ошибка при отправке уведомления менеджеру: ' + e.message, 'error');
               }
@@ -829,13 +786,15 @@ function syncManagersFromTasks(done) {
   });
 }
 
-// Обработка параметров из URL / placement (открытие через портал)
+// ✅ handleUrlParams: однократная обработка за загрузку iframe (фикс «перебрасывает обратно»)
 function handleUrlParams() {
+  if (urlParamsProcessed) return;
   var params = getIncomingParams();
   var itemId = params.itemId;
   var action = params.action;
   var tab = params.tab;
   if (itemId) {
+    urlParamsProcessed = true;
     var attempts = 0;
     var maxAttempts = 20;
     var checkItemsInterval = setInterval(function() {
@@ -879,12 +838,10 @@ function getIncomingParams() {
       if (o.id) return { action: o.action || 'view', itemId: o.id, tab: o.tab || '' };
     }
   } catch (e) {}
-
   try {
     const up = new URLSearchParams(window.location.search);
     if (up.get('id')) return { action: up.get('action') || 'view', itemId: up.get('id'), tab: up.get('tab') || '' };
   } catch (e) {}
-
   try {
     const h = (window.location.hash || '').replace(/^#/, '');
     if (h) {
@@ -892,7 +849,6 @@ function getIncomingParams() {
       if (hp.get('id')) return { action: hp.get('action') || 'view', itemId: hp.get('id'), tab: hp.get('tab') || '' };
     }
   } catch (e) {}
-
   return { action: '', itemId: '', tab: '' };
 }
 
@@ -916,7 +872,6 @@ function getNextStageId(currentStageId) {
   return null;
 }
 
-// Автообновление при возврате во вкладку (с троттлингом)
 (function setupAutoRefreshOnFocus() {
   var lastSyncTime = 0;
   var MIN_INTERVAL = 15000;

@@ -1,25 +1,46 @@
 // js/render.js — Рендер карточек и таблицы
 
+// ✅ Отделы, которыми «руководит» текущий пользователь (с учётом симуляции head)
+function getManagedDeptIds() {
+  let d = (currentUser && currentUser.UF_DEPARTMENT) || [];
+  if (!Array.isArray(d)) d = d ? [d] : [];
+  let ids = d.map(String);
+  if (currentRole === 'head' && simulatedHeadDeptId) ids = [simulatedHeadDeptId];
+  return ids;
+}
+
+// ✅ Отделы пользователя для фильтра «Все закупки» (employee/manager/head)
+function getUserDeptIds() {
+  let d = (currentUser && currentUser.UF_DEPARTMENT) || [];
+  if (!Array.isArray(d)) d = d ? [d] : [];
+  let ids = d.map(String);
+  // fallback: если UF_DEPARTMENT не подтянулся (кэш), взять из deptHeads/deptManagers
+  if (ids.length === 0) {
+    Object.keys(settings.deptHeads || {}).forEach(k => {
+      if (String(settings.deptHeads[k]) === String(currentUser.ID)) ids.push(String(k));
+    });
+    Object.keys(settings.deptManagers || {}).forEach(k => {
+      if (String(settings.deptManagers[k]) === String(currentUser.ID)) ids.push(String(k));
+    });
+  }
+  // fallback 2: первый видимый отдел
+  if (ids.length === 0 && settings.visibleDepts && settings.visibleDepts.length) ids = settings.visibleDepts.map(String);
+  return ids;
+}
+
 // ✅ Утилита: пользователь — руководитель отдела закупки?
 function isDeptHeadForItem(item) {
   if (currentRole === 'admin') return true;
   const deptVal = item[actualFields.dept];
   const deptId = Array.isArray(deptVal) ? deptVal[0] : deptVal;
   if (!deptId) return false;
+  if (currentRole === 'head' && getManagedDeptIds().includes(String(deptId))) return true;
   if (settings.deptHeads[deptId] === String(currentUser.ID)) return true;
   const deptObj = departments.find(d => String(d.ID) === String(deptId));
   if (deptObj && String(deptObj.UF_HEAD) === String(currentUser.ID)) return true;
   return false;
 }
 
-// ✅ Утилита: отделы текущего пользователя (ID массив)
-function getUserDeptIds() {
-  let d = (currentUser && currentUser.UF_DEPARTMENT) || [];
-  if (!Array.isArray(d)) d = d ? [d] : [];
-  return d.map(String);
-}
-
-// Переключение вкладок
 function switchTab(tab) {
   activeTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -27,19 +48,16 @@ function switchTab(tab) {
   render();
 }
 
-// Поиск
 function onSearchChange(val) {
   searchQuery = val.toLowerCase().trim();
   render();
 }
 
-// Сортировка
 function changeSort(val) {
   currentSort = val;
   render();
 }
 
-// Переключение вида
 function switchView(view) {
   currentView = view;
   document.getElementById('view-btn-grid').classList.toggle('active', view === 'grid');
@@ -47,7 +65,6 @@ function switchView(view) {
   render();
 }
 
-// Главный рендер
 function render() {
   const container = document.getElementById('app-container');
   container.innerHTML = '';
@@ -56,6 +73,7 @@ function render() {
   const isAdminUI = currentRole === 'admin';
   const isEconUI = isAdminUI || currentRole === 'econ';
   const isMgrUI = isAdminUI || currentRole === 'manager';
+  const isHeadUI = isAdminUI || currentRole === 'head';
 
   let funnelItems = items.filter(i => String(i.categoryId) === String(currentCategoryId));
   if (isTestMode) {
@@ -76,21 +94,22 @@ function render() {
       if (stName.includes('создание')) return false;
       if (isAdminUI) return true;
       if (isEconUI && (stName.includes('согласование') || stName.includes('обработка') || stName.includes('ожидание'))) return true;
+      const deptId = String(Array.isArray(i[actualFields.dept]) ? i[actualFields.dept][0] : (i[actualFields.dept] || ''));
+      if (isHeadUI && getManagedDeptIds().includes(deptId)) return true;
       if (isMgrUI && (stName.includes('сбор данных') || stName.includes('загрузка') || stName.includes('согласование'))) {
         const mgrVal = i[actualFields.manager];
         const mgrIds = Array.isArray(mgrVal) ? mgrVal : (mgrVal ? [mgrVal] : []);
         if (mgrIds.some(id => String(id) === String(currentUser.ID))) return true;
-        const deptId = Array.isArray(i[actualFields.dept]) ? i[actualFields.dept][0] : i[actualFields.dept];
         if (settings.deptManagers[deptId] === String(currentUser.ID)) return true;
         if (settings.deptHeads[deptId] === String(currentUser.ID)) return true;
-        const deptObj = departments.find(d => String(d.ID) === String(deptId));
+        const deptObj = departments.find(d => String(d.ID) === deptId);
         if (deptObj && String(deptObj.UF_HEAD) === String(currentUser.ID)) return true;
         return false;
       }
       return false;
     });
   } else if (activeTab === 'all') {
-    // ✅ Для админа и экономиста — все закупки. Для сотрудника/руководителя — только свой отдел.
+    // ✅ admin/econ — все; employee/manager/head — только свой отдел
     if (isAdminUI || isEconUI) {
       filtered = funnelItems;
     } else {
@@ -149,7 +168,6 @@ function render() {
   }
 }
 
-// Утилита: терминальные стадии
 function isTerminalStage(stName) {
   return stName.includes('успех') ||
     stName.includes('провал') ||
@@ -158,7 +176,6 @@ function isTerminalStage(stName) {
     stName.includes('заверш');
 }
 
-// ✅ Утилита: закупка уже отправлена в работу
 function hasBeenSentToWork(item, stName) {
   const taskId = item[actualFields.taskVyborSotr];
   const hasTask = taskId && String(taskId).match(/^\d+$/);
@@ -167,7 +184,6 @@ function hasBeenSentToWork(item, stName) {
   return !!(hasTask || hasManager);
 }
 
-// Рендер карточек
 function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
   const fragment = document.createDocumentFragment();
   filtered.forEach(item => {
@@ -189,9 +205,7 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
         buttonsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openEditModal(${item.id})" title="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
         buttonsHtml += `<button class="action-icon-btn delete" onclick="event.stopPropagation(); deleteItem(${item.id}, event)" title="Удалить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
       }
-      else if (isCreator &&
-               stName.includes('создание') &&
-               hasBeenSentToWork(item, stName)) {
+      else if (isCreator && stName.includes('создание') && hasBeenSentToWork(item, stName)) {
         buttonsHtml += `
           <button class="btn" disabled
             style="flex:1; background:#e2e8f0; color:#64748b; border-color:#cbd5e1; cursor:not-allowed; opacity:.9;"
@@ -231,23 +245,18 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
         }
       }
 
-      // ✅ Админские кнопки — ВСЕГДА доступны
       let adminActionsHtml = '';
       if (isAdminUI) {
         adminActionsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openEditModal(${item.id})" title="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
-
         if (isPostponed) {
           adminActionsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openActionModal(${item.id}, 'remove_postpone')" title="Снять отложку"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/><line x1="4" y1="4" x2="20" y2="20"/></svg></button>`;
         }
-
         if (!stName.includes('создание')) {
           adminActionsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); rollbackItem(${item.id})" title="Откатить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button>`;
         }
-
         adminActionsHtml += `<button class="action-icon-btn delete" onclick="deleteItem(${item.id}, event)" title="Удалить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
       }
 
-      // ✅ Кнопка делегирования — для руководителя отдела и админа, если есть менеджер и стадия не терминальная
       const mgrVal2 = item[actualFields.manager];
       const hasMgr = Array.isArray(mgrVal2) ? mgrVal2.length > 0 : !!mgrVal2;
       if ((isAdminUI || isDeptHeadForItem(item)) && hasMgr && !isTerminalStage(stName)) {
@@ -270,7 +279,6 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
         if (secName !== '—') combinedDirText = `${secName} / ${dirName}`;
       }
 
-      // ✅ Индикатор недоступности менеджера
       let mgrUnavailableBadge = '';
       const mgrIds2 = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []);
       if (mgrIds2.length && isUserUnavailable(mgrIds2[0])) {
@@ -349,7 +357,6 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
   container.appendChild(fragment);
 }
 
-// Рендер таблицы
 function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
   let html = `<table class="data-table">
     <thead>
@@ -393,9 +400,7 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       buttonsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openEditModal(${item.id})" title="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
       buttonsHtml += `<button class="action-icon-btn delete" onclick="event.stopPropagation(); deleteItem(${item.id}, event)" title="Удалить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
     }
-    else if (isCreator &&
-             stName.includes('создание') &&
-             hasBeenSentToWork(item, stName)) {
+    else if (isCreator && stName.includes('создание') && hasBeenSentToWork(item, stName)) {
       buttonsHtml += `<button class="btn btn-sm" disabled style="background:#e2e8f0; color:#64748b; cursor:not-allowed; opacity:.9;" title="Запрос отправлен в работу">✓ Отправлено</button>`;
     }
 
@@ -430,15 +435,12 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
     let adminHtml = '';
     if (isAdminUI) {
       adminHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openEditModal(${item.id})" title="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
-
       if (!stName.includes('создание')) {
         adminHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); rollbackItem(${item.id})" title="Откатить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button>`;
       }
-
       adminHtml += `<button class="action-icon-btn delete" onclick="deleteItem(${item.id}, event)" title="Удалить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
     }
 
-    // ✅ Кнопка делегирования в таблице
     const mgrValT = item[actualFields.manager];
     const hasMgrT = Array.isArray(mgrValT) ? mgrValT.length > 0 : !!mgrValT;
     if ((isAdminUI || isDeptHeadForItem(item)) && hasMgrT && !isTerminalStage(stName)) {
