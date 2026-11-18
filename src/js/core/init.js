@@ -73,7 +73,6 @@ function ensureAppPlacement() {
     TITLE: 'Закупки'
   }, function(res) {
     if (res.error()) {
-      // «already binded» и т.п. — считаем успехом, ставим флаг
       logAction('placement.bind: ' + getApiErrorMessage(res) + ' (возможно уже зарегистрирован)', 'info');
     } else {
       logAction('Виджет REST_APP_URI зарегистрирован: ' + handlerUrl, 'success');
@@ -111,16 +110,22 @@ function init() {
       if (d && d.indexOf('cdn-') === -1) window.__portalDomain = 'https://' + d;
     } catch (e) {}
 
-    // ✅ Пытаемся подтянуть client_id из авторизации, если в настройках пусто
+    // ✅ АВТОМАТИЧЕСКОЕ СОХРАНЕНИЕ client_id (решает проблему ссылок без пересоздания приложения)
     try {
       if (!settings.clientId) {
         const auth = BX24.getAuth();
         if (auth && auth.client_id) {
           settings.clientId = auth.client_id;
-          logAction('client_id подтянут из авторизации: ' + auth.client_id, 'info');
+          logAction('client_id автоматически подтянут из авторизации: ' + auth.client_id, 'info');
+          // Сохраняем в настройки портала, чтобы не терялся
+          BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, () => {
+            logAction('client_id сохранен в настройки приложения', 'success');
+          });
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      logAction('Ошибка авто-определения client_id: ' + e.message, 'error');
+    }
 
     setLoadingStep(1, 5);
     const initBatch = {
@@ -182,7 +187,7 @@ function init() {
           settings.mapping.detailPrice = DEFAULT_MAPPING.detailPrice;
           mappingMigrated = true;
         }
-        ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz'].forEach(k => {
+        ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory'].forEach(k => {
           if (!settings.mapping[k]) {
             settings.mapping[k] = DEFAULT_MAPPING[k];
             mappingMigrated = true;

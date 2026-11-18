@@ -340,12 +340,33 @@ function submitData(e) {
         });
       }
 
+      // ✅ ИСПРАВЛЕНО: надежное получение headId (из карточки -> из настроек -> из структуры компании)
       try {
         if (item) {
+          let headId = null;
+          const deptId = Array.isArray(item[actualFields.dept]) ? item[actualFields.dept][0] : item[actualFields.dept];
+          
+          // 1. Из карточки
           const headArr = Array.isArray(item[actualFields.deptHead]) ? item[actualFields.deptHead] : (item[actualFields.deptHead] ? [item[actualFields.deptHead]] : []);
-          const headId = headArr.length > 0 ? parseInt(headArr[0]) : null;
+          if (headArr.length > 0) headId = parseInt(headArr[0]);
+          
+          // 2. Из настроек отдела
+          if (!headId && deptId && settings.deptHeads[deptId]) {
+            headId = parseInt(settings.deptHeads[deptId]);
+          }
+          
+          // 3. Из структуры компании Битрикс24
+          if (!headId && deptId) {
+            const deptObj = departments.find(d => String(d.ID) === String(deptId));
+            if (deptObj && deptObj.UF_HEAD) headId = parseInt(deptObj.UF_HEAD);
+          }
+
           if (headId) {
-            notifyApprovalNeeded(headId, item);
+            const actorName = currentUser ? (currentUser.NAME + ' ' + (currentUser.LAST_NAME || '')) : 'Система';
+            logAction(`Отправка уведомления о согласовании руководителю ID ${headId} (${actorName})`, 'info');
+            notifyApprovalNeeded(headId, item, actorName);
+          } else {
+            logAction('Не удалось определить руководителя отдела для отправки уведомления о согласовании', 'error');
           }
         }
       } catch (e) {
