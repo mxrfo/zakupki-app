@@ -2,9 +2,13 @@
 // МОДУЛЬ: api.js — Обёртки над BX24 API
 // ============================================================
 
+// Флаг: BX24 SDK загружен и init() успешно отработал
+// Устанавливается в src/js/core/init.js после BX24.init()
+let b24Ready = false;
+
 // ✅ Утилита: домен портала (надёжно, через BX24.getDomain, а не через CDN)
 function getPortalDomain() {
-  // 1) Основной источник: SDK знает адрес портала, даже до BX24.init [[10]]
+  // 1) Основной источник: SDK знает адрес портала, даже до BX24.init
   try {
     if (typeof BX24 !== 'undefined' && typeof BX24.getDomain === 'function') {
       const d = BX24.getDomain();
@@ -38,7 +42,7 @@ function getPortalDomain() {
 }
 
 // ✅ Построение ссылки, которая открывает приложение ЧЕРЕЗ ПОРТАЛ (с авторизацией)
-// Если задан client_id — открываем кастомное приложение в слайдере через /marketplace/view/ [[13]]
+// Если задан client_id — открываем кастомное приложение в слайдере через /marketplace/view/
 // Иначе — нативную карточку smart-процесса (тоже открывается через портал, всегда работает)
 function buildAppLink(action, itemId) {
   const domain = getPortalDomain();
@@ -46,7 +50,7 @@ function buildAppLink(action, itemId) {
 
   const clientId = (settings.clientId || '').trim();
   if (clientId) {
-    // Параметры передаются ТОЛЬКО через ключ params[] — иначе не дойдут до приложения [[13]]
+    // Параметры передаются ТОЛЬКО через ключ params[] — иначе не дойдут до приложения
     return domain + '/marketplace/view/' + encodeURIComponent(clientId) +
       '/?params[action]=' + encodeURIComponent(action) +
       '&params[id]=' + encodeURIComponent(itemId);
@@ -59,7 +63,7 @@ function buildAppLink(action, itemId) {
 // ✅ Чтение входящих параметров: из placement (открытие через /marketplace/view/),
 // затем из query string (legacy/прямые ссылки)
 function getIncomingParams() {
-  // 1) Открытие через слайдер портала: параметры приходят в placement.info().options [[13]]
+  // 1) Открытие через слайдер портала: параметры приходят в placement.info().options
   try {
     if (typeof BX24 !== 'undefined' && BX24.placement && typeof BX24.placement.info === 'function') {
       const info = BX24.placement.info();
@@ -152,6 +156,12 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, l
 
 // Загрузка списка закупок
 function loadAllData() {
+  // ✅ ЗАЩИТА: не грузим данные, пока BX24 не инициализирован
+  if (!b24Ready) {
+    logAction('loadAllData вызван до инициализации BX24 — пропуск (ждём init)', 'info');
+    return;
+  }
+
   if (loadAllDataInProgress) {
     logAction('Загрузка уже идёт, пропускаем повторный вызов', 'info');
     return;
@@ -357,8 +367,6 @@ function syncManagersFromTasks(done) {
               logAction('Задача менеджеру создана (ID: ' + newTaskId + ')', 'success');
 
               try {
-                // Передаём itemUrl со старой сигнатурой — sendNotificationWithMessage сам извлечёт id
-                // и построит ссылку НА ПОРТАЛ, а не на CDN
                 var itemUrl = appBaseUrl + '?action=view&id=' + f.item.id;
                 var taskUrl = '/company/personal/user/' + f.mgrId + '/tasks/task/view/' + newTaskId + '/';
                 sendNotificationWithMessage(
@@ -453,6 +461,8 @@ function getNextStageId(currentStageId) {
   var lastSyncTime = 0;
   var MIN_INTERVAL = 15000;
   var tryReload = function() {
+    // ✅ ЗАЩИТА: не обновляем, пока BX24 не инициализирован
+    if (!b24Ready) return;
     var now = Date.now();
     if (now - lastSyncTime < MIN_INTERVAL) return;
     lastSyncTime = now;

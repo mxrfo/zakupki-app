@@ -66,6 +66,9 @@ function init() {
     inited = true;
     clearTimeout(initTimeout);
 
+    // ✅ Сигнал для api.js: BX24 инициализирован, можно вызывать loadAllData()
+    b24Ready = true;
+
     setLoadingStep(1, 5);
     const initBatch = {
       user: ['user.current', {}],

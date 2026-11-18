@@ -21,7 +21,6 @@ const ZIP_OUTPUT = `dist/releases/app_${timestamp}.zip`;
 
 // ВАЖНО: порядок подключения скриптов!
 // Зависимости: config → state → utils → bot → api → cache → roles → dragdrop → render → modals → forms → actions → settings → init
-// Файлы сгруппированы по папкам (core/api/ui/logic), но ПОРЯДОК сборки задаётся именно этим массивом.
 const JS_FILES_ORDER = [
   'src/js/core/config.js',
   'src/js/core/state.js',
@@ -84,8 +83,9 @@ function build() {
     '<style>\n' + css + '\n</style>'
   );
 
-  // 5. Удаляем все <script src="..."> теги (включая подпапки src/js/core, src/js/api и т.д.)
-  html = html.replace(/<script\s+src=["'][^"']+["'][^>]*><\/script>/gi, '');
+  // 5. Удаляем ТОЛЬКО скрипты из папки js/ (наши модули).
+  //    Скрипт BX24 SDK (<script src="//api.bitrix24.com/api/v1/"></script>) СОХРАНЯЕТСЯ.
+  html = html.replace(/<script\s+src=["']js\/[^"']+["'][^>]*><\/script>/gi, '');
 
   // 6. Вставляем объединённый JS перед </body>
   html = html.replace(
