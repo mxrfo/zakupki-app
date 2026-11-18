@@ -5,6 +5,9 @@
 // Флаг: BX24 SDK загружен и init() успешно отработал
 let b24Ready = false;
 
+// 🆕 Защита от повторного входа в очистку (двойной клик по «Удалить»)
+var deleteInProgress = {};
+
 // ✅ Утилита: домен портала (надёжно, через BX24.getDomain + кэш из init, а не через CDN)
 function getPortalDomain() {
   if (window.__portalDomain) return window.__portalDomain;
@@ -53,7 +56,6 @@ function getPortalDomain() {
 }
 
 // ✅ Построение ссылки, открывающей приложение ЧЕРЕЗ ПОРТАЛ (с авторизацией).
-//    tab — целевая вкладка ('my_requests' или 'inbox').
 function buildAppLink(action, itemId, tab) {
   const domain = getPortalDomain();
   if (!domain || !itemId) {
@@ -404,26 +406,35 @@ function delegatePurchase(itemId, toUserId, note, cb) {
   });
 }
 
-// ✅ ПОЛНАЯ ОЧИСТКА ПРИ УДАЛЕНИИ ЗАКУПКИ
+// ✅ ПОЛНАЯ ОЧИСТКА ПРИ УДАЛЕНИИ ЗАКУПКИ (исправлена логика счётчика + подробное логирование)
 // Удаляет: задачи (выбор сотрудника, сбор данных, загрузка счёта), связанные входящие счета, саму закупку.
 // Сообщения бота не удаляются (API Битрикса не позволяет), но ссылки на удалённую закупку будут вести на 404.
 function deletePurchaseWithCleanup(id, done) {
   id = parseInt(id);
   if (!id) {
-    logAction('deletePurchaseWithCleanup: invalid id', 'error');
+    logAction('[ОЧИСТКА] invalid id', 'error');
     if (done) done(false);
     return;
   }
+
+  // 🆕 Защита от повторного входа (двойной клик)
+  if (deleteInProgress[id]) {
+    logAction('[ОЧИСТКА] закупка ID ' + id + ' уже удаляется — повторный вызов пропущен', 'info');
+    return;
+  }
+  deleteInProgress[id] = true;
 
   const item = items.find(function(i) { return i.id === id; });
   if (!item) {
-    logAction('deletePurchaseWithCleanup: закупка ID ' + id + ' не найдена', 'error');
+    logAction('[ОЧИСТКА] закупка ID ' + id + ' не найдена', 'error');
+    deleteInProgress[id] = false;
     if (done) done(false);
     return;
   }
 
-  logAction('Удаление закупки ID ' + id + ' с полной очисткой...', 'info');
+  logAction('[ОЧИСТКА] начало: закупка ID ' + id, 'info');
 
+  // Собираем задачи
   var tasksToDelete = [];
   if (actualFields.taskVyborSotr && item[actualFields.taskVyborSotr]) {
     var tvs = String(item[actualFields.taskVyborSotr]);
@@ -437,32 +448,49 @@ function deletePurchaseWithCleanup(id, done) {
     var tzg = String(item[actualFields.taskZagruz]);
     if (/^\d+$/.test(tzg)) tasksToDelete.push(parseInt(tzg));
   }
+  logAction('[ОЧИСТКА] задач к удалению: ' + tasksToDelete.length + (tasksToDelete.length ? ' [' + tasksToDelete.join(', ') + ']' : ''), 'info');
 
-  var totalSteps = 1 + (tasksToDelete.length > 0 ? 1 : 0) + (INVOICE_ENTITY_ID ? 1 : 0);
+  // ✅ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: totalSteps = только подготовительные шаги (задачи, счета).
+  //    Финальный шаг (crm.item.delete) запускается ПОСЛЕ их завершения, а не учитывается в счётчике.
+  var prepSteps = 0;
+  if (tasksToDelete.length > 0) prepSteps++;
+  if (INVOICE_ENTITY_ID) prepSteps++;
   var completed = 0;
+
+  function finalizeDelete() {
+    logAction('[ОЧИСТКА] все подготовительные шаги готовы → вызываю crm.item.delete для ID ' + id, 'info');
+    BX24.callMethod('crm.item.delete', { entityTypeId: ENTITY_TYPE_ID, id: id }, function(res) {
+      deleteInProgress[id] = false;
+      if (res.error()) {
+        logAction('[ОЧИСТКА] crm.item.delete: ОШИБКА — ' + getApiErrorMessage(res), 'error');
+        if (done) done(false);
+      } else {
+        logAction('[ОЧИСТКА] crm.item.delete: успех, закупка ID ' + id + ' удалена', 'success');
+        items = items.filter(function(i) { return i.id !== id; });
+        render();
+        if (done) done(true);
+      }
+    });
+  }
 
   function stepDone(ok, msg) {
     completed++;
-    if (!ok) logAction('deletePurchaseWithCleanup: ' + msg, 'error');
-    else logAction('deletePurchaseWithCleanup: ' + msg, 'success');
-    if (completed >= totalSteps) {
-      BX24.callMethod('crm.item.delete', { entityTypeId: ENTITY_TYPE_ID, id: id }, function(res) {
-        if (res.error()) {
-          logAction('Ошибка удаления закупки ID ' + id + ': ' + getApiErrorMessage(res), 'error');
-          if (done) done(false);
-        } else {
-          logAction('Закупка ID ' + id + ' удалена', 'success');
-          items = items.filter(function(i) { return i.id !== id; });
-          render();
-          if (done) done(true);
-        }
-      });
+    logAction('[ОЧИСТКА] шаг ' + completed + '/' + prepSteps + ' завершён (' + (ok ? 'ok' : 'err') + '): ' + msg, ok ? 'info' : 'error');
+    if (completed >= prepSteps) {
+      finalizeDelete();
     }
+  }
+
+  // Нет подготовительных шагов — сразу удаляем закупку
+  if (prepSteps === 0) {
+    logAction('[ОЧИСТКА] нет подготовительных шагов → сразу удаляю закупку', 'info');
+    finalizeDelete();
+    return;
   }
 
   // Шаг 1: удаление задач
   if (tasksToDelete.length > 0) {
-    logAction('Удаление задач: ' + tasksToDelete.join(', '), 'info');
+    logAction('[ОЧИСТКА] шаг задач: вызов batch tasks.task.delete', 'info');
     var taskBatch = {};
     tasksToDelete.forEach(function(tid, idx) {
       taskBatch['t' + idx] = ['tasks.task.delete', { taskId: tid }];
@@ -472,57 +500,70 @@ function deletePurchaseWithCleanup(id, done) {
       tasksToDelete.forEach(function(tid, idx) {
         var r = res['t' + idx];
         if (r && r.error && r.error()) {
-          logAction('Ошибка удаления задачи ' + tid + ': ' + getApiErrorMessage(r), 'error');
-          allOk = false;
+          var errStr = getApiErrorMessage(r);
+          // 🆕 UNKNOWN при удалении = задача уже удалена → считаем успехом
+          if (/UNKNOWN/i.test(errStr)) {
+            logAction('[ОЧИСТКА] задача ' + tid + ' уже удалена (UNKNOWN) — ок', 'info');
+          } else {
+            logAction('[ОЧИСТКА] ошибка удаления задачи ' + tid + ': ' + errStr, 'error');
+            allOk = false;
+          }
         } else {
-          logAction('Задача ' + tid + ' удалена', 'success');
+          logAction('[ОЧИСТКА] задача ' + tid + ' удалена', 'success');
         }
       });
-      stepDone(allOk, 'Задачи удалены: ' + tasksToDelete.join(', '));
+      stepDone(allOk, 'Задачи: ' + tasksToDelete.join(', '));
     });
   } else {
-    stepDone(true, 'Нет задач для удаления');
+    // задач нет, но INVOICE_ENTITY_ID задан — шаг задач пропускаем, но счётчик не инкрементим
+    // (prepSteps уже не включает задачи, т.к. tasksToDelete.length===0)
   }
 
   // Шаг 2: поиск и удаление связанных входящих счетов
   if (INVOICE_ENTITY_ID) {
-    logAction('Поиск связанных входящих счетов для закупки ID ' + id + '...', 'info');
+    logAction('[ОЧИСТКА] шаг счетов: вызов crm.item.list для entityTypeId ' + INVOICE_ENTITY_ID, 'info');
     BX24.callMethod('crm.item.list', {
       entityTypeId: INVOICE_ENTITY_ID,
       filter: { title: '%№' + id + '%' },
       select: ['id', 'title']
     }, function(res) {
       if (res.error()) {
-        logAction('Ошибка поиска входящих счетов: ' + getApiErrorMessage(res), 'error');
+        logAction('[ОЧИСТКА] шаг счетов: ошибка поиска — ' + getApiErrorMessage(res), 'error');
         stepDone(false, 'Ошибка поиска входящих счетов');
         return;
       }
       var invItems = res.data().items || [];
+      logAction('[ОЧИСТКА] шаг счетов: найдено ' + invItems.length + ' связанных', 'info');
       if (invItems.length === 0) {
         stepDone(true, 'Нет связанных входящих счетов');
         return;
       }
-      logAction('Найдено входящих счетов: ' + invItems.length, 'info');
       var invBatch = {};
       invItems.forEach(function(inv, idx) {
         invBatch['i' + idx] = ['crm.item.delete', { entityTypeId: INVOICE_ENTITY_ID, id: inv.id }];
       });
+      logAction('[ОЧИСТКА] шаг счетов: вызов batch crm.item.delete на ' + invItems.length + ' шт.', 'info');
       BX24.callBatch(invBatch, function(invRes) {
         var allOk = true;
         invItems.forEach(function(inv, idx) {
           var r = invRes['i' + idx];
           if (r && r.error && r.error()) {
-            logAction('Ошибка удаления входящего счета ' + inv.id + ': ' + getApiErrorMessage(r), 'error');
-            allOk = false;
+            var errStr = getApiErrorMessage(r);
+            if (/UNKNOWN/i.test(errStr)) {
+              logAction('[ОЧИСТКА] входящий счет ' + inv.id + ' уже удалён (UNKNOWN) — ок', 'info');
+            } else {
+              logAction('[ОЧИСТКА] ошибка удаления входящего счета ' + inv.id + ': ' + errStr, 'error');
+              allOk = false;
+            }
           } else {
-            logAction('Входящий счет ' + inv.id + ' (' + inv.title + ') удалён', 'success');
+            logAction('[ОЧИСТКА] входящий счет ' + inv.id + ' (' + inv.title + ') удалён', 'success');
           }
         });
         stepDone(allOk, 'Входящие счета удалены: ' + invItems.length + ' шт.');
       });
     });
   } else {
-    stepDone(true, 'INVOICE_ENTITY_ID не задан — пропуск');
+    // INVOICE_ENTITY_ID не задан — шаг счетов не участвует в prepSteps
   }
 }
 
@@ -696,7 +737,6 @@ function syncManagersFromTasks(done) {
     };
 
     found.forEach(function(f) {
-      // ✅ Проверка доступности выбранного исполнителя
       if (isUserUnavailable(f.mgrId)) {
         logAction('Исполнитель ' + (userNames[f.mgrId] || f.mgrId) + ' недоступен (отпуск/больничный) — делегируйте вручную', 'error');
         try {
