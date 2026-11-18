@@ -1,29 +1,43 @@
 // ============================================================
 // МОДУЛЬ: bot.js — Чат-бот уведомлений (imbot.v2, режим fetch)
 // ============================================================
-// Устойчив к пересозданию приложения и устаревшему кэшу botId/dialogId:
-// при ЛЮБОЙ ошибке отправки (в т.ч. UNKNOWN) сбрасывает кэш и делает
-// один ретрай с принудительной перерегистрацией бота и пересозданием диалога.
-// Если register возвращает «уже существует» — бот ищется через Bot.list по code.
+// Устойчив к пересозданию приложения и устаревшему кэшу:
+// при смене client_id приложения кэш сбрасывается ДО первой попытки отправки,
+// что полностью исключает ошибку UNKNOWN и задержку ретрая.
 
 const BOT_CODE = 'purchase_app_bot';
 const BOT_NAME = 'Альтернатива · Закупки';
 
-// Хелпер: полный текст ошибки для логов
+// ✅ Надёжное получение текущего client_id приложения
+function getCurrentClientId() {
+  try {
+    const auth = BX24.getAuth();
+    if (auth && auth.client_id) return auth.client_id;
+  } catch (e) {}
+  return (settings.clientId || '').trim() || 'unknown';
+}
+
+// ✅ Улучшенный парсинг ошибки (защищён от функции вместо объекта в BX24 SDK)
 function describeError(res) {
   try {
     const e = res.error();
-    let code = '', desc = '';
-    if (typeof e === 'string') code = e;
-    else if (e) { code = e.error || ''; desc = e.error_description || ''; }
+    let code = 'UNKNOWN', desc = '';
+    if (typeof e === 'string') {
+      code = e;
+    } else if (typeof e === 'function') {
+      // Иногда BX24 SDK возвращает функцию вместо объекта ошибки
+      try { code = e() || 'UNKNOWN'; } catch (err) { code = 'UNKNOWN'; }
+    } else if (e && typeof e === 'object') {
+      code = e.error || e.code || 'UNKNOWN';
+      desc = e.error_description || e.description || '';
+    }
     if (!desc && res.error_description) desc = res.error_description;
-    return 'Код ошибки: ' + (code || 'UNKNOWN') + (desc ? ' | ' + desc : '');
+    return 'Код ошибки: ' + code + (desc ? ' | ' + desc : '');
   } catch (_) {
     return 'Код ошибки: UNKNOWN';
   }
 }
 
-// Хелпер: распознать ошибку «бот чужой / нет доступа / не найден»
 function isBotOwnershipError(res) {
   try {
     const s = describeError(res);
@@ -33,7 +47,6 @@ function isBotOwnershipError(res) {
   }
 }
 
-// Хелпер: распознать ошибку «бот с таким code уже существует»
 function isBotAlreadyExistsError(res) {
   try {
     const s = describeError(res).toLowerCase();
@@ -43,21 +56,20 @@ function isBotAlreadyExistsError(res) {
   }
 }
 
-// Полный сброс кэша бота и его диалогов
+// ✅ Полный сброс кэша бота, его диалогов и привязанного client_id
 function clearBotCache() {
   localStorage.removeItem('b24_bot_id');
+  localStorage.removeItem('b24_bot_client_id');
   Object.keys(localStorage)
     .filter(function(k) { return k.indexOf('b24_bot_chat_') === 0; })
     .forEach(function(k) { localStorage.removeItem(k); });
-  logAction('Кэш бота сброшен (botId + диалоги) — перерегистрация', 'info');
+  logAction('Кэш бота сброшен (несовпадение client_id или принудительно) — перерегистрация', 'info');
 }
 
-// Сброс кэша диалога конкретного пользователя
 function clearBotDialogCache(userId) {
   localStorage.removeItem('b24_bot_chat_' + userId);
 }
 
-// Поиск существующего бота по code через Bot.list (для случая «уже существует»)
 function findExistingBotByCode(cb) {
   BX24.callMethod('imbot.v2.Bot.list', {}, function(res) {
     if (res.error()) {
@@ -85,14 +97,24 @@ function findExistingBotByCode(cb) {
  * @param {boolean} force — принудительная регистрация (игнорировать кэш)
  */
 function getBotId(cb, force) {
-  const cached = localStorage.getItem('b24_bot_id');
-  if (cached && !force) {
-    return cb(parseInt(cached));
+  const cachedBotId = localStorage.getItem('b24_bot_id');
+  const cachedClientId = localStorage.getItem('b24_bot_client_id');
+  const currentClientId = getCurrentClientId();
+
+  // ✅ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: если client_id изменился (обновлён архив приложения), 
+  // сбрасываем кэш НЕМЕДЛЕННО, до попытки отправки, избегая ошибки UNKNOWN.
+  if (cachedBotId && cachedClientId !== currentClientId) {
+    logAction('Обнаружено изменение client_id приложения. Сброс кэша бота...', 'info');
+    clearBotCache();
+    force = true;
+  }
+
+  if (cachedBotId && !force) {
+    return cb(parseInt(cachedBotId));
   }
 
   logAction('Регистрация чат-бота (imbot.v2)...', 'info');
 
-  // eventMode: 'fetch' означает, что нам не нужен публичный URL обработчика
   BX24.callMethod('imbot.v2.Bot.register', {
     fields: {
       code: BOT_CODE,
@@ -107,33 +129,31 @@ function getBotId(cb, force) {
     if (res.error()) {
       logAction('Ошибка регистрации бота (v2): ' + describeError(res), 'error');
 
-      // Если бот с таким code уже существует под этим приложением — берём его из Bot.list
       if (isBotAlreadyExistsError(res)) {
         logAction('Бот уже существует — ищу через Bot.list...', 'info');
         findExistingBotByCode(function(foundId) {
           if (foundId) {
             localStorage.setItem('b24_bot_id', foundId);
+            localStorage.setItem('b24_bot_client_id', currentClientId);
             return cb(foundId);
           }
-          // Не нашли — пробуем v1 как последний резерв
           registerBotV1(cb);
         });
         return;
       }
 
-      // Иначе — fallback на v1
       registerBotV1(cb);
       return;
     }
 
     const botId = res.data().bot.id;
     localStorage.setItem('b24_bot_id', botId);
+    localStorage.setItem('b24_bot_client_id', currentClientId); // ✅ Сохраняем привязку
     logAction('Бот успешно зарегистрирован (v2), ID: ' + botId, 'success');
     cb(botId);
   });
 }
 
-// Регистрация через v1 (резервный путь для старых порталов)
 function registerBotV1(cb) {
   logAction('Пробуем резервный метод регистрации (imbot.v1)...', 'info');
   BX24.callMethod('imbot.register', {
@@ -142,7 +162,7 @@ function registerBotV1(cb) {
     NAME: BOT_NAME,
     FIRST_NAME: 'Альтернатива',
     LAST_NAME: 'Бот',
-    EVENT_HANDLER: '' // Пустой: события не слушаем, только пишем
+    EVENT_HANDLER: ''
   }, (resV1) => {
     if (resV1.error()) {
       logAction('Ошибка регистрации бота (v1): ' + describeError(resV1), 'error');
@@ -150,18 +170,12 @@ function registerBotV1(cb) {
     }
     const botIdV1 = resV1.data().user_id;
     localStorage.setItem('b24_bot_id', botIdV1);
+    localStorage.setItem('b24_bot_client_id', getCurrentClientId());
     logAction('Бот успешно зарегистрирован (v1 fallback), ID: ' + botIdV1, 'success');
     cb(botIdV1);
   });
 }
 
-/**
- * Получает ID диалога с ботом для пользователя, создавая его при необходимости.
- * @param {number} botId
- * @param {number|string} userId
- * @param {function} cb
- * @param {boolean} force — принудительное создание диалога (игнорировать кэш)
- */
 function getBotDialog(botId, userId, cb, force) {
   const key = 'b24_bot_chat_' + userId;
   const cached = localStorage.getItem(key);
@@ -191,11 +205,6 @@ function getBotDialog(botId, userId, cb, force) {
   });
 }
 
-/**
- * Отправляет сообщение от имени бота с кнопками-ссылками.
- * cb(ok, retryable) — retryable=true при любой ошибке (в т.ч. UNKNOWN),
- * чтобы notifyUserViaBot мог сбросить кэш и повторить.
- */
 function botSend(botId, dialogId, title, message, links, cb) {
   const keyboard = (links || []).filter(function(l) {
     return l && l.url;
@@ -219,7 +228,6 @@ function botSend(botId, dialogId, title, message, links, cb) {
   }, (res) => {
     if (res.error()) {
       logAction('Ошибка отправки сообщения ботом: ' + describeError(res), 'error');
-      // Любая ошибка send считается retryable: кэш botId/dialogId мог протухнуть
       if (cb) cb(false, true);
       return;
     }
@@ -228,10 +236,6 @@ function botSend(botId, dialogId, title, message, links, cb) {
   });
 }
 
-/**
- * Главная функция-обертка для отправки уведомления пользователю через бота.
- * Одна автоматическая попытка ретрая с полным сбросом кэша при ЛЮБОЙ ошибке send.
- */
 function notifyUserViaBot(userId, title, message, links, cb) {
   var retried = false;
 
@@ -261,7 +265,6 @@ function notifyUserViaBot(userId, title, message, links, cb) {
       return;
     }
 
-    // Ретраим один раз при любой ошибке send (UNKNOWN, ownership, устаревший dialogId и т.д.)
     if (!retried) {
       retried = true;
       clearBotCache();
