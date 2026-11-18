@@ -112,14 +112,12 @@ function submitAction(e) {
     logAction(`Отправка в работу: headId=${headIdNum}, поля для обновления: ${Object.keys(fields).join(', ') || '(нет)'}`, 'info');
 
     const proceedToTask = () => {
-      // 🔥 ИСПРАВЛЕНИЕ: Создаем задачу от имени системного администратора, 
-      // чтобы избежать ERROR_CORE из-за нехватки прав у обычного сотрудника на создание задач "от имени" руководителя.
       const adminUserId = parseInt(settings.systemUserId) || 1;
 
       const taskPayload = {
         TITLE: '[🛒] Утверждение исполняющего сотрудника по закупке',
         RESPONSIBLE_ID: headIdNum,
-        CREATED_BY: adminUserId, // <-- ИСПРАВЛЕНО: автор задачи теперь админ, а не руководитель
+        CREATED_BY: adminUserId,
         DESCRIPTION: `Задача:
 1. Выбрать в качестве СОИСПОЛНИТЕЛЯ сотрудника, который будет выполнять сбор данных и расчёт примерной стоимости закупки
 2. Завершить задачу
@@ -150,7 +148,6 @@ ${shortDescText}`,
         const taskId = taskRes.data().task.id;
         logAction(`Задача для руководителя создана (ID: ${taskId})`, 'success');
 
-        // ✅ Уведомление руководителю (колокольчик + чат, если диалог есть)
         try {
           const itemUrl = `${appBaseUrl}?action=view&id=${id}`;
           const taskUrl = `/company/personal/user/${headIdNum}/tasks/task/view/${taskId}/`;
@@ -257,6 +254,20 @@ ${shortDescText}`,
       showToast('Ошибка: ' + err, 'error');
     } else {
       showToast('Статус обновлен', 'success');
+
+      // ✅ Уведомление менеджеру после согласования/отклонения условий
+      if (type === 'approve_terms' || type === 'reject_terms') {
+        try {
+          const mgrArr = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []);
+          const mgrId = mgrArr.length > 0 ? parseInt(mgrArr[0]) : null;
+          if (mgrId) {
+            notifyAfterDecision(mgrId, item, type === 'approve_terms');
+          }
+        } catch (e) {
+          logAction('Ошибка при отправке уведомления о решении: ' + e.message, 'error');
+        }
+      }
+
       closeModal('modal-action');
       loadAllData();
     }

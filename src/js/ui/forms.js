@@ -220,7 +220,6 @@ function submitCreateRequest(e) {
           closeModal('modal-create');
           loadAllData();
 
-          // 🆕 Запуск сценария после создания (с небольшой задержкой, чтобы данные загрузились)
           if (isTestMode && currentScenario !== 'none') {
             setTimeout(() => {
               const createdItem = items.find(i => i.id === newId);
@@ -307,14 +306,13 @@ function submitData(e) {
     } else {
       logAction('Данные сохранены, стадия изменена', 'success');
 
-      // ✅ Завершаем задачу "Сбор данных" после отправки на согласование
       const item = items.find(i => i.id == id);
       const taskSborId = item ? item[actualFields.taskSbor] : null;
       if (taskSborId && String(taskSborId).match(/^\d+$/)) {
         logAction(`Завершение задачи сбора данных ID ${taskSborId}...`, 'info');
         BX24.callMethod('tasks.task.update', {
           taskId: parseInt(taskSborId),
-          fields: { STATUS: 5 } // 5 = Завершена
+          fields: { STATUS: 5 }
         }, (trRes) => {
           if (trRes.error()) {
             logAction('Ошибка завершения задачи сбора: ' + getApiErrorMessage(trRes), 'error');
@@ -322,6 +320,19 @@ function submitData(e) {
             logAction('Задача сбора данных завершена', 'success');
           }
         });
+      }
+
+      // ✅ Уведомление руководителю о поступлении на согласование (карточка + кнопки)
+      try {
+        if (item) {
+          const headArr = Array.isArray(item[actualFields.deptHead]) ? item[actualFields.deptHead] : (item[actualFields.deptHead] ? [item[actualFields.deptHead]] : []);
+          const headId = headArr.length > 0 ? parseInt(headArr[0]) : null;
+          if (headId) {
+            notifyApprovalNeeded(headId, item);
+          }
+        }
+      } catch (e) {
+        logAction('Ошибка при отправке уведомления о согласовании: ' + e.message, 'error');
       }
 
       showToast('Данные сохранены');

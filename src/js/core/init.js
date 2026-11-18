@@ -1,5 +1,21 @@
 // js/init.js — Инициализация приложения (оптимизированная)
 
+// ✅ Глобальный перехват ошибок для диагностики
+window.addEventListener('error', function(ev) {
+  try {
+    if (typeof logAction === 'function') {
+      logAction('JS ERROR: ' + (ev.message || 'unknown') + ' @ ' + (ev.filename || '') + ':' + (ev.lineno || ''), 'error');
+    }
+  } catch (e) {}
+});
+window.addEventListener('unhandledrejection', function(ev) {
+  try {
+    if (typeof logAction === 'function') {
+      logAction('UNHANDLED REJECTION: ' + (ev.reason && ev.reason.message ? ev.reason.message : ev.reason), 'error');
+    }
+  } catch (e) {}
+});
+
 // ✅ Показ прогресса загрузки
 function setLoadingStep(step, total) {
   const container = document.getElementById('app-container');
@@ -14,8 +30,7 @@ function setLoadingStep(step, total) {
   `;
 }
 
-// ✅ Защита от зависания: если приложение открыли напрямую по CDN-ссылке (без портала),
-// BX24.init никогда не вызовет колбэк. Показываем понятное сообщение вместо бесконечной загрузки.
+// ✅ Защита от зависания: если приложение открыли напрямую по CDN-ссылке (без портала)
 function showNoAuthError() {
   const container = document.getElementById('app-container');
   if (!container) return;
@@ -55,7 +70,6 @@ function init() {
     return;
   }
 
-  // Таймаут защиты от зависания при прямом открытии по CDN
   let inited = false;
   const initTimeout = setTimeout(function() {
     if (inited) return;
@@ -77,7 +91,6 @@ function init() {
     };
 
     BX24.callBatch(initBatch, (res) => {
-      // Текущий пользователь
       if (res.user && !res.user.error()) {
         currentUser = res.user.data();
         userNames[currentUser.ID] = `${currentUser.NAME} ${currentUser.LAST_NAME}`;
@@ -86,7 +99,6 @@ function init() {
         return;
       }
 
-      // Проверка прав администратора
       if (res.isAdmin && !res.isAdmin.error()) {
         actualRoles.isAdmin = res.isAdmin.data() === true;
         if (actualRoles.isAdmin) {
@@ -102,7 +114,6 @@ function init() {
         }
       }
 
-      // Загрузка настроек
       if (res.options && !res.options.error() && res.options.data() && res.options.data().settings) {
         try {
           const parsed = JSON.parse(res.options.data().settings);
@@ -115,7 +126,6 @@ function init() {
         }
       }
 
-      // МИГРАЦИЯ МАППИНГА
       let mappingMigrated = false;
       if (!settings.mapping) {
         settings.mapping = { ...DEFAULT_MAPPING };
@@ -145,12 +155,10 @@ function init() {
         BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, () => {});
       }
 
-      // Восстановление режимов
       isTestMode = localStorage.getItem('purchase_test_mode') === 'true';
       document.getElementById('test-mode-toggle').checked = isTestMode;
       currentScenario = localStorage.getItem('purchase_scenario') || 'none';
 
-      // Применение ID из настроек
       ENTITY_TYPE_ID = settings.entityTypeId || 1072;
       INVOICE_ENTITY_ID = settings.invoiceEntityTypeId || 15;
       currentCategoryId = settings.categoryId || 65;
@@ -158,7 +166,6 @@ function init() {
 
       setLoadingStep(2, 5);
 
-      // ✅ ОПТИМИЗАЦИЯ: проверяем свежесть кэша (TTL 5 минут)
       const CACHE_TTL = 5 * 60 * 1000; // 5 минут
       const cachedMeta = localStorage.getItem(CACHE_KEY);
       let useCache = false;
@@ -182,7 +189,6 @@ function init() {
       }
 
       if (useCache) {
-        // ✅ Кэш свежий — пропускаем тяжёлый запрос метаданных
         applyActualFieldsFromMapping();
         checkUserRoles();
         setLoadingStep(5, 5);
@@ -190,11 +196,9 @@ function init() {
         return;
       }
 
-      // Кэш устарел или отсутствует — грузим метаданные
       logAction('Загрузка свежих полей и справочников...', 'info');
       setLoadingStep(3, 5);
 
-      // ✅ ОПТИМИЗАЦИЯ: формируем батч с фильтрацией пользователей
       const metaBatch = {
         uCurrent: ['user.get', { ID: currentUser.ID }],
         fields: ['crm.item.fields', { entityTypeId: ENTITY_TYPE_ID }],
@@ -202,14 +206,11 @@ function init() {
         depts: ['department.get', {}]
       };
 
-      // ✅ Фильтруем пользователей по отделам (если visibleDepts задан)
-      // Это уменьшает объём данных в 10-100 раз
       const userFilter = { active: true };
       if (settings.visibleDepts && settings.visibleDepts.length > 0) {
         userFilter.UF_DEPARTMENT = settings.visibleDepts;
         logAction(`Фильтр пользователей по отделам: ${settings.visibleDepts.join(', ')}`, 'info');
       }
-      // Ограничиваем количество возвращаемых пользователей
       userFilter.SELECT = ['ID', 'NAME', 'LAST_NAME', 'UF_DEPARTMENT'];
       userFilter.ORDER = { LAST_NAME: 'ASC' };
 
@@ -218,19 +219,16 @@ function init() {
       BX24.callBatch(metaBatch, (metaRes) => {
         setLoadingStep(4, 5);
 
-        // Отделы текущего пользователя
         if (metaRes.uCurrent && !metaRes.uCurrent.error() && metaRes.uCurrent.data().length > 0) {
           currentUser.UF_DEPARTMENT = metaRes.uCurrent.data()[0].UF_DEPARTMENT;
         }
 
-        // Поля CRM
         if (metaRes.fields && !metaRes.fields.error()) {
           fieldDefs = metaRes.fields.data().fields;
           applyActualFieldsFromMapping();
           logAction('Поля успешно обновлены', 'success');
         }
 
-        // Стадии воронки
         if (metaRes.statuses && !metaRes.statuses.error()) {
           spStages = {};
           spStagesSorted = [];
@@ -244,13 +242,11 @@ function init() {
           spStagesSorted.sort((a, b) => a.sort - b.sort);
         }
 
-        // Отделы
         if (metaRes.depts && !metaRes.depts.error()) {
           departments = metaRes.depts.data() || [];
           departments.sort((a, b) => a.NAME.localeCompare(b.NAME));
         }
 
-        // Пользователи
         if (metaRes.users && !metaRes.users.error()) {
           allUsers = metaRes.users.data() || [];
           allUsers.forEach(u => {
@@ -274,7 +270,6 @@ function init() {
           logAction(`Загружено пользователей: ${allUsers.length}`, 'info');
         }
 
-        // ✅ Сохраняем кэш с timestamp
         saveToCacheWithTimestamp();
         checkUserRoles();
         setLoadingStep(5, 5);
@@ -284,7 +279,6 @@ function init() {
   });
 }
 
-// ✅ Вынесено в отдельную функцию (используется и при кэше, и при загрузке)
 function applyActualFieldsFromMapping() {
   actualFields = {};
   for (let key in settings.mapping) {
@@ -311,7 +305,6 @@ function applyActualFieldsFromMapping() {
   }
 }
 
-// ✅ Сохранение кэша с timestamp
 function saveToCacheWithTimestamp() {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify({

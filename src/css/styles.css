@@ -737,3 +737,44 @@ body {
   .fab-btn { bottom: 20px; right: 20px; width: 50px; height: 50px; }
   .fab-btn svg { width: 24px; height: 24px; }
 }
+
+/* ============================================================
+   ✅ ФИКС: кнопка "Сохранить"/"Согласовать" залипала яркой
+   (остаточный :focus/:active glow). Сбрасываем анимацию и тень
+   после клика, оставляя только мягкий hover.
+   ============================================================ */
+   .btn-primary,
+   .btn-primary:focus,
+   .btn-primary:active,
+   .btn-primary:focus-visible,
+   .btn-primary:focus-within {
+     animation: none !important;
+     box-shadow: 0 1px 2px rgba(3, 70, 148, 0.15) !important;
+     outline: none !important;
+     filter: none !important;
+   }
+   
+   .btn-primary:hover {
+     box-shadow: 0 2px 6px rgba(3, 70, 148, 0.25) !important;
+     animation: none !important;
+   }
+   
+   .btn-primary:disabled,
+   .btn-primary[disabled] {
+     opacity: 0.6;
+     cursor: not-allowed;
+     box-shadow: none !important;
+     animation: none !important;
+   }
+   
+   /* Убираем залипание transform у всех кнопок */
+   .btn:active,
+   .btn:focus,
+   .btn-primary:active {
+     transform: none !important;
+   }
+   
+   /* Отключаем любые keyframe-анимации пульсации на кнопках */
+   .btn-primary {
+     transition: background-color 0.2s ease, box-shadow 0.2s ease !important;
+   }

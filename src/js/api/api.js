@@ -8,15 +8,12 @@ let b24Ready = false;
 
 // ✅ Утилита: домен портала (надёжно, через BX24.getDomain, а не через CDN)
 function getPortalDomain() {
-  // 1) Основной источник: SDK знает адрес портала, даже до BX24.init
   try {
     if (typeof BX24 !== 'undefined' && typeof BX24.getDomain === 'function') {
       const d = BX24.getDomain();
       if (d && d.indexOf('cdn-') === -1) return 'https://' + d;
     }
   } catch (e) {}
-
-  // 2) Запасной: параметр DOMAIN в query (если портал его подставил)
   try {
     const m = window.location.search.match(/[?&]DOMAIN=([^&]+)/);
     if (m) {
@@ -24,96 +21,129 @@ function getPortalDomain() {
       if (dom && dom.indexOf('cdn-') === -1) return 'https://' + dom;
     }
   } catch (e) {}
-
-  // 3) Запасной: referrer портала
   try {
     if (document.referrer) {
       const o = new URL(document.referrer).origin;
       if (o.indexOf('bitrix24') !== -1 && o.indexOf('cdn-') === -1) return o;
     }
   } catch (e) {}
-
-  // 4) Запасной: текущий origin, если это НЕ CDN
   const origin = window.location.origin;
   if (origin && origin.indexOf('cdn-') === -1) return origin;
-
-  // Не удалось определить портал
   return '';
 }
 
-// ✅ Построение ссылки, которая открывает приложение ЧЕРЕЗ ПОРТАЛ (с авторизацией)
-// Если задан client_id — открываем кастомное приложение в слайдере через /marketplace/view/
-// Иначе — нативную карточку smart-процесса (тоже открывается через портал, всегда работает)
+// ✅ Построение ссылки, открывающей приложение ЧЕРЕЗ ПОРТАЛ (с авторизацией)
 function buildAppLink(action, itemId) {
   const domain = getPortalDomain();
   if (!domain || !itemId) return '';
-
   const clientId = (settings.clientId || '').trim();
   if (clientId) {
-    // Параметры передаются ТОЛЬКО через ключ params[] — иначе не дойдут до приложения
     return domain + '/marketplace/view/' + encodeURIComponent(clientId) +
       '/?params[action]=' + encodeURIComponent(action) +
       '&params[id]=' + encodeURIComponent(itemId);
   }
-
-  // Fallback: стандартная карточка записи smart-процесса
   return domain + '/crm/smartprocess/' + ENTITY_TYPE_ID + '/item/' + itemId + '/';
 }
 
-// ✅ Чтение входящих параметров: из placement (открытие через /marketplace/view/),
-// затем из query string (legacy/прямые ссылки)
-function getIncomingParams() {
-  // 1) Открытие через слайдер портала: параметры приходят в placement.info().options
-  try {
-    if (typeof BX24 !== 'undefined' && BX24.placement && typeof BX24.placement.info === 'function') {
-      const info = BX24.placement.info();
-      const o = (info && info.options) || {};
-      if (o.id) return { action: o.action || 'view', itemId: o.id };
-    }
-  } catch (e) {}
+// ✅ Карточка согласования: текст + кнопки-ссылки (Согласовать/Отклонить)
+function buildApprovalCard(item) {
+  const shortDesc = cleanText(item[actualFields.shortDesc]) || item.title || '';
+  const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
+  const deadline = item[actualFields.deadlineZakup] || 'не указан';
+  const deptId = String(Array.isArray(item[actualFields.dept]) ? item[actualFields.dept][0] : (item[actualFields.dept] || ''));
+  const deptName = settings.deptShortNames[deptId] || (departments.find(d => String(d.ID) === deptId)?.NAME || '—');
+  const mgrId = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager][0] : (item[actualFields.manager] || '');
+  const mgrName = mgrId ? (userNames[mgrId] || mgrId) : '—';
+  const combined = item[actualFields.combinedDir] || '—';
+  const comment = item[actualFields.comment] ? cleanText(item[actualFields.comment]) : '—';
+  const title = item.title || shortDesc;
 
-  // 2) Прямой query string
-  try {
-    const up = new URLSearchParams(window.location.search);
-    if (up.get('id')) return { action: up.get('action') || 'view', itemId: up.get('id') };
-  } catch (e) {}
+  const text =
+    `[B]${title}[/B]\n` +
+    `Описание: ${shortDesc}\n` +
+    `Срок: ${deadline}\n` +
+    `Заказчик (отдел): ${deptName}\n` +
+    `Исполнитель: ${mgrName}\n` +
+    `Сумма: ${amount}\n` +
+    `Раздел/Напр: ${combined}\n` +
+    `Комментарий: ${comment}\n\n` +
+    `Требуется согласование условий.`;
 
-  // 3) Hash (на всякий случай)
-  try {
-    const h = (window.location.hash || '').replace(/^#/, '');
-    if (h) {
-      const hp = new URLSearchParams(h);
-      if (hp.get('id')) return { action: hp.get('action') || 'view', itemId: hp.get('id') };
-    }
-  } catch (e) {}
+  const links = [
+    { text: '✅ Согласовать', url: buildAppLink('approve', item.id) },
+    { text: '❌ Отклонить', url: buildAppLink('reject', item.id) },
+    { text: '📋 Открыть закупку', url: buildAppLink('view', item.id) }
+  ].filter(l => l.url);
 
-  return { action: '', itemId: '' };
+  return { text, links };
 }
 
-// ✅ ОБНОВЛЕНО: уведомления идут через бота, а ссылки строятся НА ПОРТАЛ, а не на CDN
-// Сигнатура сохранена обратно-совместимой: 4-й аргумент может быть и старой CDN-ссылкой
+// ✅ Уведомление руководителю о поступлении на согласование
+function notifyApprovalNeeded(headId, item) {
+  headId = parseInt(headId);
+  if (!headId || !item) return;
+  const card = buildApprovalCard(item);
+  notifyUserViaBot(headId, 'Закупка на согласовании', card.text, card.links, function(success) {
+    if (!success) {
+      logAction('Fallback: im.notify о согласовании', 'info');
+      BX24.callMethod('im.notify', {
+        to: headId,
+        message: 'Закупка на согласовании: ' + (item.title || ''),
+        type: 'SYSTEM',
+        link: buildAppLink('approve', item.id),
+        button_text: 'Согласовать'
+      }, function(r) {
+        if (r.error()) logAction('im.notify (ID ' + headId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
+      });
+    }
+  });
+}
+
+// ✅ Уведомление менеджеру после согласования/отклонения
+function notifyAfterDecision(managerId, item, approved) {
+  managerId = parseInt(managerId);
+  if (!managerId || !item) return;
+  const shortDesc = cleanText(item[actualFields.shortDesc]) || item.title || '';
+  const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
+  const title = approved ? 'Условия согласованы' : 'Закупка отклонена';
+  const message = approved
+    ? `Условия по закупке "${shortDesc}" (сумма ${amount}) согласованы.\nНеобходимо загрузить входящий счёт.`
+    : `Закупка "${shortDesc}" отклонена на этапе согласования.\nТребуется корректировка.`;
+  const links = [
+    { text: approved ? '📄 Загрузить счёт' : '📋 Открыть закупку', url: buildAppLink(approved ? 'upload' : 'view', item.id) }
+  ].filter(l => l.url);
+
+  notifyUserViaBot(managerId, title, message, links, function(success) {
+    if (!success) {
+      BX24.callMethod('im.notify', {
+        to: managerId,
+        message: title + ': ' + shortDesc,
+        type: 'SYSTEM',
+        link: links[0] ? links[0].url : '',
+        button_text: links[0] ? links[0].text : ''
+      }, function(r) {
+        if (r.error()) logAction('im.notify (ID ' + managerId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
+      });
+    }
+  });
+}
+
+// ✅ ОБНОВЛЕНО: уведомления через бота, ссылки строятся НА ПОРТАЛ
 function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, linkText = 'Начать выполнение') {
   userId = parseInt(userId);
   if (!userId) return;
-
   const domain = getPortalDomain();
 
-  // Извлекаем itemId из переданного itemUrl (работает и для старых вызовов с CDN-ссылкой ?id=NNN)
   let itemId = '';
   if (itemUrl) {
     const m = String(itemUrl).match(/[?&]id=(\d+)/);
     if (m) itemId = m[1];
   }
 
-  // Формируем ссылку на приложение ЧЕРЕЗ ПОРТАЛ (не на CDN!)
   let fullItemUrl = '';
-  if (itemId) {
-    fullItemUrl = buildAppLink('view', itemId);
-  } else if (itemUrl) {
-    fullItemUrl = itemUrl.startsWith('http') ? itemUrl : (domain ? domain + itemUrl : itemUrl);
-  }
+  if (itemId) fullItemUrl = buildAppLink('view', itemId);
+  else if (itemUrl) fullItemUrl = itemUrl.startsWith('http') ? itemUrl : (domain ? domain + itemUrl : itemUrl);
 
-  // Ссылка на задачу — тоже через портал
   let fullTaskUrl = '';
   if (taskUrl) {
     if (taskUrl.startsWith('http')) fullTaskUrl = taskUrl;
@@ -126,19 +156,12 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, l
     fullTaskUrl ? { text: '✅ ' + linkText, url: fullTaskUrl } : null
   ].filter(function(l) { return l !== null; });
 
-  // 1. Основная отправка через чат-бота (создаст ЛС, если его нет, и даст push/unread)
   notifyUserViaBot(userId, title, message, links, function(success) {
     if (!success) {
-      // 2. Fallback: если бот не сработал — колокольчик
       logAction('Fallback: отправка через im.notify', 'info');
-
       let notifyText = title + '\n' + message;
-      if (fullTaskUrl) {
-        notifyText += '\n[url=' + fullTaskUrl + ']' + linkText + '[/url]';
-      } else if (fullItemUrl) {
-        notifyText += '\n[url=' + fullItemUrl + ']Открыть закупку[/url]';
-      }
-
+      if (fullTaskUrl) notifyText += '\n[url=' + fullTaskUrl + ']' + linkText + '[/url]';
+      else if (fullItemUrl) notifyText += '\n[url=' + fullItemUrl + ']Открыть закупку[/url]';
       BX24.callMethod('im.notify', {
         to: userId,
         message: notifyText,
@@ -146,9 +169,7 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, l
         link: fullTaskUrl || fullItemUrl || '',
         button_text: (fullTaskUrl || fullItemUrl) ? 'Открыть' : ''
       }, function(r) {
-        if (r.error()) {
-          logAction('im.notify (ID ' + userId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
-        }
+        if (r.error()) logAction('im.notify (ID ' + userId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
       });
     }
   });
@@ -156,12 +177,10 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, l
 
 // Загрузка списка закупок
 function loadAllData() {
-  // ✅ ЗАЩИТА: не грузим данные, пока BX24 не инициализирован
   if (!b24Ready) {
     logAction('loadAllData вызван до инициализации BX24 — пропуск (ждём init)', 'info');
     return;
   }
-
   if (loadAllDataInProgress) {
     logAction('Загрузка уже идёт, пропускаем повторный вызов', 'info');
     return;
@@ -351,7 +370,12 @@ function syncManagersFromTasks(done) {
         if (!f.item[actualFields.taskSbor]) {
           var shortDescText = cleanText(f.item[actualFields.shortDesc]) || f.item.title;
           var headArr = Array.isArray(f.item[actualFields.deptHead]) ? f.item[actualFields.deptHead] : (f.item[actualFields.deptHead] ? [f.item[actualFields.deptHead]] : []);
-          var createdBy = headArr.length > 0 ? parseInt(headArr[0]) : parseInt(currentUser.ID);
+
+          // ✅ ИСПРАВЛЕНО: постановщик задачи = системный администратор (systemUserId)
+          var createdBy = parseInt(systemUserId) || 1;
+          // ✅ Руководитель отдела — наблюдатель
+          var headId = headArr.length > 0 ? parseInt(headArr[0]) : null;
+
           var taskPayload = {
             TITLE: '[🛒] Сбор данных и расчет по закупке',
             RESPONSIBLE_ID: parseInt(f.mgrId),
@@ -360,11 +384,12 @@ function syncManagersFromTasks(done) {
             STATUS: 2,
             ADD_IN_REPORT: 'Y'
           };
+          if (headId) taskPayload.OBSERVERS = [headId];
 
           BX24.callMethod('tasks.task.add', { fields: taskPayload }, function(tr) {
             if (!tr.error()) {
               var newTaskId = tr.data().task.id;
-              logAction('Задача менеджеру создана (ID: ' + newTaskId + ')', 'success');
+              logAction('Задача менеджеру создана (ID: ' + newTaskId + '), постановщик: админ ' + createdBy + ', наблюдатель: ' + (headId || 'нет'), 'success');
 
               try {
                 var itemUrl = appBaseUrl + '?action=view&id=' + f.item.id;
@@ -422,8 +447,8 @@ function handleUrlParams() {
           if (action === 'fill') openDataModal(id);
           else if (action === 'upload') openUploadModal(id);
           else if (action === 'approve') openActionModal(id, 'approve_terms');
+          else if (action === 'reject') openActionModal(id, 'reject_terms');
           else openViewModal(id);
-          // Чистим query/hash, чтобы при повторном фокусе не открывалось заново
           try {
             var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
             window.history.replaceState({ path: newUrl }, '', newUrl);
@@ -434,6 +459,28 @@ function handleUrlParams() {
       }
     }, 500);
   }
+}
+
+function getIncomingParams() {
+  try {
+    if (typeof BX24 !== 'undefined' && BX24.placement && typeof BX24.placement.info === 'function') {
+      const info = BX24.placement.info();
+      const o = (info && info.options) || {};
+      if (o.id) return { action: o.action || 'view', itemId: o.id };
+    }
+  } catch (e) {}
+  try {
+    const up = new URLSearchParams(window.location.search);
+    if (up.get('id')) return { action: up.get('action') || 'view', itemId: up.get('id') };
+  } catch (e) {}
+  try {
+    const h = (window.location.hash || '').replace(/^#/, '');
+    if (h) {
+      const hp = new URLSearchParams(h);
+      if (hp.get('id')) return { action: hp.get('action') || 'view', itemId: hp.get('id') };
+    }
+  } catch (e) {}
+  return { action: '', itemId: '' };
 }
 
 function getStageIdByName(keyword) {
@@ -461,7 +508,6 @@ function getNextStageId(currentStageId) {
   var lastSyncTime = 0;
   var MIN_INTERVAL = 15000;
   var tryReload = function() {
-    // ✅ ЗАЩИТА: не обновляем, пока BX24 не инициализирован
     if (!b24Ready) return;
     var now = Date.now();
     if (now - lastSyncTime < MIN_INTERVAL) return;
