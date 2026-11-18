@@ -411,17 +411,21 @@
 </div>
 </div>
 </div>
-<!-- Панель логов -->
-<button class="btn-logs" onclick="toggleLogPanel()" title="Открыть/Закрыть логи">
-<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-</button>
+
+<!-- ✅ Панель логов (Обновленная структура) -->
 <div class="log-panel" id="log-panel">
-<div class="log-header" onclick="toggleLogPanel()">
-<span>Консоль логов (Системные события)</span>
-<span>&times;</span>
+  <div class="log-header" onclick="toggleLogPanel()">
+    <span>Консоль логов (Системные события)</span>
+    <div class="log-header-actions">
+      <button type="button" class="log-clear-btn" onclick="event.stopPropagation(); clearLogPanel()">Очистить</button>
+      <button type="button" class="log-close-btn" onclick="event.stopPropagation(); toggleLogPanel(false)" title="Закрыть (Esc)">✕</button>
+    </div>
+  </div>
+  <div class="log-content" id="log-content"></div>
 </div>
-<div class="log-content" id="log-content"></div>
-</div>
+<button class="btn-logs" onclick="toggleLogPanel()" title="Открыть/Закрыть логи">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+</button>
 <div id="toast" class="toast"></div>
 
 <!-- Подключение скриптов в правильном порядке -->

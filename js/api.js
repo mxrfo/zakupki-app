@@ -2,6 +2,7 @@
 // МОДУЛЬ: api.js — Обёртки над BX24 API
 // ============================================================
 
+// Регистрация бота для отправки уведомлений
 function registerNotificationBot(callback) {
   const savedBotId = localStorage.getItem('notification_bot_id');
   if (savedBotId) {
@@ -30,30 +31,49 @@ function registerNotificationBot(callback) {
   });
 }
 
+// ✅ Утилита: полный URL портала (надежное определение домена)
 function getPortalOrigin() {
+  // 1. Пробуем взять из параметра DOMAIN (стандартный параметр Bitrix24 приложений)
+  const m = window.location.search.match(/[?&]DOMAIN=([^&]+)/);
+  if (m) {
+    return `https://${decodeURIComponent(m[1])}.bitrix24.ru`;
+  }
+  // 2. Пробуем взять из document.referrer
   try {
-    if (document.referrer) return new URL(document.referrer).origin;
+    if (document.referrer) {
+      const origin = new URL(document.referrer).origin;
+      if (origin.includes('bitrix24')) return origin;
+    }
   } catch (e) {}
+  // 3. Fallback
   return window.location.origin;
 }
 
-// ✅ ФИКС: уведомления с рабочими гиперссылками в чате
-function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl) {
+// ✅ ИСПРАВЛЕНО: уведомления с кликабельными гиперссылками через BB-коды
+// im.notify поддерживает [url=...]текст[/url] в параметре MESSAGE
+function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, linkText = 'Начать выполнение') {
   userId = parseInt(userId);
   if (!userId) return;
 
   const portalOrigin = getPortalOrigin();
+  // Полная ссылка на задачу (taskUrl приходит относительным /company/...)
   const fullTaskUrl = taskUrl ? (taskUrl.startsWith('http') ? taskUrl : portalOrigin + taskUrl) : '';
   const fullItemUrl = itemUrl ? (itemUrl.startsWith('http') ? itemUrl : portalOrigin + itemUrl) : '';
 
-  // 1. Колокольчик: кликабельное уведомление через link (сама ссылка в тексте НЕ рендерится) [[23]]
-  const primaryLink = fullTaskUrl || fullItemUrl || '';
+  // 1. Колокольчик: текст с BB-кодами для гиперссылок
+  let notifyText = `${title}\n${message}`;
+  if (fullTaskUrl) {
+    notifyText += `\n[url=${fullTaskUrl}]${linkText}[/url]`;
+  } else if (fullItemUrl) {
+    notifyText += `\n[url=${fullItemUrl}]Открыть закупку[/url]`;
+  }
+
   BX24.callMethod('im.notify', {
     to: userId,
-    message: `${title}\n${message}`,
+    message: notifyText,
     type: 'SYSTEM',
-    link: primaryLink,
-    button_text: primaryLink ? 'Открыть' : ''
+    link: fullTaskUrl || fullItemUrl || '',
+    button_text: (fullTaskUrl || fullItemUrl) ? 'Открыть' : ''
   }, (r) => {
     if (r.error()) {
       logAction(`im.notify (ID ${userId}) не прошёл: ` + getApiErrorMessage(r), 'error');
@@ -62,19 +82,17 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl) {
     }
   });
 
-  // 2. Чат с ГИПЕРССЫЛКАМИ: сначала получаем числовой DIALOG_ID через im.dialog.get
-  //    (параметр именно DIALOG_ID='user_'+userId, а не USER_ID) [[31]][[32]][[40]]
-  BX24.callMethod('im.dialog.get', { DIALOG_ID: 'user_' + userId }, (r) => {
+  // 2. Сообщение в чат — только если диалог УЖЕ существует. Никогда не создаём новый чат!
+  BX24.callMethod('im.dialog.get', { USER_ID: userId }, (r) => {
     if (r.error() || !r.data() || !r.data().id) {
       logAction(`Диалог с ID ${userId} не найден — в чат не пишем (колокольчика достаточно)`, 'info');
       return;
     }
-    // BB-коды [B], [URL=...] — HTML не поддерживается, только BB [[3]]
+    // BB-коды: [B], [URL=...] — HTML-теги НЕ поддерживаются
     let chatMessage = `[B]${title}[/B]\n${message}`;
     if (fullItemUrl) chatMessage += `\n[URL=${fullItemUrl}]📋 Открыть закупку[/URL]`;
-    if (fullTaskUrl) chatMessage += `\n[URL=${fullTaskUrl}]✅ Открыть задачу[/URL]`;
+    if (fullTaskUrl) chatMessage += `\n[URL=${fullTaskUrl}]✅ ${linkText}[/URL]`;
 
-    // ✅ DIALOG_ID = числовой id из im.dialog.get (не строка 'user_...') [[40]]
     BX24.callMethod('im.message.add', {
       DIALOG_ID: r.data().id,
       MESSAGE: chatMessage
@@ -82,7 +100,7 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl) {
       if (mr.error()) {
         logAction(`im.message.add (ID ${userId}) не прошёл: ` + getApiErrorMessage(mr), 'error');
       } else {
-        logAction(`Сообщение с гиперссылками отправлено в чат ID ${userId}`, 'success');
+        logAction(`Сообщение отправлено в существующий диалог с ID ${userId}`, 'success');
       }
     });
   });
@@ -99,7 +117,6 @@ function loadAllData() {
   if (items.length === 0) {
     document.getElementById('app-container').innerHTML = '<div class="loading" style="grid-column: 1/-1;">Загрузка данных...</div>';
   }
-  // ✅ ФИКС: правильные звёздочки (в Knowledge Base были пробелы [' ','UF_ '])
   BX24.callMethod('crm.item.list', { entityTypeId: ENTITY_TYPE_ID, select: ['*', 'UF_*'] }, (res) => {
     loadAllDataInProgress = false;
     if (res.error()) {
@@ -116,6 +133,7 @@ function loadAllData() {
   });
 }
 
+// Функция смены сценария
 function changeScenario(val) {
   currentScenario = val;
   localStorage.setItem('purchase_scenario', val);
@@ -129,6 +147,7 @@ function changeScenario(val) {
   showToast(`Сценарий: ${labels[val] || val}`);
 }
 
+// Автопроход сценария после создания закупки
 function runScenarioAfterCreate(itemId) {
   if (!isTestMode || currentScenario === 'none') return;
   if (scenarioRunning[itemId]) return;
@@ -175,6 +194,7 @@ function runScenarioAfterCreate(itemId) {
   });
 }
 
+// Синхронизация менеджера из соисполнителей задачи
 function syncManagersFromTasks(done) {
   done = done || function () {};
 
@@ -198,6 +218,7 @@ function syncManagersFromTasks(done) {
 
   BX24.callBatch(batch, (res) => {
     logAction(`Ответ batch получен. Тип: ${Array.isArray(res) ? 'массив' : 'объект'}, ключей: ${Object.keys(res).length}`, 'info');
+
     const found = [];
 
     need.forEach((i, idx) => {
@@ -214,6 +235,7 @@ function syncManagersFromTasks(done) {
       }
       const taskData = r.data();
       const task = (taskData && taskData.task) || taskData || {};
+
       const accomplices = task.accomplices || [];
       const status = task.status;
       const responsibleId = task.responsibleId;
@@ -265,26 +287,16 @@ function syncManagersFromTasks(done) {
 
         if (!f.item[actualFields.taskSbor]) {
           const shortDescText = cleanText(f.item[actualFields.shortDesc]) || f.item.title;
-
-          // ✅ ФИКС: CREATED_BY = админ (systemUserId), а НЕ headArr/currentUser
-          const adminUserId = parseInt(settings.systemUserId) || 1;
-          const responsibleUserId = parseInt(f.mgrId);
-
-          if (isNaN(responsibleUserId) || responsibleUserId <= 0) {
-            logAction(`Критическая ошибка: некорректный ID ответственного (${f.mgrId}) для закупки ${f.item.id}`, 'error');
-            finish(f.item.id);
-            return;
-          }
-
+          const headArr = Array.isArray(f.item[actualFields.deptHead]) ? f.item[actualFields.deptHead] : (f.item[actualFields.deptHead] ? [f.item[actualFields.deptHead]] : []);
+          const createdBy = headArr.length > 0 ? parseInt(headArr[0]) : parseInt(currentUser.ID);
           const taskPayload = {
             TITLE: '[🛒] Сбор данных и расчет по закупке',
-            RESPONSIBLE_ID: responsibleUserId,
-            CREATED_BY: adminUserId,
+            RESPONSIBLE_ID: parseInt(f.mgrId),
+            CREATED_BY: createdBy,
             DESCRIPTION: `Необходимо собрать данные и рассчитать стоимость по закупке "${shortDescText}".`,
             STATUS: 2,
             ADD_IN_REPORT: 'Y'
           };
-
           BX24.callMethod('tasks.task.add', { fields: taskPayload }, (tr) => {
             if (!tr.error()) {
               const newTaskId = tr.data().task.id;
@@ -298,7 +310,8 @@ function syncManagersFromTasks(done) {
                   'Назначена задача по закупке',
                   `Необходимо собрать данные и рассчитать стоимость по закупке: ${shortDescText}`,
                   itemUrl,
-                  taskUrl
+                  taskUrl,
+                  'Начать выполнение'
                 );
               } catch (e) {
                 logAction('Ошибка при отправке уведомления менеджеру: ' + e.message, 'error');
@@ -328,6 +341,7 @@ function syncManagersFromTasks(done) {
   });
 }
 
+// Обработка параметров из URL
 function handleUrlParams() {
   const urlParams = new URLSearchParams(window.location.search);
   const action = urlParams.get('action');
@@ -375,6 +389,7 @@ function getNextStageId(currentStageId) {
   return null;
 }
 
+// Автообновление при возврате во вкладку (с троттлингом)
 (function setupAutoRefreshOnFocus() {
   let lastSyncTime = 0;
   const MIN_INTERVAL = 15000;

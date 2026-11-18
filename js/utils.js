@@ -7,52 +7,59 @@ function getApiErrorMessage(res) {
   if (!res || !res.error) return 'Неизвестная ошибка';
   const err = res.error();
   if (!err) return 'Неизвестная ошибка';
-
+  
   const desc = err.error_description || err.errorDescription || err.description || '';
   const code = err.error || err.code || 'UNKNOWN';
   const exception = err.errorException || err.exception || '';
-
+  
   if (desc || exception) {
     return `${code}: ${desc} ${exception}`.trim();
   }
   return `Код ошибки: ${code}`;
 }
 
+// Экранирование HTML для безопасного вывода в логи
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+  );
+}
+
 // Логирование действий в консоль и UI
 function logAction(message, type = 'info') {
-  const timestamp = new Date().toLocaleTimeString();
-  const prefix = type === 'error' ? '❌' : (type === 'success' ? '✅' : 'ℹ️');
-  console.log(`[${timestamp}] ${prefix} ${message}`);
-
-  const logContainer = document.getElementById('app-logs');
-  if (logContainer && logContainer.style.display !== 'none') {
+  const timestamp = new Date().toLocaleTimeString('ru-RU');
+  console.log(`[${timestamp}] ${type === 'error' ? '❌' : (type === 'success' ? '✅' : 'ℹ️')} ${message}`);
+  
+  const logContainer = document.getElementById('log-content');
+  if (logContainer) {
     const div = document.createElement('div');
-    div.className = `log-entry log-${type}`;
-    div.style.cssText = `padding:3px 0; border-bottom:1px solid #1e293b; ${
-      type === 'error' ? 'color:#f87171;' : type === 'success' ? 'color:#34d399;' : 'color:#cbd5e1;'
-    }`;
-    div.textContent = `[${timestamp}] ${message}`;
+    div.className = `log-line log-${type}`;
+    div.innerHTML = `<span class="log-time">[${timestamp}]</span> ${escapeHtml(message)}`;
     logContainer.appendChild(div);
     logContainer.scrollTop = logContainer.scrollHeight;
+    
+    // Ограничиваем количество строк логов, чтобы не перегружать DOM
+    while (logContainer.children.length > 500) {
+      logContainer.removeChild(logContainer.firstChild);
+    }
   }
 }
 
 // Показ всплывающего уведомления (toast)
 function showToast(message, type = 'info') {
-  let toast = document.getElementById('app-toast');
+  let toast = document.getElementById('app-toast') || document.getElementById('toast');
   if (!toast) {
     toast = document.createElement('div');
     toast.id = 'app-toast';
-    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:12px 20px;border-radius:8px;color:#fff;font-weight:500;z-index:9999;opacity:0;transition:opacity 0.3s;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
+    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:12px 20px;border-radius:8px;color:#fff;font-weight:500;z-index:10001;opacity:0;transition:opacity 0.3s;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
     document.body.appendChild(toast);
   }
-
+  
   toast.textContent = message;
-  toast.style.backgroundColor = type === 'error' ? '#ef4444' : (type === 'success' ? '#10b981' : '#3b82f6');
-  toast.style.opacity = '1';
-
+  toast.className = `toast show ${type}`;
+  
   setTimeout(() => {
-    toast.style.opacity = '0';
+    toast.classList.remove('show');
   }, 3000);
 }
 
@@ -61,6 +68,40 @@ function cleanText(text) {
   if (!text) return '';
   return String(text).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
+
+// ✅ Открытие/закрытие консоли логов
+function toggleLogPanel(force) {
+  const panel = document.getElementById('log-panel');
+  if (!panel) return;
+  
+  const willOpen = (typeof force === 'boolean') ? force : !panel.classList.contains('open');
+  panel.classList.toggle('open', willOpen);
+  localStorage.setItem('purchase_log_open', willOpen ? '1' : '0');
+  
+  const btn = document.querySelector('.btn-logs');
+  if (btn) {
+    btn.style.display = willOpen ? 'none' : 'flex';
+  }
+}
+
+// ✅ Очистка консоли логов
+function clearLogPanel() {
+  const container = document.getElementById('log-content');
+  if (container) container.innerHTML = '';
+}
+
+// ✅ Горячая клавиша Esc для закрытия и восстановление состояния при загрузке
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    toggleLogPanel(false);
+  }
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (localStorage.getItem('purchase_log_open') === '1') {
+    toggleLogPanel(true);
+  }
+});
 
 // ============================================================
 // 🔥 ВОССТАНОВЛЕННЫЕ ФУНКЦИИ
@@ -136,70 +177,4 @@ function getFileInfo(item, fileFieldCode) {
   const url = file.url || file.downloadUrl || '';
   const name = file.name || file.originalName || 'Файл';
   return { url, name };
-}
-
-// ============================================================
-// 🔥 ПАНЕЛЬ ЛОГОВ (только логика, без создания кнопки)
-// ============================================================
-
-function toggleLogPanel() {
-  const panel = document.getElementById('app-logs');
-  if (!panel) return;
-
-  const isVisible = panel.style.display === 'block';
-  panel.style.display = isVisible ? 'none' : 'block';
-
-  document.querySelectorAll('#log-toggle-btn, .log-toggle-btn, [onclick*="toggleLogPanel"]').forEach(btn => {
-    btn.style.background = isVisible ? '#1e293b' : '#334155';
-  });
-
-  if (!isVisible) panel.scrollTop = panel.scrollHeight;
-}
-
-// Автоинициализация панели логов (только панель, без кнопки)
-(function initLogPanel() {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', buildLogPanel);
-  } else {
-    buildLogPanel();
-  }
-
-  function buildLogPanel() {
-    // Создаём панель только если её нет
-    if (document.getElementById('app-logs')) return;
-
-    const panel = document.createElement('div');
-    panel.id = 'app-logs';
-    panel.style.cssText = `
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: 220px;
-      background: #0f172a;
-      color: #e2e8f0;
-      font-family: 'Consolas', 'Monaco', monospace;
-      font-size: 12px;
-      padding: 12px 16px;
-      overflow-y: auto;
-      z-index: 9997;
-      display: none;
-      border-top: 2px solid #334155;
-    `;
-
-    const header = document.createElement('div');
-    header.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #334155;';
-    header.innerHTML = `
-      <span style="font-weight:700; color:#60a5fa;">📋 КОНСОЛЬ ЛОГОВ</span>
-      <button id="log-clear-btn" style="background:#ef4444;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;">Очистить</button>
-    `;
-    panel.appendChild(header);
-
-    document.body.appendChild(panel);
-
-    document.getElementById('log-clear-btn').addEventListener('click', () => {
-      const entries = panel.querySelectorAll('.log-entry');
-      entries.forEach(e => e.remove());
-    });
-  }
-})();
+};
