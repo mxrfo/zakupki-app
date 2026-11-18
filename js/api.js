@@ -33,30 +33,25 @@ function registerNotificationBot(callback) {
 
 // ✅ Утилита: полный URL портала (надежное определение домена)
 function getPortalOrigin() {
-  // 1. Пробуем взять из параметра DOMAIN (стандартный параметр Bitrix24 приложений)
   const m = window.location.search.match(/[?&]DOMAIN=([^&]+)/);
   if (m) {
     return `https://${decodeURIComponent(m[1])}.bitrix24.ru`;
   }
-  // 2. Пробуем взять из document.referrer
   try {
     if (document.referrer) {
       const origin = new URL(document.referrer).origin;
       if (origin.includes('bitrix24')) return origin;
     }
   } catch (e) {}
-  // 3. Fallback
   return window.location.origin;
 }
 
 // ✅ ИСПРАВЛЕНО: уведомления с кликабельными гиперссылками через BB-коды
-// im.notify поддерживает [url=...]текст[/url] в параметре MESSAGE
 function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, linkText = 'Начать выполнение') {
   userId = parseInt(userId);
   if (!userId) return;
 
   const portalOrigin = getPortalOrigin();
-  // Полная ссылка на задачу (taskUrl приходит относительным /company/...)
   const fullTaskUrl = taskUrl ? (taskUrl.startsWith('http') ? taskUrl : portalOrigin + taskUrl) : '';
   const fullItemUrl = itemUrl ? (itemUrl.startsWith('http') ? itemUrl : portalOrigin + itemUrl) : '';
 
@@ -82,13 +77,12 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, l
     }
   });
 
-  // 2. Сообщение в чат — только если диалог УЖЕ существует. Никогда не создаём новый чат!
+  // 2. Сообщение в чат — только если диалог УЖЕ существует.
   BX24.callMethod('im.dialog.get', { USER_ID: userId }, (r) => {
     if (r.error() || !r.data() || !r.data().id) {
       logAction(`Диалог с ID ${userId} не найден — в чат не пишем (колокольчика достаточно)`, 'info');
       return;
     }
-    // BB-коды: [B], [URL=...] — HTML-теги НЕ поддерживаются
     let chatMessage = `[B]${title}[/B]\n${message}`;
     if (fullItemUrl) chatMessage += `\n[URL=${fullItemUrl}]📋 Открыть закупку[/URL]`;
     if (fullTaskUrl) chatMessage += `\n[URL=${fullTaskUrl}]✅ ${linkText}[/URL]`;

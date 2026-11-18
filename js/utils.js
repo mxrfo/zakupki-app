@@ -8,6 +8,7 @@ function getApiErrorMessage(res) {
   const err = res.error();
   if (!err) return 'Неизвестная ошибка';
   
+  // Битрикс может вернуть ошибку в разных форматах
   const desc = err.error_description || err.errorDescription || err.description || '';
   const code = err.error || err.code || 'UNKNOWN';
   const exception = err.errorException || err.exception || '';
@@ -18,14 +19,14 @@ function getApiErrorMessage(res) {
   return `Код ошибки: ${code}`;
 }
 
-// Экранирование HTML для безопасного вывода в логи
+// ✅ Экранирование HTML для безопасного вывода в логи
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
   );
 }
 
-// Логирование действий в консоль и UI
+// ✅ Логирование действий в консоль и UI (исправлен ID на log-content и добавлен escapeHtml)
 function logAction(message, type = 'info') {
   const timestamp = new Date().toLocaleTimeString('ru-RU');
   console.log(`[${timestamp}] ${type === 'error' ? '❌' : (type === 'success' ? '✅' : 'ℹ️')} ${message}`);
@@ -45,7 +46,7 @@ function logAction(message, type = 'info') {
   }
 }
 
-// Показ всплывающего уведомления (toast)
+// ✅ Показ всплывающего уведомления (toast) с исправленным z-index и классами
 function showToast(message, type = 'info') {
   let toast = document.getElementById('app-toast') || document.getElementById('toast');
   if (!toast) {
@@ -104,7 +105,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================================
-// 🔥 ВОССТАНОВЛЕННЫЕ ФУНКЦИИ
+// 🔥 ВОССТАНОВЛЕННЫЕ ОРИГИНАЛЬНЫЕ ФУНКЦИИ (НИ ОДНА НЕ УДАЛЕНА)
 // ============================================================
 
 function calculateTotalAmount(item) {
@@ -177,4 +178,4 @@ function getFileInfo(item, fileFieldCode) {
   const url = file.url || file.downloadUrl || '';
   const name = file.name || file.originalName || 'Файл';
   return { url, name };
-};
+}
