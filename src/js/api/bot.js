@@ -1,8 +1,8 @@
 // ============================================================
 // МОДУЛЬ: bot.js — Чат-бот уведомлений (imbot.v2, режим fetch)
 // ============================================================
-// При смене client_id приложения бот ПЕРЕСОЗДАЁТСЯ (не ищется старый).
-// Это гарантирует, что бот всегда привязан к текущему приложению.
+// При каждом запуске приложения удаляет ВСЕХ старых ботов с кодом purchase_app_bot
+// и создаёт нового, привязанного к текущему архиву.
 
 const BOT_CODE = 'purchase_app_bot';
 const BOT_NAME = 'Альтернатива · Закупки';
@@ -34,13 +34,52 @@ function describeError(res) {
   }
 }
 
-function isBotAlreadyExistsError(res) {
-  try {
-    const s = describeError(res).toLowerCase();
-    return /already|exist|duplicate|taken|существует|занят/i.test(s);
-  } catch (_) {
-    return false;
-  }
+// ✅ Удаляет ВСЕХ ботов с кодом BOT_CODE (старые версии)
+function removeAllOldBots(cb) {
+  logAction('Поиск старых ботов с кодом ' + BOT_CODE + '...', 'info');
+  
+  BX24.callMethod('imbot.v2.Bot.list', {}, function(res) {
+    if (res.error()) {
+      logAction('Bot.list ошибка: ' + describeError(res), 'error');
+      return cb();
+    }
+    
+    const list = (res.data() && (res.data().result || res.data())) || [];
+    const arr = Array.isArray(list) ? list : [];
+    const botsToDelete = [];
+    
+    for (let i = 0; i < arr.length; i++) {
+      const b = arr[i];
+      const code = (b && (b.code || b.CODE)) || '';
+      if (String(code) === String(BOT_CODE) && b && (b.id || b.ID)) {
+        botsToDelete.push(parseInt(b.id || b.ID));
+      }
+    }
+    
+    if (botsToDelete.length === 0) {
+      logAction('Старых ботов не найдено', 'info');
+      return cb();
+    }
+    
+    logAction('Найдено старых ботов: ' + botsToDelete.length + ' (ID: ' + botsToDelete.join(', ') + '). Удаляю...', 'info');
+    
+    let deleted = 0;
+    botsToDelete.forEach(function(botId) {
+      // Используем legacy метод imbot.remove (работает и для v2 ботов)
+      BX24.callMethod('imbot.remove', { ID: botId }, function(removeRes) {
+        if (removeRes.error()) {
+          logAction('Ошибка удаления бота ID ' + botId + ': ' + describeError(removeRes), 'error');
+        } else {
+          logAction('Бот ID ' + botId + ' удалён', 'success');
+        }
+        deleted++;
+        if (deleted === botsToDelete.length) {
+          logAction('Все старые боты удалены', 'success');
+          cb();
+        }
+      });
+    });
+  });
 }
 
 // ✅ Полный сброс кэша бота, диалогов и client_id
@@ -50,7 +89,7 @@ function clearBotCache() {
   Object.keys(localStorage)
     .filter(function(k) { return k.indexOf('b24_bot_chat_') === 0; })
     .forEach(function(k) { localStorage.removeItem(k); });
-  logAction('Кэш бота полностью сброшен — будет создан новый бот', 'info');
+  logAction('Кэш бота полностью сброшен', 'info');
 }
 
 function clearBotDialogCache(userId) {
@@ -58,25 +97,42 @@ function clearBotDialogCache(userId) {
 }
 
 /**
- * Получает ID бота, регистрируя его при необходимости.
- * При смене client_id — ВСЕГДА регистрирует нового бота (не ищет старого).
+ * Получает ID бота, удаляя старых и создавая нового при необходимости.
+ * Вызывается ОДИН РАЗ при первом запуске приложения.
  */
 function getBotId(cb, force) {
   const cachedBotId = localStorage.getItem('b24_bot_id');
   const cachedClientId = localStorage.getItem('b24_bot_client_id');
   const currentClientId = getCurrentClientId();
 
-  // ✅ Если client_id изменился — принудительно пересоздаём бота
-  if (cachedBotId && cachedClientId !== currentClientId) {
-    logAction('client_id изменился (' + cachedClientId + ' → ' + currentClientId + '). Пересоздаём бота...', 'info');
+  // ✅ Если client_id изменился ИЛИ force=true — удаляем старых ботов и создаём нового
+  if (force || (cachedBotId && cachedClientId !== currentClientId)) {
+    if (cachedBotId && cachedClientId !== currentClientId) {
+      logAction('client_id изменился (' + cachedClientId + ' → ' + currentClientId + '). Пересоздаём бота...', 'info');
+    } else {
+      logAction('Принудительное пересоздание бота...', 'info');
+    }
+    
     clearBotCache();
-    force = true;
+    
+    // Удаляем всех старых ботов и создаём нового
+    removeAllOldBots(function() {
+      registerNewBot(cb);
+    });
+    return;
   }
 
-  if (cachedBotId && !force) {
+  if (cachedBotId) {
     return cb(parseInt(cachedBotId));
   }
 
+  // Первый запуск — удаляем старых (если есть) и создаём нового
+  removeAllOldBots(function() {
+    registerNewBot(cb);
+  });
+}
+
+function registerNewBot(cb) {
   logAction('Регистрация нового чат-бота (imbot.v2)...', 'info');
 
   BX24.callMethod('imbot.v2.Bot.register', {
@@ -92,40 +148,13 @@ function getBotId(cb, force) {
   }, (res) => {
     if (res.error()) {
       logAction('Ошибка регистрации бота (v2): ' + describeError(res), 'error');
-
-      // ✅ Если бот уже существует под ЭТИМ client_id — используем его
-      if (isBotAlreadyExistsError(res)) {
-        logAction('Бот уже существует под текущим приложением — ищем через Bot.list...', 'info');
-        BX24.callMethod('imbot.v2.Bot.list', {}, function(listRes) {
-          if (listRes.error()) {
-            logAction('Bot.list ошибка: ' + describeError(listRes), 'error');
-            return registerBotV1(cb);
-          }
-          const list = (listRes.data() && (listRes.data().result || listRes.data())) || [];
-          const arr = Array.isArray(list) ? list : [];
-          for (let i = 0; i < arr.length; i++) {
-            const b = arr[i];
-            const code = (b && (b.code || b.CODE)) || '';
-            if (String(code) === String(BOT_CODE) && b && (b.id || b.ID)) {
-              const id = parseInt(b.id || b.ID);
-              localStorage.setItem('b24_bot_id', id);
-              localStorage.setItem('b24_bot_client_id', currentClientId);
-              logAction('Найден существующий бот под текущим приложением, ID: ' + id, 'success');
-              return cb(id);
-            }
-          }
-          registerBotV1(cb);
-        });
-        return;
-      }
-
       registerBotV1(cb);
       return;
     }
 
     const botId = res.data().bot.id;
     localStorage.setItem('b24_bot_id', botId);
-    localStorage.setItem('b24_bot_client_id', currentClientId);
+    localStorage.setItem('b24_bot_client_id', getCurrentClientId());
     logAction('Бот успешно зарегистрирован (v2), ID: ' + botId, 'success');
     cb(botId);
   });
