@@ -32,7 +32,7 @@
 <header class="topbar">
 <div style="display:flex; align-items:center; gap:16px;">
 <div class="search-bar">
-<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="21.65"/></svg>
 <input type="text" id="search-input" placeholder="Поиск..." oninput="onSearchChange(this.value)">
 </div>
 <button class="btn btn-primary btn-sm" onclick="openCreateModal()" id="btn-create-top" style="white-space: nowrap;">
@@ -64,7 +64,7 @@
 </div>
 <span id="user-display">Загрузка...</span>
 <button class="btn btn-icon" onclick="openAdminPanel()" id="btn-settings" style="display: none;" title="Настройки">
-<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-.33 1.82l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
 </button>
 <button class="btn btn-icon" onclick="loadAllData()" title="Обновить">
 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
@@ -428,19 +428,20 @@
 </button>
 <div id="toast" class="toast"></div>
 
-<!-- Подключение скриптов в правильном порядке -->
-<script src="js/config.js"></script>
-<script src="js/state.js"></script>
-<script src="js/utils.js"></script>
-<script src="js/api.js"></script>
-<script src="js/cache.js"></script>
-<script src="js/roles.js"></script>
-<script src="js/dragdrop.js"></script>
-<script src="js/render.js"></script>
-<script src="js/modals.js"></script>
-<script src="js/forms.js"></script>
-<script src="js/actions.js"></script>
-<script src="js/settings.js"></script>
-<script src="js/init.js"></script>
+<!-- Подключение скриптов в правильном порядке (dev-режим; при сборке в dist они инлайнятся через build.js) -->
+<script src="js/core/config.js"></script>
+<script src="js/core/state.js"></script>
+<script src="js/core/utils.js"></script>
+<script src="js/api/bot.js"></script>
+<script src="js/api/api.js"></script>
+<script src="js/api/cache.js"></script>
+<script src="js/logic/roles.js"></script>
+<script src="js/ui/dragdrop.js"></script>
+<script src="js/ui/render.js"></script>
+<script src="js/ui/modals.js"></script>
+<script src="js/ui/forms.js"></script>
+<script src="js/logic/actions.js"></script>
+<script src="js/logic/settings.js"></script>
+<script src="js/core/init.js"></script>
 </body>
 </html>
