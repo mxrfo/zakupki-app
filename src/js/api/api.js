@@ -3,32 +3,54 @@
 // ============================================================
 
 // Флаг: BX24 SDK загружен и init() успешно отработал
-// Устанавливается в src/js/core/init.js после BX24.init()
 let b24Ready = false;
 
-// ✅ Утилита: домен портала (надёжно, через BX24.getDomain, а не через CDN)
+// ✅ Утилита: домен портала (надёжно, через BX24.getDomain + кэш из init, а не через CDN)
 function getPortalDomain() {
+  // 0) Приоритет: значение, сохранённое в init.js сразу после BX24.init()
+  if (window.__portalDomain) return window.__portalDomain;
+
+  // 1) SDK знает адрес портала
   try {
     if (typeof BX24 !== 'undefined' && typeof BX24.getDomain === 'function') {
       const d = BX24.getDomain();
-      if (d && d.indexOf('cdn-') === -1) return 'https://' + d;
+      if (d && d.indexOf('cdn-') === -1) {
+        window.__portalDomain = 'https://' + d;
+        return window.__portalDomain;
+      }
     }
   } catch (e) {}
+
+  // 2) Параметр DOMAIN в query
   try {
     const m = window.location.search.match(/[?&]DOMAIN=([^&]+)/);
     if (m) {
       const dom = decodeURIComponent(m[1]);
-      if (dom && dom.indexOf('cdn-') === -1) return 'https://' + dom;
+      if (dom && dom.indexOf('cdn-') === -1) {
+        window.__portalDomain = 'https://' + dom;
+        return window.__portalDomain;
+      }
     }
   } catch (e) {}
+
+  // 3) Referrer портала
   try {
     if (document.referrer) {
       const o = new URL(document.referrer).origin;
-      if (o.indexOf('bitrix24') !== -1 && o.indexOf('cdn-') === -1) return o;
+      if (o.indexOf('bitrix24') !== -1 && o.indexOf('cdn-') === -1) {
+        window.__portalDomain = o;
+        return o;
+      }
     }
   } catch (e) {}
+
+  // 4) Текущий origin, если это НЕ CDN
   const origin = window.location.origin;
-  if (origin && origin.indexOf('cdn-') === -1) return origin;
+  if (origin && origin.indexOf('cdn-') === -1) {
+    window.__portalDomain = origin;
+    return origin;
+  }
+
   return '';
 }
 
@@ -45,7 +67,7 @@ function buildAppLink(action, itemId) {
   return domain + '/crm/smartprocess/' + ENTITY_TYPE_ID + '/item/' + itemId + '/';
 }
 
-// ✅ Карточка согласования: текст + кнопки-ссылки (Согласовать/Отклонить)
+// ✅ Карточка согласования: текст + кнопки-ссылки (Согласовать/Отклонить/Открыть)
 function buildApprovalCard(item) {
   const shortDesc = cleanText(item[actualFields.shortDesc]) || item.title || '';
   const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
@@ -128,7 +150,7 @@ function notifyAfterDecision(managerId, item, approved) {
   });
 }
 
-// ✅ ОБНОВЛЕНО: уведомления через бота, ссылки строятся НА ПОРТАЛ
+// ✅ ОБНОВЛЕНО: уведомления через бота, ссылки строятся НА ПОРТАЛ, битые кнопки отсекаются
 function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, linkText = 'Начать выполнение') {
   userId = parseInt(userId);
   if (!userId) return;
@@ -142,19 +164,20 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, l
 
   let fullItemUrl = '';
   if (itemId) fullItemUrl = buildAppLink('view', itemId);
-  else if (itemUrl) fullItemUrl = itemUrl.startsWith('http') ? itemUrl : (domain ? domain + itemUrl : itemUrl);
+  else if (itemUrl && domain) fullItemUrl = itemUrl.startsWith('http') ? itemUrl : domain + itemUrl;
 
   let fullTaskUrl = '';
   if (taskUrl) {
     if (taskUrl.startsWith('http')) fullTaskUrl = taskUrl;
     else if (domain) fullTaskUrl = domain + taskUrl;
-    else fullTaskUrl = taskUrl;
+    else fullTaskUrl = ''; // без домена относительная ссылка в мессенджере ведёт на /online/ — не добавляем
   }
 
+  // ✅ Фильтр по НЕПУСТОМУ url — битые кнопки больше не попадают в клавиатуру
   const links = [
     fullItemUrl ? { text: '📋 Открыть закупку', url: fullItemUrl } : null,
     fullTaskUrl ? { text: '✅ ' + linkText, url: fullTaskUrl } : null
-  ].filter(function(l) { return l !== null; });
+  ].filter(function(l) { return l && l.url; });
 
   notifyUserViaBot(userId, title, message, links, function(success) {
     if (!success) {

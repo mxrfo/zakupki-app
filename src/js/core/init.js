@@ -60,6 +60,28 @@ function tryRedirectToPortal() {
   }
 }
 
+// ✅ Регистрация виджета REST_APP_URI, чтобы ссылка /marketplace/view/{client_id}/
+//    открывала приложение в слайдере, а не показывала «Ошибка при показе приложения».
+//    Выполняется только админом и один раз (идемпотентно через localStorage-флаг).
+function ensureAppPlacement() {
+  const handlerUrl = window.location.href.split('?')[0].split('#')[0];
+  const bindKey = 'b24_placement_bound_' + handlerUrl;
+  if (localStorage.getItem(bindKey)) return;
+  BX24.callMethod('placement.bind', {
+    PLACEMENT: 'REST_APP_URI',
+    HANDLER: handlerUrl,
+    TITLE: 'Закупки'
+  }, function(res) {
+    if (res.error()) {
+      // «already binded» и т.п. — считаем успехом, ставим флаг
+      logAction('placement.bind: ' + getApiErrorMessage(res) + ' (возможно уже зарегистрирован)', 'info');
+    } else {
+      logAction('Виджет REST_APP_URI зарегистрирован: ' + handlerUrl, 'success');
+    }
+    localStorage.setItem(bindKey, '1');
+  });
+}
+
 function init() {
   logAction('Инициализация приложения...', 'info');
   setLoadingStep(0, 5);
@@ -82,6 +104,23 @@ function init() {
 
     // ✅ Сигнал для api.js: BX24 инициализирован, можно вызывать loadAllData()
     b24Ready = true;
+
+    // ✅ Сохраняем домен портала СРАЗУ, до любых отправок уведомлений
+    try {
+      const d = BX24.getDomain();
+      if (d && d.indexOf('cdn-') === -1) window.__portalDomain = 'https://' + d;
+    } catch (e) {}
+
+    // ✅ Пытаемся подтянуть client_id из авторизации, если в настройках пусто
+    try {
+      if (!settings.clientId) {
+        const auth = BX24.getAuth();
+        if (auth && auth.client_id) {
+          settings.clientId = auth.client_id;
+          logAction('client_id подтянут из авторизации: ' + auth.client_id, 'info');
+        }
+      }
+    } catch (e) {}
 
     setLoadingStep(1, 5);
     const initBatch = {
@@ -165,6 +204,11 @@ function init() {
       systemUserId = settings.systemUserId || 175;
 
       setLoadingStep(2, 5);
+
+      // ✅ Если есть client_id и мы админ — регистрируем виджет REST_APP_URI
+      try {
+        if (settings.clientId && actualRoles.isAdmin) ensureAppPlacement();
+      } catch (e) {}
 
       const CACHE_TTL = 5 * 60 * 1000; // 5 минут
       const cachedMeta = localStorage.getItem(CACHE_KEY);
