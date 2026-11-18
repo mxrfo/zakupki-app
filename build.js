@@ -6,7 +6,18 @@ const archiver = require('archiver');
 const INPUT_HTML = 'index.html';
 const OUTPUT_HTML = 'dist/index.html';
 const CSS_FILE = 'css/styles.css';
-const ZIP_OUTPUT = 'dist/app.zip';
+
+// Генерируем временную метку для имени файла: YYYYMMDD_HHMMSS
+const now = new Date();
+const timestamp = now.getFullYear() +
+  String(now.getMonth() + 1).padStart(2, '0') +
+  String(now.getDate()).padStart(2, '0') + '_' +
+  String(now.getHours()).padStart(2, '0') +
+  String(now.getMinutes()).padStart(2, '0') +
+  String(now.getSeconds()).padStart(2, '0');
+
+// Архив сохраняется в папке releases с уникальным именем
+const ZIP_OUTPUT = `dist/releases/app_${timestamp}.zip`;
 
 // ВАЖНО: порядок подключения скриптов!
 // Зависимости: config → state → utils → bot → api → cache → roles → dragdrop → render → modals → forms → actions → settings → init
@@ -67,7 +78,6 @@ function build() {
   let html = fs.readFileSync(INPUT_HTML, 'utf8');
 
   // 4. Заменяем подключение CSS на inline <style>
-  // Поддержка разных форматов: <link>, <link />, самозакрывающиеся теги
   html = html.replace(
     /<link\s+[^>]*href=["']css\/styles\.css["'][^>]*\/?>/gi,
     '<style>\n' + css + '\n</style>'
@@ -94,8 +104,10 @@ function build() {
   console.log('   CSS:  ' + (css.length / 1024).toFixed(1) + ' КБ');
   console.log('   JS:   ' + (js.length / 1024).toFixed(1) + ' КБ');
 
-  // 8. Создаем ZIP-архив для загрузки в Битрикс24
-  console.log('\n🗜️  Начинаю создание ZIP-архива для Битрикс24...');
+  // 8. Создаем ZIP-архив с версионированием для загрузки в Битрикс24
+  console.log('\n🗜️  Начинаю создание ZIP-архива с временной меткой...');
+  ensureDir('dist/releases'); // Создаём папку для истории сборок
+  
   const output = fs.createWriteStream(ZIP_OUTPUT);
   const archive = archiver('zip', {
     zlib: { level: 9 } // Максимальное сжатие
@@ -104,6 +116,7 @@ function build() {
   output.on('close', function() {
     console.log('✅ ZIP-архив успешно создан: ' + ZIP_OUTPUT + ' (' + (archive.pointer() / 1024).toFixed(1) + ' КБ)');
     console.log('🚀 Готов к загрузке в раздел "Локальные приложения" Битрикс24!');
+    console.log('💡 Предыдущие версии архивов сохранены в папке dist/releases/ для возможного отката.');
   });
 
   archive.on('error', function(err) {
@@ -114,10 +127,6 @@ function build() {
   
   // Добавляем файл index.html в корень архива строго под именем index.html
   archive.file(OUTPUT_HTML, { name: 'index.html' });
-  
-  // Примечание: если в будущем в папке dist появятся другие файлы (например, иконки),
-  // можно раскомментировать строку ниже, чтобы добавить всю папку целиком:
-  // archive.directory('dist/', false);
 
   archive.finalize();
 }
