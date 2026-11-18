@@ -54,17 +54,115 @@ function getPortalDomain() {
   return '';
 }
 
-// ✅ Построение ссылки, открывающей приложение ЧЕРЕЗ ПОРТАЛ (с авторизацией)
-function buildAppLink(action, itemId) {
+// ✅ Построение ссылки, открывающей приложение ЧЕРЕЗ ПОРТАЛ (с авторизацией).
+//    tab — целевая вкладка (по умолчанию не добавляется; в уведомлениях ставим 'inbox').
+function buildAppLink(action, itemId, tab) {
   const domain = getPortalDomain();
   if (!domain || !itemId) return '';
   const clientId = (settings.clientId || '').trim();
+  const tabSuffix = tab ? ('&params[tab]=' + encodeURIComponent(tab)) : '';
   if (clientId) {
     return domain + '/marketplace/view/' + encodeURIComponent(clientId) +
       '/?params[action]=' + encodeURIComponent(action) +
-      '&params[id]=' + encodeURIComponent(itemId);
+      '&params[id]=' + encodeURIComponent(itemId) + tabSuffix;
   }
+  // Fallback: стандартная карточка записи smart-процесса (tab не применим)
   return domain + '/crm/smartprocess/' + ENTITY_TYPE_ID + '/item/' + itemId + '/';
+}
+
+// ✅ Форматирование даты создания (createdTime → dd.mm.yyyy)
+function formatCreatedDate(v) {
+  if (!v) return '—';
+  try {
+    const d = new Date(v);
+    if (!isNaN(d.getTime())) return d.toLocaleDateString('ru-RU');
+  } catch (e) {}
+  return '—';
+}
+
+// ✅ Форматирование крайнего срока ('YYYY-MM-DD' → dd.mm.yyyy)
+function formatDeadline(v) {
+  if (!v) return 'не указан';
+  const s = String(v);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[3] + '.' + m[2] + '.' + m[1];
+  try {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toLocaleDateString('ru-RU');
+  } catch (e) {}
+  return s;
+}
+
+// ✅ Извлечение меты закупки из карточки (id, дата создания, краткое описание, срок, автор)
+function buildPurchaseMeta(item) {
+  const no = item.id;
+  const dateStr = formatCreatedDate(item.createdTime);
+  let shortDesc = '';
+  try {
+    shortDesc = (typeof cleanText === 'function' ? cleanText(item[actualFields.shortDesc]) : (item[actualFields.shortDesc] || '')) || item.title || '—';
+  } catch (e) {
+    shortDesc = item.title || '—';
+  }
+  const deadlineStr = formatDeadline(item[actualFields.deadlineZakup]);
+  const creatorRaw = item[actualFields.creator];
+  const creatorId = Array.isArray(creatorRaw) ? creatorRaw[0] : creatorRaw;
+  const creatorName = creatorId ? (userNames[creatorId] || creatorId) : '—';
+  return { no, dateStr, shortDesc, deadlineStr, creatorName };
+}
+
+// ✅ Единое тело уведомления-карточки
+function formatPurchaseBody(meta) {
+  return 'Что нужно закупить: ' + meta.shortDesc + '\n' +
+         'Крайний срок закупки: ' + meta.deadlineStr + '\n' +
+         'Кто создал запрос: ' + meta.creatorName;
+}
+
+// ✅ Универсальная отправка уведомления через бота с fallback на im.notify
+function sendBotNotification(userId, title, message, links, cb) {
+  notifyUserViaBot(userId, title, message, links, function(success) {
+    if (!success) {
+      logAction('Fallback: отправка через im.notify', 'info');
+      const firstLink = (links && links[0] && links[0].url) ? links[0].url : '';
+      const plain = title + '\n' + message;
+      BX24.callMethod('im.notify', {
+        to: userId,
+        message: plain,
+        type: 'SYSTEM',
+        link: firstLink,
+        button_text: firstLink ? 'Открыть' : ''
+      }, function(r) {
+        if (r.error()) logAction('im.notify (ID ' + userId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
+      });
+    }
+    if (cb) cb(success);
+  });
+}
+
+// ✅ Уведомление №1: руководителю — выбрать исполнителя (без упоминания задачи)
+function notifySelectExecutor(userId, item) {
+  userId = parseInt(userId);
+  if (!userId || !item) return;
+  const meta = buildPurchaseMeta(item);
+  const title = 'Необходимо выбрать исполнителя для закупки №' + meta.no + ' от ' + meta.dateStr;
+  const message = formatPurchaseBody(meta);
+  const links = [
+    { text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'inbox') }
+  ].filter(function(l) { return l.url; });
+  sendBotNotification(userId, title, message, links);
+}
+
+// ✅ Уведомление №2: менеджеру — собрать данные (без «Начать выполнение», с кнопкой заполнения)
+function notifyCollectData(userId, item) {
+  userId = parseInt(userId);
+  if (!userId || !item) return;
+  const meta = buildPurchaseMeta(item);
+  const title = 'Необходимо собрать данные и рассчитать стоимость по закупке №' + meta.no + ' от ' + meta.dateStr;
+  const message = formatPurchaseBody(meta);
+  const links = [
+    { text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'inbox') },
+    { text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }
+  ].filter(function(l) { return l.url; });
+  sendBotNotification(userId, title, message, links);
 }
 
 // ✅ Карточка согласования: текст + кнопки-ссылки (Согласовать/Отклонить/Открыть)
@@ -92,9 +190,9 @@ function buildApprovalCard(item) {
     `Требуется согласование условий.`;
 
   const links = [
-    { text: '✅ Согласовать', url: buildAppLink('approve', item.id) },
-    { text: '❌ Отклонить', url: buildAppLink('reject', item.id) },
-    { text: '📋 Открыть закупку', url: buildAppLink('view', item.id) }
+    { text: '✅ Согласовать', url: buildAppLink('approve', item.id, 'inbox') },
+    { text: '❌ Отклонить', url: buildAppLink('reject', item.id, 'inbox') },
+    { text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'inbox') }
   ].filter(l => l.url);
 
   return { text, links };
@@ -112,7 +210,7 @@ function notifyApprovalNeeded(headId, item) {
         to: headId,
         message: 'Закупка на согласовании: ' + (item.title || ''),
         type: 'SYSTEM',
-        link: buildAppLink('approve', item.id),
+        link: buildAppLink('approve', item.id, 'inbox'),
         button_text: 'Согласовать'
       }, function(r) {
         if (r.error()) logAction('im.notify (ID ' + headId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
@@ -132,7 +230,7 @@ function notifyAfterDecision(managerId, item, approved) {
     ? `Условия по закупке "${shortDesc}" (сумма ${amount}) согласованы.\nНеобходимо загрузить входящий счёт.`
     : `Закупка "${shortDesc}" отклонена на этапе согласования.\nТребуется корректировка.`;
   const links = [
-    { text: approved ? '📄 Загрузить счёт' : '📋 Открыть закупку', url: buildAppLink(approved ? 'upload' : 'view', item.id) }
+    { text: approved ? '📄 Загрузить счёт' : '📋 Открыть закупку', url: buildAppLink(approved ? 'upload' : 'view', item.id, 'inbox') }
   ].filter(l => l.url);
 
   notifyUserViaBot(managerId, title, message, links, function(success) {
@@ -150,7 +248,7 @@ function notifyAfterDecision(managerId, item, approved) {
   });
 }
 
-// ✅ ОБНОВЛЕНО: уведомления через бота, ссылки строятся НА ПОРТАЛ, битые кнопки отсекаются
+// ✅ Legacy-обёртка (сохранена для совместимости). Ссылки строятся НА ПОРТАЛ, битые кнопки отсекаются.
 function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, linkText = 'Начать выполнение') {
   userId = parseInt(userId);
   if (!userId) return;
@@ -163,17 +261,16 @@ function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, l
   }
 
   let fullItemUrl = '';
-  if (itemId) fullItemUrl = buildAppLink('view', itemId);
+  if (itemId) fullItemUrl = buildAppLink('view', itemId, 'inbox');
   else if (itemUrl && domain) fullItemUrl = itemUrl.startsWith('http') ? itemUrl : domain + itemUrl;
 
   let fullTaskUrl = '';
   if (taskUrl) {
     if (taskUrl.startsWith('http')) fullTaskUrl = taskUrl;
     else if (domain) fullTaskUrl = domain + taskUrl;
-    else fullTaskUrl = ''; // без домена относительная ссылка в мессенджере ведёт на /online/ — не добавляем
+    else fullTaskUrl = ''; // без домена относительная ссылка ведёт на /online/ — не добавляем
   }
 
-  // ✅ Фильтр по НЕПУСТОМУ url — битые кнопки больше не попадают в клавиатуру
   const links = [
     fullItemUrl ? { text: '📋 Открыть закупку', url: fullItemUrl } : null,
     fullTaskUrl ? { text: '✅ ' + linkText, url: fullTaskUrl } : null
@@ -415,16 +512,8 @@ function syncManagersFromTasks(done) {
               logAction('Задача менеджеру создана (ID: ' + newTaskId + '), постановщик: админ ' + createdBy + ', наблюдатель: ' + (headId || 'нет'), 'success');
 
               try {
-                var itemUrl = appBaseUrl + '?action=view&id=' + f.item.id;
-                var taskUrl = '/company/personal/user/' + f.mgrId + '/tasks/task/view/' + newTaskId + '/';
-                sendNotificationWithMessage(
-                  parseInt(f.mgrId),
-                  'Назначена задача по закупке',
-                  'Необходимо собрать данные и рассчитать стоимость по закупке: ' + shortDescText,
-                  itemUrl,
-                  taskUrl,
-                  'Начать выполнение'
-                );
+                // ✅ Уведомление менеджеру: карточка + кнопки «Открыть закупку» (inbox) и «Заполнить данные»
+                notifyCollectData(parseInt(f.mgrId), f.item);
               } catch (e) {
                 logAction('Ошибка при отправке уведомления менеджеру: ' + e.message, 'error');
               }
@@ -458,6 +547,7 @@ function handleUrlParams() {
   var params = getIncomingParams();
   var itemId = params.itemId;
   var action = params.action;
+  var tab = params.tab;
   if (itemId) {
     var attempts = 0;
     var maxAttempts = 20;
@@ -467,11 +557,22 @@ function handleUrlParams() {
         clearInterval(checkItemsInterval);
         if (items.length > 0) {
           var id = parseInt(itemId);
+
+          // ✅ Переключаем целевую вкладку (например, Входящие) ДО открытия модалки
+          if (tab) {
+            try {
+              if (typeof switchTab === 'function') switchTab(tab);
+            } catch (e) {
+              logAction('switchTab(' + tab + ') не выполнен: ' + e.message, 'error');
+            }
+          }
+
           if (action === 'fill') openDataModal(id);
           else if (action === 'upload') openUploadModal(id);
           else if (action === 'approve') openActionModal(id, 'approve_terms');
           else if (action === 'reject') openActionModal(id, 'reject_terms');
           else openViewModal(id);
+
           try {
             var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
             window.history.replaceState({ path: newUrl }, '', newUrl);
@@ -485,25 +586,31 @@ function handleUrlParams() {
 }
 
 function getIncomingParams() {
+  // 1) Открытие через слайдер портала: параметры приходят в placement.info().options
   try {
     if (typeof BX24 !== 'undefined' && BX24.placement && typeof BX24.placement.info === 'function') {
       const info = BX24.placement.info();
       const o = (info && info.options) || {};
-      if (o.id) return { action: o.action || 'view', itemId: o.id };
+      if (o.id) return { action: o.action || 'view', itemId: o.id, tab: o.tab || '' };
     }
   } catch (e) {}
+
+  // 2) Прямой query string
   try {
     const up = new URLSearchParams(window.location.search);
-    if (up.get('id')) return { action: up.get('action') || 'view', itemId: up.get('id') };
+    if (up.get('id')) return { action: up.get('action') || 'view', itemId: up.get('id'), tab: up.get('tab') || '' };
   } catch (e) {}
+
+  // 3) Hash (на всякий случай)
   try {
     const h = (window.location.hash || '').replace(/^#/, '');
     if (h) {
       const hp = new URLSearchParams(h);
-      if (hp.get('id')) return { action: hp.get('action') || 'view', itemId: hp.get('id') };
+      if (hp.get('id')) return { action: hp.get('action') || 'view', itemId: hp.get('id'), tab: hp.get('tab') || '' };
     }
   } catch (e) {}
-  return { action: '', itemId: '' };
+
+  return { action: '', itemId: '', tab: '' };
 }
 
 function getStageIdByName(keyword) {

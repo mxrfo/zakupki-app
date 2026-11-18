@@ -148,16 +148,9 @@ ${shortDescText}`,
         const taskId = taskRes.data().task.id;
         logAction(`Задача для руководителя создана (ID: ${taskId})`, 'success');
 
+        // ✅ Уведомление руководителю: карточка «выбрать исполнителя» (без упоминания задачи), кнопка «Открыть закупку» → inbox
         try {
-          const itemUrl = `${appBaseUrl}?action=view&id=${id}`;
-          const taskUrl = `/company/personal/user/${headIdNum}/tasks/task/view/${taskId}/`;
-          sendNotificationWithMessage(
-            headIdNum,
-            'Создана задача по закупке',
-            `Необходимо выбрать исполнителя для закупки: ${shortDescText}`,
-            itemUrl,
-            taskUrl
-          );
+          notifySelectExecutor(headIdNum, item);
         } catch (e) {
           logAction('Ошибка при отправке уведомления руководителю: ' + e.message, 'error');
         }
