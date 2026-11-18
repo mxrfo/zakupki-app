@@ -1,6 +1,5 @@
 // js/forms.js — Обработка форм (создание, редактирование, загрузка)
 
-// Открытие модалки создания
 function openCreateModal() {
   const deptSelect = document.getElementById('create-dept');
   deptSelect.innerHTML = '<option value="">-- Выберите отдел --</option>';
@@ -33,21 +32,18 @@ function openCreateModal() {
   document.getElementById('modal-create').style.display = 'flex';
 }
 
-// Добавление строки детализации (создание)
 function addDetailRow() {
   const tr = document.createElement('tr');
   tr.innerHTML = `<td><input type="text" class="det-name" oninput="calculateAllTotals()"></td><td><input type="text" class="det-purpose"></td><td><input type="number" class="det-price" step="0.01" oninput="calculateRowTotal(this)"></td><td><input type="number" class="det-qty" step="1" oninput="calculateRowTotal(this)"></td><td><input type="text" class="det-total" readonly></td><td><input type="url" class="det-link"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove(); calculateAllTotals();">&times;</button></td>`;
   document.getElementById('detail-tbody').appendChild(tr);
 }
 
-// Добавление строки детализации (данные)
 function addDataDetailRow() {
   const tr = document.createElement('tr');
   tr.innerHTML = `<td><input type="text" class="data-det-name"></td><td><input type="text" class="data-det-purpose"></td><td><input type="number" class="data-det-price" step="0.01" oninput="calculateDataRowTotal(this)"></td><td><input type="number" class="data-det-qty" step="1" oninput="calculateDataRowTotal(this)"></td><td><input type="text" class="data-det-total" readonly></td><td><input type="url" class="data-det-link"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
   document.getElementById('data-detail-tbody').appendChild(tr);
 }
 
-// Расчёт строки (создание)
 function calculateRowTotal(input) {
   const tr = input.closest('tr');
   const price = parseFloat(tr.querySelector('.det-price').value) || 0;
@@ -57,7 +53,6 @@ function calculateRowTotal(input) {
   calculateAllTotals();
 }
 
-// Расчёт всех итогов (создание)
 function calculateAllTotals() {
   let sum = 0;
   let hasDetails = false;
@@ -84,7 +79,6 @@ function calculateAllTotals() {
   }
 }
 
-// Расчёт строки (данные)
 function calculateDataRowTotal(input) {
   const tr = input.closest('tr');
   const price = parseFloat(tr.querySelector('.data-det-price').value) || 0;
@@ -93,7 +87,6 @@ function calculateDataRowTotal(input) {
   tr.querySelector('.data-det-total').value = total > 0 ? total.toFixed(2) : '';
 }
 
-// Обновление списка направлений в зависимости от раздела
 function updateDirections(selectedDirId = null) {
   const secSelect = document.getElementById('data-section');
   const secId = secSelect.value;
@@ -117,7 +110,6 @@ function updateDirections(selectedDirId = null) {
   });
 }
 
-// ✅ Отправка делегирования
 function submitDelegate(e) {
   e.preventDefault();
   const id = document.getElementById('delegate-id').value;
@@ -135,7 +127,6 @@ function submitDelegate(e) {
   });
 }
 
-// Отправка формы создания/редактирования
 function submitCreateRequest(e) {
   e.preventDefault();
   const btn = document.getElementById('btn-save-create');
@@ -252,7 +243,6 @@ function submitCreateRequest(e) {
   }
 }
 
-// Отправка формы сбора данных
 function submitData(e) {
   e.preventDefault();
   const id = document.getElementById('data-id').value;
@@ -340,33 +330,16 @@ function submitData(e) {
         });
       }
 
-      // ✅ ИСПРАВЛЕНО: надежное получение headId (из карточки -> из настроек -> из структуры компании)
+      // ✅ Надёжное определение руководителя (учитывает тест-режим и fallback по отделу)
       try {
         if (item) {
-          let headId = null;
-          const deptId = Array.isArray(item[actualFields.dept]) ? item[actualFields.dept][0] : item[actualFields.dept];
-          
-          // 1. Из карточки
-          const headArr = Array.isArray(item[actualFields.deptHead]) ? item[actualFields.deptHead] : (item[actualFields.deptHead] ? [item[actualFields.deptHead]] : []);
-          if (headArr.length > 0) headId = parseInt(headArr[0]);
-          
-          // 2. Из настроек отдела
-          if (!headId && deptId && settings.deptHeads[deptId]) {
-            headId = parseInt(settings.deptHeads[deptId]);
-          }
-          
-          // 3. Из структуры компании Битрикс24
-          if (!headId && deptId) {
-            const deptObj = departments.find(d => String(d.ID) === String(deptId));
-            if (deptObj && deptObj.UF_HEAD) headId = parseInt(deptObj.UF_HEAD);
-          }
-
+          const headId = resolveDeptHeadId(item, true);
+          const actorName = currentUser ? (currentUser.NAME + ' ' + (currentUser.LAST_NAME || '')) : 'Система';
           if (headId) {
-            const actorName = currentUser ? (currentUser.NAME + ' ' + (currentUser.LAST_NAME || '')) : 'Система';
-            logAction(`Отправка уведомления о согласовании руководителю ID ${headId} (${actorName})`, 'info');
+            logAction(`Отправка уведомления о согласовании руководителю ID ${headId} (от: ${actorName})`, 'info');
             notifyApprovalNeeded(headId, item, actorName);
           } else {
-            logAction('Не удалось определить руководителя отдела для отправки уведомления о согласовании', 'error');
+            logAction('Не удалось определить руководителя — уведомление о согласовании НЕ отправлено. Проверьте: поле deptHead в карточке, settings.deptHeads, UF_HEAD отдела.', 'error');
           }
         }
       } catch (e) {
@@ -380,7 +353,6 @@ function submitData(e) {
   });
 }
 
-// Отправка формы изменения суммы
 function submitEditAmount(e) {
   e.preventDefault();
   const id = document.getElementById('edit-amount-id').value;
@@ -401,7 +373,6 @@ function submitEditAmount(e) {
   });
 }
 
-// Отправка формы загрузки счёта
 function submitUpload(e) {
   e.preventDefault();
   const id = document.getElementById('upload-id').value;

@@ -4,7 +4,6 @@
 
 let b24Ready = false;
 var deleteInProgress = {};
-// 🆕 Флаг: параметры URL/placement обработаны один раз за загрузку iframe
 var urlParamsProcessed = false;
 
 function getPortalDomain() {
@@ -85,7 +84,6 @@ function formatDeadline(v) {
   return s;
 }
 
-// ✅ buildPurchaseMeta: creator с fallback на системное createdBy
 function buildPurchaseMeta(item) {
   const no = item.id;
   const dateStr = formatCreatedDate(item.createdTime);
@@ -96,19 +94,29 @@ function buildPurchaseMeta(item) {
     shortDesc = item.title || '—';
   }
   const deadlineStr = formatDeadline(item[actualFields.deadlineZakup]);
-  let creatorId = '';
-  if (actualFields.creator && item[actualFields.creator]) {
-    creatorId = Array.isArray(item[actualFields.creator]) ? item[actualFields.creator][0] : item[actualFields.creator];
-  }
-  if (!creatorId) creatorId = item.createdBy;
+  const creatorRaw = item[actualFields.creator];
+  const creatorId = Array.isArray(creatorRaw) ? creatorRaw[0] : creatorRaw;
   const creatorName = creatorId ? (userNames[creatorId] || creatorId) : '—';
-  return { no, dateStr, shortDesc, deadlineStr, creatorName, creatorId };
+  return { no, dateStr, shortDesc, deadlineStr, creatorName };
 }
 
 function formatPurchaseBody(meta) {
   return 'Что нужно закупить: ' + meta.shortDesc + '\n' +
          'Крайний срок закупки: ' + meta.deadlineStr + '\n' +
          'Кто создал запрос: ' + meta.creatorName;
+}
+
+// ✅ Надёжное определение руководителя отдела закупки.
+//    Цепочка: тест-режим → deptHead из карточки → settings.deptHeads[dept] → UF_HEAD из departments.
+function resolveDeptHeadId(item, respectTestMode) {
+  if (!item) return null;
+  if (respectTestMode && isTestMode && currentUser) return parseInt(currentUser.ID);
+  const headArr = Array.isArray(item[actualFields.deptHead]) ? item[actualFields.deptHead] : (item[actualFields.deptHead] ? [item[actualFields.deptHead]] : []);
+  if (headArr.length > 0) { const id = parseInt(headArr[0]); if (id) return id; }
+  const deptId = String(Array.isArray(item[actualFields.dept]) ? item[actualFields.dept][0] : (item[actualFields.dept] || ''));
+  if (deptId && settings.deptHeads && settings.deptHeads[deptId]) { const id = parseInt(settings.deptHeads[deptId]); if (id) return id; }
+  if (deptId) { const d = departments.find(x => String(x.ID) === deptId); if (d && d.UF_HEAD) { const id = parseInt(d.UF_HEAD); if (id) return id; } }
+  return null;
 }
 
 function sendBotNotification(userId, title, message, links, cb) {
@@ -131,13 +139,12 @@ function sendBotNotification(userId, title, message, links, cb) {
   });
 }
 
-// ✅ notifySelectExecutor: добавить кто отправил в работу (создатель)
 function notifySelectExecutor(userId, item, taskId) {
   userId = parseInt(userId);
   if (!userId || !item) return;
   const meta = buildPurchaseMeta(item);
   const title = 'Необходимо выбрать исполнителя для закупки №' + meta.no + ' от ' + meta.dateStr;
-  const message = formatPurchaseBody(meta) + '\n\nДействие выполнил: ' + meta.creatorName;
+  const message = formatPurchaseBody(meta);
 
   const domain = getPortalDomain();
   const taskLink = taskId ? (domain ? domain + '/company/personal/user/' + userId + '/tasks/task/view/' + taskId + '/' : '') : '';
@@ -150,7 +157,6 @@ function notifySelectExecutor(userId, item, taskId) {
   sendBotNotification(userId, title, message, links);
 }
 
-// ✅ notifyCollectData: УБРАТЬ кнопку «Открыть закупку», оставить только «Заполнить данные»
 function notifyCollectData(userId, item, actorName) {
   userId = parseInt(userId);
   if (!userId || !item) return;
@@ -165,7 +171,6 @@ function notifyCollectData(userId, item, actorName) {
   sendBotNotification(userId, title, message, links);
 }
 
-// ✅ buildApprovalCard: добавить кто отправил на согласование (менеджер)
 function buildApprovalCard(item, actorName) {
   const shortDesc = cleanText(item[actualFields.shortDesc]) || item.title || '';
   const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
@@ -199,10 +204,12 @@ function buildApprovalCard(item, actorName) {
   return { text, links };
 }
 
-// ✅ notifyApprovalNeeded: принимать actorName
 function notifyApprovalNeeded(headId, item, actorName) {
   headId = parseInt(headId);
-  if (!headId || !item) return;
+  if (!headId || !item) {
+    logAction('notifyApprovalNeeded: headId не определён — уведомление о согласовании НЕ отправлено', 'error');
+    return;
+  }
   const card = buildApprovalCard(item, actorName);
   notifyUserViaBot(headId, 'Закупка на согласовании', card.text, card.links, function(success) {
     if (!success) {
@@ -220,14 +227,13 @@ function notifyApprovalNeeded(headId, item, actorName) {
   });
 }
 
-// ✅ notifyAfterDecision: принимать actorName (кто согласовал/отклонил)
 function notifyAfterDecision(managerId, item, approved, actorName) {
   managerId = parseInt(managerId);
   if (!managerId || !item) return;
   const shortDesc = cleanText(item[actualFields.shortDesc]) || item.title || '';
   const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
   const title = approved ? 'Условия согласованы' : 'Закупка отклонена';
-  const message = approved
+  let message = approved
     ? `Условия по закупке "${shortDesc}" (сумма ${amount}) согласованы.\nНеобходимо загрузить входящий счёт.`
     : `Закупка "${shortDesc}" отклонена на этапе согласования.\nТребуется корректировка.`;
   if (actorName) message += '\n\nДействие выполнил: ' + actorName;
@@ -697,8 +703,7 @@ function syncManagersFromTasks(done) {
       if (isUserUnavailable(f.mgrId)) {
         logAction('Исполнитель ' + (userNames[f.mgrId] || f.mgrId) + ' недоступен (отпуск/больничный) — делегируйте вручную', 'error');
         try {
-          const headArr = Array.isArray(f.item[actualFields.deptHead]) ? f.item[actualFields.deptHead] : (f.item[actualFields.deptHead] ? [f.item[actualFields.deptHead]] : []);
-          const headId = headArr.length > 0 ? parseInt(headArr[0]) : null;
+          const headId = resolveDeptHeadId(f.item, true);
           if (headId) {
             const meta = buildPurchaseMeta(f.item);
             sendBotNotification(headId, 'Исполнитель недоступен', 'Выбранный исполнитель ' + (userNames[f.mgrId] || f.mgrId) + ' недоступен (отпуск/больничный). Делегируйте закупку №' + meta.no + ' другому сотруднику отдела.', [
@@ -736,10 +741,9 @@ function syncManagersFromTasks(done) {
 
         if (!f.item[actualFields.taskSbor]) {
           var shortDescText = cleanText(f.item[actualFields.shortDesc]) || f.item.title;
-          var headArr = Array.isArray(f.item[actualFields.deptHead]) ? f.item[actualFields.deptHead] : (f.item[actualFields.deptHead] ? [f.item[actualFields.deptHead]] : []);
+          var headId = resolveDeptHeadId(f.item, true);
 
           var createdBy = parseInt(systemUserId) || 1;
-          var headId = headArr.length > 0 ? parseInt(headArr[0]) : null;
 
           var taskPayload = {
             TITLE: '[🛒] Сбор данных и расчет по закупке',
@@ -786,7 +790,6 @@ function syncManagersFromTasks(done) {
   });
 }
 
-// ✅ handleUrlParams: однократная обработка за загрузку iframe (фикс «перебрасывает обратно»)
 function handleUrlParams() {
   if (urlParamsProcessed) return;
   var params = getIncomingParams();

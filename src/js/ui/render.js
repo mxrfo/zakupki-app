@@ -14,7 +14,6 @@ function getUserDeptIds() {
   let d = (currentUser && currentUser.UF_DEPARTMENT) || [];
   if (!Array.isArray(d)) d = d ? [d] : [];
   let ids = d.map(String);
-  // fallback: если UF_DEPARTMENT не подтянулся (кэш), взять из deptHeads/deptManagers
   if (ids.length === 0) {
     Object.keys(settings.deptHeads || {}).forEach(k => {
       if (String(settings.deptHeads[k]) === String(currentUser.ID)) ids.push(String(k));
@@ -23,7 +22,6 @@ function getUserDeptIds() {
       if (String(settings.deptManagers[k]) === String(currentUser.ID)) ids.push(String(k));
     });
   }
-  // fallback 2: первый видимый отдел
   if (ids.length === 0 && settings.visibleDepts && settings.visibleDepts.length) ids = settings.visibleDepts.map(String);
   return ids;
 }
@@ -95,21 +93,21 @@ function render() {
       if (isAdminUI) return true;
       if (isEconUI && (stName.includes('согласование') || stName.includes('обработка') || stName.includes('ожидание'))) return true;
       const deptId = String(Array.isArray(i[actualFields.dept]) ? i[actualFields.dept][0] : (i[actualFields.dept] || ''));
-      if (isHeadUI && getManagedDeptIds().includes(deptId)) return true;
+      if (isHeadUI && getManagedDeptIds().includes(deptId) &&
+          (stName.includes('согласование') || stName.includes('сбор данных') || stName.includes('загрузка') || stName.includes('обработка') || stName.includes('ожидание') || stName.includes('получение'))) return true;
       if (isMgrUI && (stName.includes('сбор данных') || stName.includes('загрузка') || stName.includes('согласование'))) {
         const mgrVal = i[actualFields.manager];
         const mgrIds = Array.isArray(mgrVal) ? mgrVal : (mgrVal ? [mgrVal] : []);
         if (mgrIds.some(id => String(id) === String(currentUser.ID))) return true;
         if (settings.deptManagers[deptId] === String(currentUser.ID)) return true;
         if (settings.deptHeads[deptId] === String(currentUser.ID)) return true;
-        const deptObj = departments.find(d => String(d.ID) === deptId);
+        const deptObj = departments.find(d => String(d.ID) === String(deptId));
         if (deptObj && String(deptObj.UF_HEAD) === String(currentUser.ID)) return true;
         return false;
       }
       return false;
     });
   } else if (activeTab === 'all') {
-    // ✅ admin/econ — все; employee/manager/head — только свой отдел
     if (isAdminUI || isEconUI) {
       filtered = funnelItems;
     } else {
@@ -185,6 +183,7 @@ function hasBeenSentToWork(item, stName) {
 }
 
 function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
+  const isHeadUI = isAdminUI || currentRole === 'head';
   const fragment = document.createDocumentFragment();
   filtered.forEach(item => {
     try {
@@ -231,7 +230,8 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
         if (currentRole === 'manager' && stName.includes('согласование')) {
           buttonsHtml += `<button class="btn btn-primary" style="flex:1;" onclick="event.stopPropagation(); openEditAmountModal(${item.id})">Изменить сумму</button>`;
         }
-        if (isEconUI && stName.includes('согласование условий')) {
+        // ✅ Согласование условий — и для экономиста, и для руководителя
+        if ((isEconUI || isHeadUI) && stName.includes('согласование условий')) {
           buttonsHtml += `<button class="action-icon-btn approve" style="width:auto; padding:0 16px;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_terms')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Согласовать</button>`;
           buttonsHtml += `<button class="action-icon-btn reject" style="width:auto; padding:0 16px;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_terms')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Отклонить</button>`;
         }
@@ -358,6 +358,7 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
 }
 
 function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
+  const isHeadUI = isAdminUI || currentRole === 'head';
   let html = `<table class="data-table">
     <thead>
       <tr>
@@ -418,7 +419,7 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       if (currentRole === 'manager' && stName.includes('согласование')) {
         buttonsHtml += `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openEditAmountModal(${item.id})">Изменить сумму</button>`;
       }
-      if (isEconUI && stName.includes('согласование условий')) {
+      if ((isEconUI || isHeadUI) && stName.includes('согласование условий')) {
         buttonsHtml += `<button class="action-icon-btn approve btn-sm" style="width:auto;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_terms')">Согласовать</button>`;
         buttonsHtml += `<button class="action-icon-btn reject btn-sm" style="width:auto;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_terms')">Отклонить</button>`;
       }

@@ -11,6 +11,26 @@ function toggleTestMode(val) {
   render();
 }
 
+// ✅ Является ли текущий пользователь руководителем хотя бы одного отдела (по настройкам или UF_HEAD)?
+function isRealDeptHead() {
+  if (!currentUser) return false;
+  const uid = String(currentUser.ID);
+  const heads = settings.deptHeads || {};
+  for (const k in heads) { if (String(heads[k]) === uid) return true; }
+  for (const d of departments) { if (d.UF_HEAD && String(d.UF_HEAD) === uid) return true; }
+  return false;
+}
+
+// ✅ Первый отдел, которым руководит пользователь (для симуляции head)
+function getFirstManagedDeptId() {
+  if (!currentUser) return '';
+  const uid = String(currentUser.ID);
+  const heads = settings.deptHeads || {};
+  for (const k in heads) { if (String(heads[k]) === uid) return String(k); }
+  for (const d of departments) { if (d.UF_HEAD && String(d.UF_HEAD) === uid) return String(d.ID); }
+  return '';
+}
+
 function checkUserRoles() {
   if (!currentUser) return;
 
@@ -21,9 +41,16 @@ function checkUserRoles() {
     if (settings.econDepts.includes(String(dId))) actualRoles.isEcon = true;
   });
 
-  if (!document.getElementById('role-viewer').value || document.getElementById('role-viewer').value === 'admin') {
-    currentRole = actualRoles.isAdmin ? 'admin' : (actualRoles.isEcon ? 'econ' : 'employee');
-    document.getElementById('role-viewer').value = currentRole;
+  actualRoles.isHead = isRealDeptHead();
+
+  const rv = document.getElementById('role-viewer');
+  if (!rv.value || rv.value === 'admin') {
+    currentRole = actualRoles.isAdmin ? 'admin' : (actualRoles.isEcon ? 'econ' : (actualRoles.isHead ? 'head' : 'employee'));
+    rv.value = currentRole;
+  }
+
+  if (currentRole === 'head' && !simulatedHeadDeptId) {
+    simulatedHeadDeptId = getFirstManagedDeptId() || (userDeptIds[0] ? String(userDeptIds[0]) : '');
   }
 
   let roleName = 'Сотрудник';
@@ -42,11 +69,14 @@ function checkUserRoles() {
     `<b>${currentUser.NAME} ${currentUser.LAST_NAME}</b> (${roleName}${userDeptName ? ' • ' + userDeptName : ''})`;
 }
 
-// ✅ Симуляция роли: для head подставляем отдел пользователя как «ведомый»
+// ✅ Симуляция роли: для head подставляем ведомый отдел
 function simulateRole(role) {
   currentRole = role;
   if (role === 'head') {
-    let d = currentUser && currentUser.UF_DEPARTMENT ? (Array.isArray(currentUser.UF_DEPARTMENT) ? currentUser.UF_DEPARTMENT[0] : currentUser.UF_DEPARTMENT) : '';
+    let d = getFirstManagedDeptId();
+    if (!d) {
+      d = currentUser && currentUser.UF_DEPARTMENT ? (Array.isArray(currentUser.UF_DEPARTMENT) ? currentUser.UF_DEPARTMENT[0] : currentUser.UF_DEPARTMENT) : '';
+    }
     if (!d && settings.visibleDepts && settings.visibleDepts.length) d = settings.visibleDepts[0];
     simulatedHeadDeptId = d ? String(d) : '';
   } else {

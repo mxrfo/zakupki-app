@@ -58,6 +58,7 @@
 <select id="role-viewer" class="role-viewer" onchange="simulateRole(this.value)">
 <option value="admin">Администратор</option>
 <option value="econ">Экономист</option>
+<option value="head">Руководитель</option>
 <option value="manager">Менеджер</option>
 <option value="employee">Сотрудник</option>
 </select>
@@ -317,7 +318,7 @@
 </form>
 </div>
 </div>
-<!-- ✅ Модалка делегирования -->
+<!-- Модалка делегирования -->
 <div id="modal-delegate" class="modal-overlay">
 <div class="modal" style="max-width: 500px;">
 <div class="modal-header">
@@ -386,6 +387,7 @@
 <div class="form-group" style="flex:1; margin-bottom:0;">
 <label>Client ID приложения (не обяз.)</label>
 <input type="text" id="set-clientid" placeholder="local.xxxxxxxxxx">
+<div style="font-size:11px; color:#64748b; margin-top:4px;">Автоматически синхронизируется с текущим приложением при каждом запуске.</div>
 </div>
 <div class="form-group" style="flex:1; margin-bottom:0;">
 <label>Client Secret (не обяз.)</label>
@@ -466,7 +468,7 @@
 </div>
 </div>
 
-<!-- ✅ Панель логов (Обновленная структура) -->
+<!-- Панель логов -->
 <div class="log-panel" id="log-panel">
   <div class="log-header" onclick="toggleLogPanel()">
     <span>Консоль логов (Системные события)</span>
@@ -482,7 +484,6 @@
 </button>
 <div id="toast" class="toast"></div>
 
-<!-- Подключение скриптов в правильном порядке (dev-режим; при сборке в dist они инлайнятся через scripts/build.js) -->
 <script src="js/core/config.js"></script>
 <script src="js/core/state.js"></script>
 <script src="js/core/utils.js"></script>

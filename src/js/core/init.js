@@ -1,6 +1,5 @@
 // js/init.js — Инициализация приложения (оптимизированная)
 
-// ✅ Глобальный перехват ошибок для диагностики
 window.addEventListener('error', function(ev) {
   try {
     if (typeof logAction === 'function') {
@@ -16,7 +15,6 @@ window.addEventListener('unhandledrejection', function(ev) {
   } catch (e) {}
 });
 
-// ✅ Показ прогресса загрузки
 function setLoadingStep(step, total) {
   const container = document.getElementById('app-container');
   const pct = Math.round((step / total) * 100);
@@ -30,7 +28,6 @@ function setLoadingStep(step, total) {
   `;
 }
 
-// ✅ Защита от зависания: если приложение открыли напрямую по CDN-ссылке (без портала)
 function showNoAuthError() {
   const container = document.getElementById('app-container');
   if (!container) return;
@@ -60,9 +57,6 @@ function tryRedirectToPortal() {
   }
 }
 
-// ✅ Регистрация виджета REST_APP_URI, чтобы ссылка /marketplace/view/{client_id}/
-//    открывала приложение в слайдере, а не показывала «Ошибка при показе приложения».
-//    Выполняется только админом и один раз (идемпотентно через localStorage-флаг).
 function ensureAppPlacement() {
   const handlerUrl = window.location.href.split('?')[0].split('#')[0];
   const bindKey = 'b24_placement_bound_' + handlerUrl;
@@ -79,6 +73,38 @@ function ensureAppPlacement() {
     }
     localStorage.setItem(bindKey, '1');
   });
+}
+
+// ✅ Синхронизация client_id с текущей авторизацией (решает 404 без пересоздания приложения)
+function syncClientIdFromAuth() {
+  try {
+    const auth = BX24.getAuth();
+    if (!auth || !auth.client_id) {
+      logAction('syncClientIdFromAuth: BX24.getAuth() не вернул client_id', 'error');
+      return;
+    }
+    const liveId = auth.client_id;
+    const savedId = (settings.clientId || '').trim();
+    if (!savedId) {
+      settings.clientId = liveId;
+      logAction('client_id подтянут из авторизации: ' + liveId, 'info');
+      BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function(r) {
+        if (r.error()) logAction('Ошибка сохранения client_id: ' + getApiErrorMessage(r), 'error');
+        else logAction('client_id сохранён в настройки', 'success');
+      });
+    } else if (savedId !== liveId) {
+      logAction('client_id рассинхронизирован: настройки=' + savedId + ' → актуальный=' + liveId + '. Обновляю.', 'error');
+      settings.clientId = liveId;
+      BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function(r) {
+        if (r.error()) logAction('Ошибка сохранения client_id: ' + getApiErrorMessage(r), 'error');
+        else logAction('client_id обновлён в настройках на актуальный', 'success');
+      });
+    } else {
+      logAction('client_id актуален: ' + liveId, 'info');
+    }
+  } catch (e) {
+    logAction('syncClientIdFromAuth: ошибка ' + e.message, 'error');
+  }
 }
 
 function init() {
@@ -101,31 +127,12 @@ function init() {
     inited = true;
     clearTimeout(initTimeout);
 
-    // ✅ Сигнал для api.js: BX24 инициализирован, можно вызывать loadAllData()
     b24Ready = true;
 
-    // ✅ Сохраняем домен портала СРАЗУ, до любых отправок уведомлений
     try {
       const d = BX24.getDomain();
       if (d && d.indexOf('cdn-') === -1) window.__portalDomain = 'https://' + d;
     } catch (e) {}
-
-    // ✅ АВТОМАТИЧЕСКОЕ СОХРАНЕНИЕ client_id (решает проблему ссылок без пересоздания приложения)
-    try {
-      if (!settings.clientId) {
-        const auth = BX24.getAuth();
-        if (auth && auth.client_id) {
-          settings.clientId = auth.client_id;
-          logAction('client_id автоматически подтянут из авторизации: ' + auth.client_id, 'info');
-          // Сохраняем в настройки портала, чтобы не терялся
-          BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, () => {
-            logAction('client_id сохранен в настройки приложения', 'success');
-          });
-        }
-      }
-    } catch (e) {
-      logAction('Ошибка авто-определения client_id: ' + e.message, 'error');
-    }
 
     setLoadingStep(1, 5);
     const initBatch = {
@@ -170,6 +177,9 @@ function init() {
         }
       }
 
+      // ✅ Синхронизируем client_id ПОСЛЕ загрузки настроек
+      syncClientIdFromAuth();
+
       let mappingMigrated = false;
       if (!settings.mapping) {
         settings.mapping = { ...DEFAULT_MAPPING };
@@ -210,12 +220,11 @@ function init() {
 
       setLoadingStep(2, 5);
 
-      // ✅ Если есть client_id и мы админ — регистрируем виджет REST_APP_URI
       try {
         if (settings.clientId && actualRoles.isAdmin) ensureAppPlacement();
       } catch (e) {}
 
-      const CACHE_TTL = 5 * 60 * 1000; // 5 минут
+      const CACHE_TTL = 5 * 60 * 1000;
       const cachedMeta = localStorage.getItem(CACHE_KEY);
       let useCache = false;
       if (cachedMeta) {
@@ -365,5 +374,4 @@ function saveToCacheWithTimestamp() {
   }
 }
 
-// Запуск после загрузки страницы
 window.onload = init;
