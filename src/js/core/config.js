@@ -2,7 +2,7 @@
 
 // ID сущностей Битрикс24
 let ENTITY_TYPE_ID = 1072;
-let INVOICE_ENTITY_ID = 15;
+let INVOICE_ENTITY_ID = 1068;
 let currentCategoryId = 65;
 let systemUserId = 175; // ID пользователя для уведомлений (бот)
 
@@ -54,7 +54,7 @@ const CACHE_KEY = 'purchase_app_meta_cache_1088';
 let settings = {
   categoryId: 65,
   entityTypeId: 1072,
-  invoiceEntityTypeId: 15,
+  invoiceEntityTypeId: 1068,
   systemUserId: 175,
   clientId: '',
   clientSecret: '',
