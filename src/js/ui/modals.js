@@ -5,21 +5,55 @@ function closeModal(id) {
   document.getElementById(id).style.display = 'none';
 }
 
-// Удаление закупки
+// Удаление закупки с полной очисткой (задачи, входящие счета, закупка)
 function deleteItem(id, event) {
   if (event) event.stopPropagation();
-  if (!confirm('Вы уверены, что хотите удалить эту закупку? Это действие необратимо.')) return;
-  logAction(`Удаление закупки ID: ${id}`, 'info');
-  BX24.callMethod('crm.item.delete', { entityTypeId: ENTITY_TYPE_ID, id: id }, (res) => {
-    if (res.error()) {
-      logAction('Ошибка удаления: ' + getApiErrorMessage(res), 'error');
-      showToast('Ошибка: ' + getApiErrorMessage(res), 'error');
-    } else {
-      logAction('Закупка успешно удалена', 'success');
-      showToast('Закупка удалена');
-      loadAllData();
+  if (!confirm('Удалить закупку и все связанные данные (задачи, входящие счета)? Это действие необратимо.')) return;
+  logAction(`Удаление закупки ID ${id} с полной очисткой...`, 'info');
+  deletePurchaseWithCleanup(id, function(ok) {
+    if (ok) showToast('Закупка и связанные данные удалены', 'success');
+    else showToast('Ошибка при удалении', 'error');
+  });
+}
+
+// ✅ Открытие модалки делегирования
+function openDelegateModal(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+
+  document.getElementById('delegate-id').value = id;
+  document.getElementById('delegate-note').value = '';
+
+  const deptVal = item[actualFields.dept];
+  const deptId = Array.isArray(deptVal) ? deptVal[0] : deptVal;
+  const deptObj = departments.find(d => String(d.ID) === String(deptId));
+
+  const mgrVal = item[actualFields.manager];
+  const mgrIds = Array.isArray(mgrVal) ? mgrVal : (mgrVal ? [mgrVal] : []);
+  const currentMgr = mgrIds[0] || '';
+
+  document.getElementById('delegate-title').innerText = 'Делегировать закупку №' + item.id;
+  document.getElementById('delegate-from').innerText = currentMgr ? (userNames[currentMgr] || currentMgr) : '—';
+
+  // Получатели: сотрудники отдела (UF_DEPARTMENT включает deptId), исключая текущего менеджера
+  const sel = document.getElementById('delegate-to');
+  sel.innerHTML = '<option value="">-- Выберите сотрудника --</option>';
+  allUsers.forEach(u => {
+    if (String(u.ID) === String(currentMgr)) return;
+    if (String(u.ACTIVE) === 'N') return;
+    const depts = Array.isArray(u.UF_DEPARTMENT) ? u.UF_DEPARTMENT : (u.UF_DEPARTMENT ? [u.UF_DEPARTMENT] : []);
+    const inDept = depts.some(d => String(d) === String(deptId));
+    if (inDept) {
+      const unav = isUserUnavailable(u.ID) ? ' (недоступен)' : '';
+      sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${unav}</option>`;
     }
   });
+
+  if (deptObj) {
+    document.getElementById('delegate-dept').innerText = deptObj.NAME;
+  }
+
+  document.getElementById('modal-delegate').style.display = 'flex';
 }
 
 // Просмотр деталей
@@ -117,6 +151,13 @@ function openViewModal(id) {
 
   if (econComment) {
     html += `<div class="note-comment-box" style="margin-top:20px;"><b>Комментарий (${commentAuthorName}):</b> ${econComment}</div>`;
+  }
+
+  // ✅ История делегирований
+  const histField = actualFields.delegateHistory;
+  const hist = (histField && item[histField]) ? String(item[histField]) : '';
+  if (hist) {
+    html += `<div class="note-comment-box" style="margin-top:20px; background:#fffbeb; border-color:#fcd34d;"><b>История делегирований:</b><div style="white-space:pre-wrap; font-size:12px; margin-top:6px;">${escapeHtml(hist)}</div></div>`;
   }
 
   document.getElementById('view-body').innerHTML = html;
@@ -271,7 +312,6 @@ function openActionModal(id, type) {
   let btnHtml = `<button type="button" class="btn" onclick="closeModal('modal-action')">Отмена</button>`;
 
   if (type === 'send_to_work') {
-    // 🆕 Проверяем, есть ли уже задача — если да, показываем info и не даём отправить
     const item = items.find(i => i.id == id);
     const existingTaskId = item ? item[actualFields.taskVyborSotr] : null;
     if (existingTaskId && String(existingTaskId).match(/^\d+$/)) {

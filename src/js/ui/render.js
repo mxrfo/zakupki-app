@@ -1,19 +1,22 @@
 // js/render.js — Рендер карточек и таблицы
 
-// ✅ Удаление закупки с полной очисткой (задачи, счета, сама закупка)
-function deleteItem(id, event) {
-  if (event) event.stopPropagation();
-  if (!confirm('Удалить закупку и все связанные данные (задачи, входящие счета)? Это действие необратимо.')) return;
-  
-  logAction(`Инициализация удаления закупки ID ${id}...`, 'info');
-  
-  deletePurchaseWithCleanup(id, function(ok) {
-    if (ok) {
-      showToast('Закупка и связанные данные успешно удалены', 'success');
-    } else {
-      showToast('Ошибка при удалении закупки', 'error');
-    }
-  });
+// ✅ Утилита: пользователь — руководитель отдела закупки?
+function isDeptHeadForItem(item) {
+  if (currentRole === 'admin') return true;
+  const deptVal = item[actualFields.dept];
+  const deptId = Array.isArray(deptVal) ? deptVal[0] : deptVal;
+  if (!deptId) return false;
+  if (settings.deptHeads[deptId] === String(currentUser.ID)) return true;
+  const deptObj = departments.find(d => String(d.ID) === String(deptId));
+  if (deptObj && String(deptObj.UF_HEAD) === String(currentUser.ID)) return true;
+  return false;
+}
+
+// ✅ Утилита: отделы текущего пользователя (ID массив)
+function getUserDeptIds() {
+  let d = (currentUser && currentUser.UF_DEPARTMENT) || [];
+  if (!Array.isArray(d)) d = d ? [d] : [];
+  return d.map(String);
 }
 
 // Переключение вкладок
@@ -87,7 +90,17 @@ function render() {
       return false;
     });
   } else if (activeTab === 'all') {
-    filtered = funnelItems;
+    // ✅ Для админа и экономиста — все закупки. Для сотрудника/руководителя — только свой отдел.
+    if (isAdminUI || isEconUI) {
+      filtered = funnelItems;
+    } else {
+      const userDepts = getUserDeptIds();
+      filtered = funnelItems.filter(i => {
+        const deptVal = i[actualFields.dept];
+        const deptId = Array.isArray(deptVal) ? deptVal[0] : deptVal;
+        return deptId && userDepts.includes(String(deptId));
+      });
+    }
   }
 
   if (searchQuery) {
@@ -171,13 +184,11 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
 
       let buttonsHtml = '';
 
-      // ✅ Кнопка «В работу» — только на стадии "создание" и если НЕ отправлено
       if (isCreator && stName.includes('создание') && !hasBeenSentToWork(item, stName)) {
         buttonsHtml += `<button class="btn btn-primary" style="flex:1;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_work')" title="Отправить в работу">В работу</button>`;
         buttonsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openEditModal(${item.id})" title="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
         buttonsHtml += `<button class="action-icon-btn delete" onclick="event.stopPropagation(); deleteItem(${item.id}, event)" title="Удалить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
       }
-      // ✅ Закупка отправлена — показываем заблокированную плашку ТОЛЬКО на стадии "создание"
       else if (isCreator &&
                stName.includes('создание') &&
                hasBeenSentToWork(item, stName)) {
@@ -220,23 +231,27 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
         }
       }
 
-      // ✅ Админские кнопки — ВСЕГДА доступны (убрано ограничение !stName.includes('создание'))
+      // ✅ Админские кнопки — ВСЕГДА доступны
       let adminActionsHtml = '';
       if (isAdminUI) {
-        // Редактировать — всегда
         adminActionsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openEditModal(${item.id})" title="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
-        
+
         if (isPostponed) {
           adminActionsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openActionModal(${item.id}, 'remove_postpone')" title="Снять отложку"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/><line x1="4" y1="4" x2="20" y2="20"/></svg></button>`;
         }
-        
-        // Откатить — только если не первая стадия
+
         if (!stName.includes('создание')) {
           adminActionsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); rollbackItem(${item.id})" title="Откатить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button>`;
         }
-        
-        // Удалить — всегда
+
         adminActionsHtml += `<button class="action-icon-btn delete" onclick="deleteItem(${item.id}, event)" title="Удалить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
+      }
+
+      // ✅ Кнопка делегирования — для руководителя отдела и админа, если есть менеджер и стадия не терминальная
+      const mgrVal2 = item[actualFields.manager];
+      const hasMgr = Array.isArray(mgrVal2) ? mgrVal2.length > 0 : !!mgrVal2;
+      if ((isAdminUI || isDeptHeadForItem(item)) && hasMgr && !isTerminalStage(stName)) {
+        adminActionsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openDelegateModal(${item.id})" title="Делегировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>`;
       }
 
       const deptName = getDisplayValue(item, actualFields.dept, 'dept');
@@ -253,6 +268,13 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
         const secName = getDisplayValue(item, actualFields.section, 'enum');
         const dirName = getDisplayValue(item, actualFields.direction, 'enum');
         if (secName !== '—') combinedDirText = `${secName} / ${dirName}`;
+      }
+
+      // ✅ Индикатор недоступности менеджера
+      let mgrUnavailableBadge = '';
+      const mgrIds2 = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []);
+      if (mgrIds2.length && isUserUnavailable(mgrIds2[0])) {
+        mgrUnavailableBadge = `<span style="color:#ef4444; font-size:11px; font-weight:600; margin-left:6px;">⚠ недоступен</span>`;
       }
 
       const card = document.createElement('div');
@@ -303,7 +325,7 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
 
       card.innerHTML = `
         <div class="note-header">
-          <h3 class="note-title">${mainTitle}</h3>
+          <h3 class="note-title">${mainTitle}${mgrUnavailableBadge}</h3>
           ${badgeHtml}
         </div>
         <div class="note-desc">${shortDesc}</div>
@@ -366,13 +388,11 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
 
     let buttonsHtml = '';
 
-    // ✅ Кнопки для создателя в стадии «создание», если ещё не отправлено
     if (isCreator && stName.includes('создание') && !hasBeenSentToWork(item, stName)) {
       buttonsHtml += `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_work')">В работу</button>`;
       buttonsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openEditModal(${item.id})" title="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
       buttonsHtml += `<button class="action-icon-btn delete" onclick="event.stopPropagation(); deleteItem(${item.id}, event)" title="Удалить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
     }
-    // ✅ Создатель уже отправил — плашка «Отправлено» ТОЛЬКО на стадии "создание"
     else if (isCreator &&
              stName.includes('создание') &&
              hasBeenSentToWork(item, stName)) {
@@ -407,19 +427,22 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       }
     }
 
-    // ✅ Админские кнопки — ВСЕГДА доступны
     let adminHtml = '';
     if (isAdminUI) {
-      // Редактировать — всегда
       adminHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openEditModal(${item.id})" title="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
-      
-      // Откатить — только если не первая стадия
+
       if (!stName.includes('создание')) {
         adminHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); rollbackItem(${item.id})" title="Откатить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button>`;
       }
-      
-      // Удалить — всегда
+
       adminHtml += `<button class="action-icon-btn delete" onclick="deleteItem(${item.id}, event)" title="Удалить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
+    }
+
+    // ✅ Кнопка делегирования в таблице
+    const mgrValT = item[actualFields.manager];
+    const hasMgrT = Array.isArray(mgrValT) ? mgrValT.length > 0 : !!mgrValT;
+    if ((isAdminUI || isDeptHeadForItem(item)) && hasMgrT && !isTerminalStage(stName)) {
+      adminHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openDelegateModal(${item.id})" title="Делегировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>`;
     }
 
     const commentIcon = econComment ? `<span class="comment-icon" title="${econComment.replace(/"/g, '&quot;')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>` : '';

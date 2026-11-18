@@ -317,6 +317,41 @@
 </form>
 </div>
 </div>
+<!-- ✅ Модалка делегирования -->
+<div id="modal-delegate" class="modal-overlay">
+<div class="modal" style="max-width: 500px;">
+<div class="modal-header">
+<h2 id="delegate-title">Делегировать закупку</h2>
+<button onclick="closeModal('modal-delegate')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
+</div>
+<form id="form-delegate" onsubmit="submitDelegate(event)">
+<div class="modal-body">
+<input type="hidden" id="delegate-id">
+<div class="form-group">
+<label>Текущий исполнитель</label>
+<input type="text" id="delegate-from" disabled style="background:#f1f5f9;">
+</div>
+<div class="form-group">
+<label>Отдел</label>
+<input type="text" id="delegate-dept" disabled style="background:#f1f5f9;">
+</div>
+<div class="form-group">
+<label>Передать сотруднику *</label>
+<select id="delegate-to" required></select>
+</div>
+<div class="form-group">
+<label>Причина / комментарий</label>
+<textarea id="delegate-note" rows="3" placeholder="Напр.: основной исполнитель в отпуске"></textarea>
+</div>
+<div style="font-size:12px; color:#64748b; background:#fffbeb; border:1px solid #fcd34d; border-radius:6px; padding:10px;">История делегирований сохраняется в карточке закупки. Задача по сбору данных будет переназначена новому исполнителю.</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn" onclick="closeModal('modal-delegate')">Отмена</button>
+<button type="submit" class="btn btn-primary" id="btn-delegate-save">Делегировать</button>
+</div>
+</form>
+</div>
+</div>
 <!-- Модалка настроек -->
 <div id="modal-settings" class="modal-overlay">
 <div class="modal" style="max-width: 1000px;">
@@ -372,6 +407,25 @@
 <input type="number" id="set-deadline-yellow" value="7" min="0">
 </div>
 </div>
+</div>
+</details>
+<details class="admin-section" open>
+<summary>Поля CRM (статус и автосоздание)</summary>
+<div class="section-content">
+<p style="font-size:12px; color:#64748b; margin-bottom:10px;">Зелёная галочка — поле найдено в CRM. Красный крест — поле отсутствует (нужно создать).</p>
+<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+<button type="button" class="btn btn-sm btn-primary" onclick="autoMapFields()">Автонастроить маппинг по названиям</button>
+<button type="button" class="btn btn-sm" onclick="autoFillHeadsFromB24()">Заполнить руководителей из Б24</button>
+<button type="button" class="btn btn-sm" onclick="createField('delegateHistory')">Создать поле «История делегирований»</button>
+</div>
+<div id="fields-status-container"></div>
+</div>
+</details>
+<details class="admin-section" open>
+<summary>Недоступные сотрудники (отпуск / больничный)</summary>
+<div class="section-content">
+<p style="font-size:12px; color:#64748b; margin-bottom:10px;">Отметьте сотрудников, которые сейчас недоступны. Им нельзя делегировать закупку, а руководитель получит предупреждение.</p>
+<div id="unavailable-users-container" style="max-height:260px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; padding:8px;"></div>
 </div>
 </details>
 <details class="admin-section" open>

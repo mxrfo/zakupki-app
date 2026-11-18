@@ -117,6 +117,24 @@ function updateDirections(selectedDirId = null) {
   });
 }
 
+// ✅ Отправка делегирования
+function submitDelegate(e) {
+  e.preventDefault();
+  const id = document.getElementById('delegate-id').value;
+  const toUserId = document.getElementById('delegate-to').value;
+  const note = document.getElementById('delegate-note').value.trim();
+
+  if (!toUserId) return showToast('Выберите сотрудника', 'error');
+
+  const btn = document.getElementById('btn-delegate-save');
+  if (btn) { btn.disabled = true; btn.innerText = 'Делегирование...'; }
+
+  delegatePurchase(parseInt(id), parseInt(toUserId), note, function(ok) {
+    if (btn) { btn.disabled = false; btn.innerText = 'Делегировать'; }
+    if (ok) closeModal('modal-delegate');
+  });
+}
+
 // Отправка формы создания/редактирования
 function submitCreateRequest(e) {
   e.preventDefault();
@@ -322,7 +340,6 @@ function submitData(e) {
         });
       }
 
-      // ✅ Уведомление руководителю о поступлении на согласование (карточка + кнопки)
       try {
         if (item) {
           const headArr = Array.isArray(item[actualFields.deptHead]) ? item[actualFields.deptHead] : (item[actualFields.deptHead] ? [item[actualFields.deptHead]] : []);

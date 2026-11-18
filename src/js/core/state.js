@@ -31,14 +31,17 @@ let customOrder = JSON.parse(localStorage.getItem('purchase_custom_order_1088'))
 let approvedAmounts = JSON.parse(localStorage.getItem('approved_amounts_1088')) || {};
 let approvedInvoices = JSON.parse(localStorage.getItem('approved_invoices_1088')) || {};
 
+// 🆕 История делегирований (быстрый доступ для UI; источник истины — поле delegateHistory в CRM)
+let delegateHistory = JSON.parse(localStorage.getItem('purchase_delegate_history_1088')) || {};
+
 // Флаг, что сценарий уже запущен для этой закупки (чтобы не дублировать)
 let scenarioRunning = {};
 
-// 🆕 Защита от дублирования задач "В работу"
+// Защита от дублирования задач "В работу"
 let sendToWorkInProgress = {};
 
-// 🆕 Защита от параллельной синхронизации менеджеров
+// Защита от параллельной синхронизации менеджеров
 let syncManagersInProgress = {};
 
-// 🆕 Защита от параллельного loadAllData
+// Защита от параллельного loadAllData
 let loadAllDataInProgress = false;

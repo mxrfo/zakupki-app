@@ -16,12 +16,111 @@ function openAdminPanel() {
     renderSettingsTable();
     renderListDependencies();
     renderMappingSettings();
+    renderFieldsStatus();
+    renderUnavailableUsers();
 
     document.getElementById('modal-settings').style.display = 'flex';
   } catch (e) {
     console.error('Ошибка при открытии настроек:', e);
     showToast('Ошибка открытия настроек: ' + e.message, 'error');
   }
+}
+
+// ✅ Статус полей CRM: какие маппинги найдены, какие нет
+function renderFieldsStatus() {
+  const container = document.getElementById('fields-status-container');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const required = ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory', 'combinedDir', 'postponeDate'];
+  required.forEach(key => {
+    const code = settings.mapping[key];
+    const exists = code && fieldDefs[code];
+    const status = exists ? '<span style="color:#10b981; font-weight:600;">✓ найдено</span>' : '<span style="color:#ef4444; font-weight:600;">✗ отсутствует</span>';
+    container.innerHTML += `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border-color);"><span style="font-size:13px;">${key} <code style="font-size:11px; color:#64748b;">${code || '—'}</code></span><span>${status}</span></div>`;
+  });
+}
+
+// ✅ Создание недостающего технического поля через crm.item.field.add
+function createField(key) {
+  const code = settings.mapping[key];
+  if (!code) {
+    showToast('Для поля "' + key + '" не задан код. Укажите код в маппинге.', 'error');
+    return;
+  }
+  if (fieldDefs[code]) {
+    showToast('Поле "' + code + '" уже существует', 'info');
+    return;
+  }
+  logAction('Создание поля CRM: ' + code + ' (' + key + ')...', 'info');
+  BX24.callMethod('crm.item.field.add', {
+    entityTypeId: ENTITY_TYPE_ID,
+    fields: {
+      name: 'Тех: ' + key,
+      code: code,
+      type: 'string',
+      multiple: 'N',
+      isRequired: 'N'
+    }
+  }, function(res) {
+    if (res.error()) {
+      logAction('Ошибка создания поля ' + code + ': ' + getApiErrorMessage(res), 'error');
+      showToast('Ошибка создания поля: ' + getApiErrorMessage(res), 'error');
+    } else {
+      logAction('Поле ' + code + ' создано', 'success');
+      showToast('Поле создано. Обновите страницу (F5) для подгрузки.', 'success');
+    }
+  });
+}
+
+// ✅ Автонастройка маппинга по названиям полей
+function autoMapFields() {
+  const titleMap = {
+    shortDesc: ['что нужно закупить', 'кратко'],
+    amountProduct: ['сумма закупки', 'сумма товаров', 'сумма позиций'],
+    amountDelivery: ['доставка'],
+    deadlineZakup: ['крайний срок закупки', 'срок закупки'],
+    deadlinePay: ['крайний срок оплаты', 'срок оплаты'],
+    section: ['раздел направления', 'раздел расхода'],
+    direction: ['направление расхода', 'направление'],
+    combinedDir: ['раздел+направление', 'раздел + направление'],
+    fileInvoice: ['копия сч', 'счёт', 'счет'],
+    comment: ['комментарий'],
+    postponeDate: ['дата отложения', 'отложить'],
+    manager: ['менеджер отдела', 'исполнитель сотрудник'],
+    deptHead: ['руководитель отдела', 'отдел исполнителя рук'],
+    approver: ['согласующий', 'согласующий сумму']
+  };
+  let changed = 0;
+  for (const key in titleMap) {
+    const needles = titleMap[key];
+    const found = Object.keys(fieldDefs).find(code => {
+      const t = (fieldDefs[code].title || '').toLowerCase().replace(/ё/g, 'е');
+      return needles.some(n => t.includes(n));
+    });
+    if (found && settings.mapping[key] !== found) {
+      settings.mapping[key] = found;
+      changed++;
+    }
+  }
+  logAction('Автонастройка маппинга: обновлено ' + changed + ' полей', 'info');
+  showToast('Автонастройка: ' + changed + ' полей обновлено. Сохраните настройки.', 'success');
+  renderMappingSettings();
+  renderFieldsStatus();
+}
+
+// ✅ Авто-заполнение руководителей отделов из Б24 (UF_HEAD)
+function autoFillHeadsFromB24() {
+  let filled = 0;
+  departments.forEach(d => {
+    if (d.UF_HEAD && !settings.deptHeads[d.ID]) {
+      settings.deptHeads[d.ID] = String(d.UF_HEAD);
+      filled++;
+    }
+  });
+  logAction('Авто-руководители из Б24: заполнено ' + filled, 'info');
+  showToast('Заполнено руководителей: ' + filled, 'success');
+  renderSettingsTable();
 }
 
 // Рендер таблицы ролей отделов
@@ -90,6 +189,24 @@ function renderListDependencies() {
   });
 }
 
+// ✅ Рендер списка недоступных сотрудников (отпуск/больничный)
+function renderUnavailableUsers() {
+  const container = document.getElementById('unavailable-users-container');
+  if (!container) return;
+  container.innerHTML = '';
+  if (!allUsers || !allUsers.length) {
+    container.innerHTML = '<p style="color:#64748b;">Список сотрудников не загружен.</p>';
+    return;
+  }
+  const list = (settings.unavailableUsers || []).map(String);
+  allUsers.forEach(u => {
+    if (String(u.ACTIVE) === 'N') return;
+    const checked = list.includes(String(u.ID)) ? 'checked' : '';
+    const deptName = userDepts[u.ID] || '';
+    container.innerHTML += `<label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; padding:4px 0;"><input type="checkbox" class="unavail-check" data-uid="${u.ID}" ${checked}> ${u.LAST_NAME} ${u.NAME} <span style="color:#94a3b8; font-size:11px;">${deptName}</span></label>`;
+  });
+}
+
 // Рендер настроек маппинга полей
 function renderMappingSettings() {
   const container = document.getElementById('mapping-container');
@@ -113,13 +230,13 @@ function renderMappingSettings() {
     { key: 'detailPrice', label: 'Детализация: Цена за 1 шт. (Список)' },
     { key: 'detailQty', label: 'Детализация: Количество (Список)' },
     { key: 'detailLink', label: 'Детализация: Ссылка (Список)' },
-    // 🆕 Новые поля
     { key: 'manager', label: 'Менеджер отдела (Привязка к сотруднику)' },
     { key: 'deptHead', label: 'Руководитель отдела-исполнителя' },
     { key: 'approver', label: 'Согласующий сумму' },
     { key: 'taskVyborSotr', label: '[Тех] ID задачи по выбору сотрудника' },
     { key: 'taskSbor', label: '[Тех] ID задачи по сбору данных' },
-    { key: 'taskZagruz', label: '[Тех] ID задачи по загрузке счёта' }
+    { key: 'taskZagruz', label: '[Тех] ID задачи по загрузке счёта' },
+    { key: 'delegateHistory', label: '[Тех] История делегирований' }
   ];
 
   fieldsToMap.forEach(f => {
@@ -129,7 +246,9 @@ function renderMappingSettings() {
       const isSel = settings.mapping[f.key] === code ? 'selected' : '';
       options += `<option value="${code}" ${isSel}>${fieldDefs[code].title} (${code})</option>`;
     });
-    container.innerHTML += `<div class="form-group" style="margin-bottom:12px;"><label>${f.label}</label><select class="map-select" data-key="${f.key}">${options}</select></div>`;
+    const exists = settings.mapping[f.key] && fieldDefs[settings.mapping[f.key]];
+    const badge = exists ? '<span style="color:#10b981; font-size:11px; margin-left:6px;">✓</span>' : '<span style="color:#ef4444; font-size:11px; margin-left:6px;">✗</span>';
+    container.innerHTML += `<div class="form-group" style="margin-bottom:12px;"><label>${f.label}${badge}</label><select class="map-select" data-key="${f.key}">${options}</select></div>`;
   });
 }
 
@@ -151,6 +270,7 @@ function saveSettings() {
   settings.econDepts = [];
   settings.listDependencies = {};
   settings.mapping = {};
+  settings.unavailableUsers = [];
 
   document.querySelectorAll('.short-input').forEach(inp => {
     if (inp.value.trim()) settings.deptShortNames[inp.getAttribute('data-dept')] = inp.value.trim();
@@ -177,6 +297,9 @@ function saveSettings() {
   });
   document.querySelectorAll('.map-select').forEach(sel => {
     if (sel.value) settings.mapping[sel.getAttribute('data-key')] = sel.value;
+  });
+  document.querySelectorAll('.unavail-check').forEach(chk => {
+    if (chk.checked) settings.unavailableUsers.push(chk.getAttribute('data-uid'));
   });
 
   logAction('Сохранение настроек...', 'info');

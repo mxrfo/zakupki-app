@@ -2,7 +2,7 @@
 
 // ID сущностей Битрикс24
 let ENTITY_TYPE_ID = 1072;
-let INVOICE_ENTITY_ID = 1068;
+let INVOICE_ENTITY_ID = 15;
 let currentCategoryId = 65;
 let systemUserId = 175; // ID пользователя для уведомлений (бот)
 
@@ -21,21 +21,22 @@ const DEFAULT_MAPPING = {
   fileInvoice: 'ufCrm17_1793018051305',     // Копия счёта (файл)
   creator: 'ufCrm17_1793859756',            // Кто создал запрос
   comment: 'ufCrm17_COMM',                  // Комментарий
-  shortDesc: 'ufCrm17_1793017330493',       // ✅ ИСПРАВЛЕНО: Что нужно закупить (Кратко)
+  shortDesc: 'ufCrm17_1793017330493',       // Что нужно закупить (Кратко)
   detailName: 'ufCrm17_1792761243',         // Наименование товара
   detailPurpose: 'ufCrm17_1792761268',      // Цель использования
   detailPrice: 'UF_CRM_17_PRICE_ED',        // Цена за 1 ед.
   detailQty: 'ufCrm17_1792998488',          // Количество
   detailLink: 'ufCrm17_1792761300',         // Ссылка на товар
-  postponeDate: 'ufCrm17_1794583117',       // ✅ ИСПРАВЛЕНО: Дата отложения
+  postponeDate: 'ufCrm17_1794583117',       // Дата отложения
 
-  // 🆕 Ролевые и технические поля
+  // Ролевые и технические поля
   manager: 'ufCrm17_OTDEL_ISPOL_SOTR',      // Менеджер отдела (привязка к сотруднику)
   deptHead: 'ufCrm17_OTDEL_ISPOL_RUK',      // Руководитель отдела-исполнителя
   approver: 'ufCrm17_1793003413',           // Согласующий сумму
   taskVyborSotr: 'ufCrm17_TECH_ZAD_VYBSOTR',// ID задачи по выбору сотрудника
   taskSbor: 'ufCrm17_TECH_ZAD_SBOR',        // ID задачи по сбору данных
-  taskZagruz: 'ufCrm17_TECH_ZAD_ZAGRUZ'     // ID задачи по загрузке счёта
+  taskZagruz: 'ufCrm17_TECH_ZAD_ZAGRUZ',    // ID задачи по загрузке счёта
+  delegateHistory: 'ufCrm17_TECH_DELEG'     // История делегирований (текст)
 };
 
 // Маппинг полей Входящих счетов
@@ -54,7 +55,7 @@ const CACHE_KEY = 'purchase_app_meta_cache_1088';
 let settings = {
   categoryId: 65,
   entityTypeId: 1072,
-  invoiceEntityTypeId: 1068,
+  invoiceEntityTypeId: 15,
   systemUserId: 175,
   clientId: '',
   clientSecret: '',
@@ -66,5 +67,6 @@ let settings = {
   listDependencies: {},
   mapping: { ...DEFAULT_MAPPING },
   deadlineRedDays: 3,
-  deadlineYellowDays: 7
+  deadlineYellowDays: 7,
+  unavailableUsers: []
 };
