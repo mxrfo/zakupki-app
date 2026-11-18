@@ -1,22 +1,43 @@
 // ============================================================
 // МОДУЛЬ: bot.js — Чат-бот уведомлений (imbot.v2, режим fetch)
 // ============================================================
-// Устойчив к пересозданию приложения: если бот из кэша принадлежит
-// другому client_id (BOT_OWNERSHIP_ERROR / ACCESS_DENIED / BOT_NOT_FOUND),
-// кэш сбрасывается и бот перерегистрируется автоматически.
+// Устойчив к пересозданию приложения и устаревшему кэшу botId/dialogId:
+// при ЛЮБОЙ ошибке отправки (в т.ч. UNKNOWN) сбрасывает кэш и делает
+// один ретрай с принудительной перерегистрацией бота и пересозданием диалога.
+// Если register возвращает «уже существует» — бот ищется через Bot.list по code.
 
 const BOT_CODE = 'purchase_app_bot';
 const BOT_NAME = 'Альтернатива · Закупки';
 
-// Хелпер: распознать ошибку «бот чужой / не найден / нет доступа»
-function isBotOwnershipError(res) {
+// Хелпер: полный текст ошибки для логов
+function describeError(res) {
   try {
     const e = res.error();
-    let s = '';
-    if (typeof e === 'string') s = e;
-    else if (e) s = (e.error || '') + ' ' + (e.error_description || '');
-    s += ' ' + (res.error_description || '');
+    let code = '', desc = '';
+    if (typeof e === 'string') code = e;
+    else if (e) { code = e.error || ''; desc = e.error_description || ''; }
+    if (!desc && res.error_description) desc = res.error_description;
+    return 'Код ошибки: ' + (code || 'UNKNOWN') + (desc ? ' | ' + desc : '');
+  } catch (_) {
+    return 'Код ошибки: UNKNOWN';
+  }
+}
+
+// Хелпер: распознать ошибку «бот чужой / нет доступа / не найден»
+function isBotOwnershipError(res) {
+  try {
+    const s = describeError(res);
     return /BOT_OWNERSHIP_ERROR|BOT_NOT_FOUND|ACCESS_DENIED|BOT_ID_REQUIRED|BOT_TOKEN_NOT_SPECIFIED/i.test(s);
+  } catch (_) {
+    return false;
+  }
+}
+
+// Хелпер: распознать ошибку «бот с таким code уже существует»
+function isBotAlreadyExistsError(res) {
+  try {
+    const s = describeError(res).toLowerCase();
+    return /already|exist|duplicate|taken|существует|занят/i.test(s);
   } catch (_) {
     return false;
   }
@@ -29,6 +50,33 @@ function clearBotCache() {
     .filter(function(k) { return k.indexOf('b24_bot_chat_') === 0; })
     .forEach(function(k) { localStorage.removeItem(k); });
   logAction('Кэш бота сброшен (botId + диалоги) — перерегистрация', 'info');
+}
+
+// Сброс кэша диалога конкретного пользователя
+function clearBotDialogCache(userId) {
+  localStorage.removeItem('b24_bot_chat_' + userId);
+}
+
+// Поиск существующего бота по code через Bot.list (для случая «уже существует»)
+function findExistingBotByCode(cb) {
+  BX24.callMethod('imbot.v2.Bot.list', {}, function(res) {
+    if (res.error()) {
+      logAction('imbot.v2.Bot.list ошибка: ' + describeError(res), 'error');
+      return cb(null);
+    }
+    const list = (res.data() && (res.data().result || res.data())) || [];
+    const arr = Array.isArray(list) ? list : [];
+    for (let i = 0; i < arr.length; i++) {
+      const b = arr[i];
+      const code = (b && (b.code || b.CODE)) || '';
+      if (String(code) === String(BOT_CODE) && b && (b.id || b.ID)) {
+        const id = parseInt(b.id || b.ID);
+        logAction('Бот найден через Bot.list, ID: ' + id, 'success');
+        return cb(id);
+      }
+    }
+    cb(null);
+  });
 }
 
 /**
@@ -57,27 +105,24 @@ function getBotId(cb, force) {
     }
   }, (res) => {
     if (res.error()) {
-      logAction('Ошибка регистрации бота (v2): ' + getApiErrorMessage(res), 'error');
+      logAction('Ошибка регистрации бота (v2): ' + describeError(res), 'error');
 
-      // Fallback на v1, если портал старый и не поддерживает v2
-      logAction('Пробуем резервный метод регистрации (imbot.v1)...', 'info');
-      BX24.callMethod('imbot.register', {
-        CODE: BOT_CODE,
-        TYPE: 'bot',
-        NAME: BOT_NAME,
-        FIRST_NAME: 'Альтернатива',
-        LAST_NAME: 'Бот',
-        EVENT_HANDLER: '' // Пустой, так как мы не будем слушать события, только писать
-      }, (resV1) => {
-        if (resV1.error()) {
-          logAction('Ошибка регистрации бота (v1): ' + getApiErrorMessage(resV1), 'error');
-          return cb(null);
-        }
-        const botIdV1 = resV1.data().user_id;
-        localStorage.setItem('b24_bot_id', botIdV1);
-        logAction('Бот успешно зарегистрирован (v1 fallback), ID: ' + botIdV1, 'success');
-        cb(botIdV1);
-      });
+      // Если бот с таким code уже существует под этим приложением — берём его из Bot.list
+      if (isBotAlreadyExistsError(res)) {
+        logAction('Бот уже существует — ищу через Bot.list...', 'info');
+        findExistingBotByCode(function(foundId) {
+          if (foundId) {
+            localStorage.setItem('b24_bot_id', foundId);
+            return cb(foundId);
+          }
+          // Не нашли — пробуем v1 как последний резерв
+          registerBotV1(cb);
+        });
+        return;
+      }
+
+      // Иначе — fallback на v1
+      registerBotV1(cb);
       return;
     }
 
@@ -88,8 +133,30 @@ function getBotId(cb, force) {
   });
 }
 
+// Регистрация через v1 (резервный путь для старых порталов)
+function registerBotV1(cb) {
+  logAction('Пробуем резервный метод регистрации (imbot.v1)...', 'info');
+  BX24.callMethod('imbot.register', {
+    CODE: BOT_CODE,
+    TYPE: 'bot',
+    NAME: BOT_NAME,
+    FIRST_NAME: 'Альтернатива',
+    LAST_NAME: 'Бот',
+    EVENT_HANDLER: '' // Пустой: события не слушаем, только пишем
+  }, (resV1) => {
+    if (resV1.error()) {
+      logAction('Ошибка регистрации бота (v1): ' + describeError(resV1), 'error');
+      return cb(null);
+    }
+    const botIdV1 = resV1.data().user_id;
+    localStorage.setItem('b24_bot_id', botIdV1);
+    logAction('Бот успешно зарегистрирован (v1 fallback), ID: ' + botIdV1, 'success');
+    cb(botIdV1);
+  });
+}
+
 /**
- * Получает ID диалога с ботом для конкретного пользователя, создавая его при необходимости.
+ * Получает ID диалога с ботом для пользователя, создавая его при необходимости.
  * @param {number} botId
  * @param {number|string} userId
  * @param {function} cb
@@ -113,7 +180,7 @@ function getBotDialog(botId, userId, cb, force) {
     }
   }, (res) => {
     if (res.error()) {
-      logAction('Ошибка создания чата с ботом: ' + getApiErrorMessage(res), 'error');
+      logAction('Ошибка создания чата с ботом: ' + describeError(res), 'error');
       return cb(null);
     }
 
@@ -126,9 +193,10 @@ function getBotDialog(botId, userId, cb, force) {
 
 /**
  * Отправляет сообщение от имени бота с кнопками-ссылками.
+ * cb(ok, retryable) — retryable=true при любой ошибке (в т.ч. UNKNOWN),
+ * чтобы notifyUserViaBot мог сбросить кэш и повторить.
  */
 function botSend(botId, dialogId, title, message, links, cb) {
-  // Формируем клавиатуру из переданных ссылок
   const keyboard = (links || []).filter(function(l) {
     return l && l.url;
   }).map(function(l) {
@@ -150,10 +218,9 @@ function botSend(botId, dialogId, title, message, links, cb) {
     }
   }, (res) => {
     if (res.error()) {
-      logAction('Ошибка отправки сообщения ботом: ' + getApiErrorMessage(res), 'error');
-      // Передаём в cb не просто false, а признак «ошибка владения/доступа»,
-      // чтобы notifyUserViaBot мог решить — ретраить или нет.
-      if (cb) cb(false, isBotOwnershipError(res));
+      logAction('Ошибка отправки сообщения ботом: ' + describeError(res), 'error');
+      // Любая ошибка send считается retryable: кэш botId/dialogId мог протухнуть
+      if (cb) cb(false, true);
       return;
     }
     logAction('Бот успешно отправил уведомление в диалог ' + dialogId, 'success');
@@ -163,7 +230,7 @@ function botSend(botId, dialogId, title, message, links, cb) {
 
 /**
  * Главная функция-обертка для отправки уведомления пользователю через бота.
- * Одна автоматическая попытка ретрая с перерегистрацией бота при ошибке владения.
+ * Одна автоматическая попытка ретрая с полным сбросом кэша при ЛЮБОЙ ошибке send.
  */
 function notifyUserViaBot(userId, title, message, links, cb) {
   var retried = false;
@@ -172,33 +239,34 @@ function notifyUserViaBot(userId, title, message, links, cb) {
     getBotId(function(botId) {
       if (!botId) {
         logAction('Не удалось получить ID бота', 'error');
-        return done(false, false);
+        return done(false);
       }
 
       getBotDialog(botId, userId, function(dialogId) {
         if (!dialogId) {
           logAction('Не удалось получить dialogId для пользователя ' + userId, 'error');
-          return done(false, false);
+          return done(false);
         }
 
-        botSend(botId, dialogId, title, message, links, function(ok, ownershipErr) {
-          done(ok, ownershipErr);
+        botSend(botId, dialogId, title, message, links, function(ok, retryable) {
+          done(ok, retryable);
         });
       }, force);
     }, force);
   }
 
-  attempt(false, function(ok, ownershipErr) {
+  attempt(false, function(ok, retryable) {
     if (ok) {
       if (cb) cb(true);
       return;
     }
 
-    // Если ошибка «бот чужой / нет доступа» и ещё не ретраили —
-    // сбрасываем кэш и пробуем один раз с принудительной перерегистрацией.
-    if (ownershipErr && !retried) {
+    // Ретраим один раз при любой ошибке send (UNKNOWN, ownership, устаревший dialogId и т.д.)
+    if (!retried) {
       retried = true;
       clearBotCache();
+      clearBotDialogCache(userId);
+      logAction('Повторная попытка отправки с перерегистрацией бота...', 'info');
       attempt(true, function(ok2) {
         if (cb) cb(ok2);
       });
