@@ -330,14 +330,12 @@ function submitData(e) {
         });
       }
 
-      // ✅ Надёжное определение руководителя (учитывает тест-режим и fallback по отделу)
       try {
         if (item) {
           const headId = resolveDeptHeadId(item, true);
-          const actorName = currentUser ? (currentUser.NAME + ' ' + (currentUser.LAST_NAME || '')) : 'Система';
           if (headId) {
-            logAction(`Отправка уведомления о согласовании руководителю ID ${headId} (от: ${actorName})`, 'info');
-            notifyApprovalNeeded(headId, item, actorName);
+            logAction(`Отправка уведомления о согласовании руководителю ID ${headId}`, 'info');
+            notifyApprovalNeeded(headId, item);
           } else {
             logAction('Не удалось определить руководителя — уведомление о согласовании НЕ отправлено. Проверьте: поле deptHead в карточке, settings.deptHeads, UF_HEAD отдела.', 'error');
           }

@@ -1,14 +1,12 @@
 // ============================================================
 // МОДУЛЬ: bot.js — Чат-бот уведомлений (imbot.v2, режим fetch)
 // ============================================================
-// Устойчив к пересозданию приложения и устаревшему кэшу:
-// при смене client_id приложения кэш сбрасывается ДО первой попытки отправки,
-// что полностью исключает ошибку UNKNOWN и задержку ретрая.
+// При смене client_id приложения бот ПЕРЕСОЗДАЁТСЯ (не ищется старый).
+// Это гарантирует, что бот всегда привязан к текущему приложению.
 
 const BOT_CODE = 'purchase_app_bot';
 const BOT_NAME = 'Альтернатива · Закупки';
 
-// ✅ Надёжное получение текущего client_id приложения
 function getCurrentClientId() {
   try {
     const auth = BX24.getAuth();
@@ -17,7 +15,6 @@ function getCurrentClientId() {
   return (settings.clientId || '').trim() || 'unknown';
 }
 
-// ✅ Улучшенный парсинг ошибки (защищён от функции вместо объекта в BX24 SDK)
 function describeError(res) {
   try {
     const e = res.error();
@@ -25,7 +22,6 @@ function describeError(res) {
     if (typeof e === 'string') {
       code = e;
     } else if (typeof e === 'function') {
-      // Иногда BX24 SDK возвращает функцию вместо объекта ошибки
       try { code = e() || 'UNKNOWN'; } catch (err) { code = 'UNKNOWN'; }
     } else if (e && typeof e === 'object') {
       code = e.error || e.code || 'UNKNOWN';
@@ -38,15 +34,6 @@ function describeError(res) {
   }
 }
 
-function isBotOwnershipError(res) {
-  try {
-    const s = describeError(res);
-    return /BOT_OWNERSHIP_ERROR|BOT_NOT_FOUND|ACCESS_DENIED|BOT_ID_REQUIRED|BOT_TOKEN_NOT_SPECIFIED/i.test(s);
-  } catch (_) {
-    return false;
-  }
-}
-
 function isBotAlreadyExistsError(res) {
   try {
     const s = describeError(res).toLowerCase();
@@ -56,55 +43,32 @@ function isBotAlreadyExistsError(res) {
   }
 }
 
-// ✅ Полный сброс кэша бота, его диалогов и привязанного client_id
+// ✅ Полный сброс кэша бота, диалогов и client_id
 function clearBotCache() {
   localStorage.removeItem('b24_bot_id');
   localStorage.removeItem('b24_bot_client_id');
   Object.keys(localStorage)
     .filter(function(k) { return k.indexOf('b24_bot_chat_') === 0; })
     .forEach(function(k) { localStorage.removeItem(k); });
-  logAction('Кэш бота сброшен (несовпадение client_id или принудительно) — перерегистрация', 'info');
+  logAction('Кэш бота полностью сброшен — будет создан новый бот', 'info');
 }
 
 function clearBotDialogCache(userId) {
   localStorage.removeItem('b24_bot_chat_' + userId);
 }
 
-function findExistingBotByCode(cb) {
-  BX24.callMethod('imbot.v2.Bot.list', {}, function(res) {
-    if (res.error()) {
-      logAction('imbot.v2.Bot.list ошибка: ' + describeError(res), 'error');
-      return cb(null);
-    }
-    const list = (res.data() && (res.data().result || res.data())) || [];
-    const arr = Array.isArray(list) ? list : [];
-    for (let i = 0; i < arr.length; i++) {
-      const b = arr[i];
-      const code = (b && (b.code || b.CODE)) || '';
-      if (String(code) === String(BOT_CODE) && b && (b.id || b.ID)) {
-        const id = parseInt(b.id || b.ID);
-        logAction('Бот найден через Bot.list, ID: ' + id, 'success');
-        return cb(id);
-      }
-    }
-    cb(null);
-  });
-}
-
 /**
  * Получает ID бота, регистрируя его при необходимости.
- * @param {function} cb
- * @param {boolean} force — принудительная регистрация (игнорировать кэш)
+ * При смене client_id — ВСЕГДА регистрирует нового бота (не ищет старого).
  */
 function getBotId(cb, force) {
   const cachedBotId = localStorage.getItem('b24_bot_id');
   const cachedClientId = localStorage.getItem('b24_bot_client_id');
   const currentClientId = getCurrentClientId();
 
-  // ✅ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: если client_id изменился (обновлён архив приложения), 
-  // сбрасываем кэш НЕМЕДЛЕННО, до попытки отправки, избегая ошибки UNKNOWN.
+  // ✅ Если client_id изменился — принудительно пересоздаём бота
   if (cachedBotId && cachedClientId !== currentClientId) {
-    logAction('Обнаружено изменение client_id приложения. Сброс кэша бота...', 'info');
+    logAction('client_id изменился (' + cachedClientId + ' → ' + currentClientId + '). Пересоздаём бота...', 'info');
     clearBotCache();
     force = true;
   }
@@ -113,7 +77,7 @@ function getBotId(cb, force) {
     return cb(parseInt(cachedBotId));
   }
 
-  logAction('Регистрация чат-бота (imbot.v2)...', 'info');
+  logAction('Регистрация нового чат-бота (imbot.v2)...', 'info');
 
   BX24.callMethod('imbot.v2.Bot.register', {
     fields: {
@@ -129,13 +93,26 @@ function getBotId(cb, force) {
     if (res.error()) {
       logAction('Ошибка регистрации бота (v2): ' + describeError(res), 'error');
 
+      // ✅ Если бот уже существует под ЭТИМ client_id — используем его
       if (isBotAlreadyExistsError(res)) {
-        logAction('Бот уже существует — ищу через Bot.list...', 'info');
-        findExistingBotByCode(function(foundId) {
-          if (foundId) {
-            localStorage.setItem('b24_bot_id', foundId);
-            localStorage.setItem('b24_bot_client_id', currentClientId);
-            return cb(foundId);
+        logAction('Бот уже существует под текущим приложением — ищем через Bot.list...', 'info');
+        BX24.callMethod('imbot.v2.Bot.list', {}, function(listRes) {
+          if (listRes.error()) {
+            logAction('Bot.list ошибка: ' + describeError(listRes), 'error');
+            return registerBotV1(cb);
+          }
+          const list = (listRes.data() && (listRes.data().result || listRes.data())) || [];
+          const arr = Array.isArray(list) ? list : [];
+          for (let i = 0; i < arr.length; i++) {
+            const b = arr[i];
+            const code = (b && (b.code || b.CODE)) || '';
+            if (String(code) === String(BOT_CODE) && b && (b.id || b.ID)) {
+              const id = parseInt(b.id || b.ID);
+              localStorage.setItem('b24_bot_id', id);
+              localStorage.setItem('b24_bot_client_id', currentClientId);
+              logAction('Найден существующий бот под текущим приложением, ID: ' + id, 'success');
+              return cb(id);
+            }
           }
           registerBotV1(cb);
         });
@@ -148,7 +125,7 @@ function getBotId(cb, force) {
 
     const botId = res.data().bot.id;
     localStorage.setItem('b24_bot_id', botId);
-    localStorage.setItem('b24_bot_client_id', currentClientId); // ✅ Сохраняем привязку
+    localStorage.setItem('b24_bot_client_id', currentClientId);
     logAction('Бот успешно зарегистрирован (v2), ID: ' + botId, 'success');
     cb(botId);
   });
@@ -269,7 +246,7 @@ function notifyUserViaBot(userId, title, message, links, cb) {
       retried = true;
       clearBotCache();
       clearBotDialogCache(userId);
-      logAction('Повторная попытка отправки с перерегистрацией бота...', 'info');
+      logAction('Повторная попытка отправки с пересозданием бота...', 'info');
       attempt(true, function(ok2) {
         if (cb) cb(ok2);
       });

@@ -97,7 +97,7 @@ function buildPurchaseMeta(item) {
   const creatorRaw = item[actualFields.creator];
   const creatorId = Array.isArray(creatorRaw) ? creatorRaw[0] : creatorRaw;
   const creatorName = creatorId ? (userNames[creatorId] || creatorId) : '—';
-  return { no, dateStr, shortDesc, deadlineStr, creatorName };
+  return { no, dateStr, shortDesc, deadlineStr, creatorName, creatorId };
 }
 
 function formatPurchaseBody(meta) {
@@ -106,8 +106,7 @@ function formatPurchaseBody(meta) {
          'Кто создал запрос: ' + meta.creatorName;
 }
 
-// ✅ Надёжное определение руководителя отдела закупки.
-//    Цепочка: тест-режим → deptHead из карточки → settings.deptHeads[dept] → UF_HEAD из departments.
+// ✅ Надёжное определение руководителя отдела закупки
 function resolveDeptHeadId(item, respectTestMode) {
   if (!item) return null;
   if (respectTestMode && isTestMode && currentUser) return parseInt(currentUser.ID);
@@ -139,6 +138,7 @@ function sendBotNotification(userId, title, message, links, cb) {
   });
 }
 
+// ✅ Уведомление №1: руководителю — выбрать исполнителя
 function notifySelectExecutor(userId, item, taskId) {
   userId = parseInt(userId);
   if (!userId || !item) return;
@@ -157,12 +157,13 @@ function notifySelectExecutor(userId, item, taskId) {
   sendBotNotification(userId, title, message, links);
 }
 
-function notifyCollectData(userId, item, actorName) {
+// ✅ Уведомление №2: менеджеру — собрать данные (без actorName, только данные закупки)
+function notifyCollectData(userId, item) {
   userId = parseInt(userId);
   if (!userId || !item) return;
   const meta = buildPurchaseMeta(item);
   const title = 'Необходимо собрать данные и рассчитать стоимость по закупке №' + meta.no + ' от ' + meta.dateStr;
-  const message = formatPurchaseBody(meta) + (actorName ? ('\n\nДействие выполнил: ' + actorName) : '');
+  const message = formatPurchaseBody(meta);
 
   const links = [
     { text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }
@@ -171,8 +172,10 @@ function notifyCollectData(userId, item, actorName) {
   sendBotNotification(userId, title, message, links);
 }
 
-function buildApprovalCard(item, actorName) {
-  const shortDesc = cleanText(item[actualFields.shortDesc]) || item.title || '';
+// ✅ Карточка согласования: текст + кнопки. Выводит СОЗДАТЕЛЯ запроса (creatorName), а не того, кто выполнил действие.
+function buildApprovalCard(item) {
+  const meta = buildPurchaseMeta(item);
+  const shortDesc = meta.shortDesc;
   const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
   const deadline = item[actualFields.deadlineZakup] || 'не указан';
   const deptId = String(Array.isArray(item[actualFields.dept]) ? item[actualFields.dept][0] : (item[actualFields.dept] || ''));
@@ -191,9 +194,9 @@ function buildApprovalCard(item, actorName) {
     `Исполнитель: ${mgrName}\n` +
     `Сумма: ${amount}\n` +
     `Раздел/Напр: ${combined}\n` +
-    `Комментарий: ${comment}` +
-    (actorName ? (`\nДействие выполнил: ${actorName}`) : '') +
-    `\n\nТребуется согласование условий.`;
+    `Комментарий: ${comment}\n` +
+    `Создал запрос: ${meta.creatorName}\n\n` +
+    `Требуется согласование условий.`;
 
   const links = [
     { text: '✅ Согласовать', url: buildAppLink('approve', item.id, 'inbox') },
@@ -204,13 +207,14 @@ function buildApprovalCard(item, actorName) {
   return { text, links };
 }
 
-function notifyApprovalNeeded(headId, item, actorName) {
+// ✅ Уведомление руководителю о поступлении на согласование (без actorName)
+function notifyApprovalNeeded(headId, item) {
   headId = parseInt(headId);
   if (!headId || !item) {
     logAction('notifyApprovalNeeded: headId не определён — уведомление о согласовании НЕ отправлено', 'error');
     return;
   }
-  const card = buildApprovalCard(item, actorName);
+  const card = buildApprovalCard(item);
   notifyUserViaBot(headId, 'Закупка на согласовании', card.text, card.links, function(success) {
     if (!success) {
       logAction('Fallback: im.notify о согласовании', 'info');
@@ -227,16 +231,17 @@ function notifyApprovalNeeded(headId, item, actorName) {
   });
 }
 
-function notifyAfterDecision(managerId, item, approved, actorName) {
+// ✅ Уведомление менеджеру после согласования/отклонения (без actorName)
+function notifyAfterDecision(managerId, item, approved) {
   managerId = parseInt(managerId);
   if (!managerId || !item) return;
-  const shortDesc = cleanText(item[actualFields.shortDesc]) || item.title || '';
+  const meta = buildPurchaseMeta(item);
+  const shortDesc = meta.shortDesc;
   const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
   const title = approved ? 'Условия согласованы' : 'Закупка отклонена';
-  let message = approved
+  const message = approved
     ? `Условия по закупке "${shortDesc}" (сумма ${amount}) согласованы.\nНеобходимо загрузить входящий счёт.`
     : `Закупка "${shortDesc}" отклонена на этапе согласования.\nТребуется корректировка.`;
-  if (actorName) message += '\n\nДействие выполнил: ' + actorName;
   const links = [
     { text: approved ? '📄 Загрузить счёт' : '📋 Открыть закупку', url: buildAppLink(approved ? 'upload' : 'view', item.id, 'inbox') }
   ].filter(l => l.url);
@@ -256,6 +261,7 @@ function notifyAfterDecision(managerId, item, approved, actorName) {
   });
 }
 
+// ✅ Legacy-обёртка
 function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, linkText = 'Начать выполнение') {
   userId = parseInt(userId);
   if (!userId) return;
@@ -761,7 +767,7 @@ function syncManagersFromTasks(done) {
               logAction('Задача менеджеру создана (ID: ' + newTaskId + '), постановщик: админ ' + createdBy + ', наблюдатель: ' + (headId || 'нет'), 'success');
 
               try {
-                notifyCollectData(parseInt(f.mgrId), f.item, headId ? (userNames[headId] || headId) : '');
+                notifyCollectData(parseInt(f.mgrId), f.item);
               } catch (e) {
                 logAction('Ошибка при отправке уведомления менеджеру: ' + e.message, 'error');
               }

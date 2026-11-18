@@ -1,4 +1,4 @@
-// js/init.js — Инициализация приложения (оптимизированная)
+// js/init.js — Инициализация приложения
 
 window.addEventListener('error', function(ev) {
   try {
@@ -57,25 +57,27 @@ function tryRedirectToPortal() {
   }
 }
 
+// ✅ ВСЕГДА перерегистрируем placement (handler URL может измениться после обновления архива)
 function ensureAppPlacement() {
   const handlerUrl = window.location.href.split('?')[0].split('#')[0];
-  const bindKey = 'b24_placement_bound_' + handlerUrl;
-  if (localStorage.getItem(bindKey)) return;
   BX24.callMethod('placement.bind', {
     PLACEMENT: 'REST_APP_URI',
     HANDLER: handlerUrl,
     TITLE: 'Закупки'
   }, function(res) {
     if (res.error()) {
-      logAction('placement.bind: ' + getApiErrorMessage(res) + ' (возможно уже зарегистрирован)', 'info');
+      const errStr = getApiErrorMessage(res);
+      if (/already|binded/i.test(errStr)) {
+        logAction('placement.bind: уже зарегистрирован (handler обновлён)', 'info');
+      } else {
+        logAction('placement.bind: ' + errStr, 'error');
+      }
     } else {
-      logAction('Виджет REST_APP_URI зарегистрирован: ' + handlerUrl, 'success');
+      logAction('placement.bind: виджет REST_APP_URI зарегистрирован/обновлён: ' + handlerUrl, 'success');
     }
-    localStorage.setItem(bindKey, '1');
   });
 }
 
-// ✅ Синхронизация client_id с текущей авторизацией (решает 404 без пересоздания приложения)
 function syncClientIdFromAuth() {
   try {
     const auth = BX24.getAuth();
@@ -220,6 +222,7 @@ function init() {
 
       setLoadingStep(2, 5);
 
+      // ✅ ВСЕГДА перерегистрируем placement (если есть client_id и мы админ)
       try {
         if (settings.clientId && actualRoles.isAdmin) ensureAppPlacement();
       } catch (e) {}
