@@ -2,41 +2,132 @@
 // МОДУЛЬ: api.js — Обёртки над BX24 API
 // ============================================================
 
-// ✅ Утилита: полный URL портала (надежное определение домена)
-function getPortalOrigin() {
-  const m = window.location.search.match(/[?&]DOMAIN=([^&]+)/);
-  if (m) {
-    return `https://${decodeURIComponent(m[1])}.bitrix24.ru`;
-  }
+// ✅ Утилита: домен портала (надёжно, через BX24.getDomain, а не через CDN)
+function getPortalDomain() {
+  // 1) Основной источник: SDK знает адрес портала, даже до BX24.init [[10]]
   try {
-    if (document.referrer) {
-      const origin = new URL(document.referrer).origin;
-      if (origin.includes('bitrix24')) return origin;
+    if (typeof BX24 !== 'undefined' && typeof BX24.getDomain === 'function') {
+      const d = BX24.getDomain();
+      if (d && d.indexOf('cdn-') === -1) return 'https://' + d;
     }
   } catch (e) {}
-  return window.location.origin;
+
+  // 2) Запасной: параметр DOMAIN в query (если портал его подставил)
+  try {
+    const m = window.location.search.match(/[?&]DOMAIN=([^&]+)/);
+    if (m) {
+      const dom = decodeURIComponent(m[1]);
+      if (dom && dom.indexOf('cdn-') === -1) return 'https://' + dom;
+    }
+  } catch (e) {}
+
+  // 3) Запасной: referrer портала
+  try {
+    if (document.referrer) {
+      const o = new URL(document.referrer).origin;
+      if (o.indexOf('bitrix24') !== -1 && o.indexOf('cdn-') === -1) return o;
+    }
+  } catch (e) {}
+
+  // 4) Запасной: текущий origin, если это НЕ CDN
+  const origin = window.location.origin;
+  if (origin && origin.indexOf('cdn-') === -1) return origin;
+
+  // Не удалось определить портал
+  return '';
 }
 
-// ✅ ОБНОВЛЕНО: уведомления теперь гарантированно приходят в чат через бота
+// ✅ Построение ссылки, которая открывает приложение ЧЕРЕЗ ПОРТАЛ (с авторизацией)
+// Если задан client_id — открываем кастомное приложение в слайдере через /marketplace/view/ [[13]]
+// Иначе — нативную карточку smart-процесса (тоже открывается через портал, всегда работает)
+function buildAppLink(action, itemId) {
+  const domain = getPortalDomain();
+  if (!domain || !itemId) return '';
+
+  const clientId = (settings.clientId || '').trim();
+  if (clientId) {
+    // Параметры передаются ТОЛЬКО через ключ params[] — иначе не дойдут до приложения [[13]]
+    return domain + '/marketplace/view/' + encodeURIComponent(clientId) +
+      '/?params[action]=' + encodeURIComponent(action) +
+      '&params[id]=' + encodeURIComponent(itemId);
+  }
+
+  // Fallback: стандартная карточка записи smart-процесса
+  return domain + '/crm/smartprocess/' + ENTITY_TYPE_ID + '/item/' + itemId + '/';
+}
+
+// ✅ Чтение входящих параметров: из placement (открытие через /marketplace/view/),
+// затем из query string (legacy/прямые ссылки)
+function getIncomingParams() {
+  // 1) Открытие через слайдер портала: параметры приходят в placement.info().options [[13]]
+  try {
+    if (typeof BX24 !== 'undefined' && BX24.placement && typeof BX24.placement.info === 'function') {
+      const info = BX24.placement.info();
+      const o = (info && info.options) || {};
+      if (o.id) return { action: o.action || 'view', itemId: o.id };
+    }
+  } catch (e) {}
+
+  // 2) Прямой query string
+  try {
+    const up = new URLSearchParams(window.location.search);
+    if (up.get('id')) return { action: up.get('action') || 'view', itemId: up.get('id') };
+  } catch (e) {}
+
+  // 3) Hash (на всякий случай)
+  try {
+    const h = (window.location.hash || '').replace(/^#/, '');
+    if (h) {
+      const hp = new URLSearchParams(h);
+      if (hp.get('id')) return { action: hp.get('action') || 'view', itemId: hp.get('id') };
+    }
+  } catch (e) {}
+
+  return { action: '', itemId: '' };
+}
+
+// ✅ ОБНОВЛЕНО: уведомления идут через бота, а ссылки строятся НА ПОРТАЛ, а не на CDN
+// Сигнатура сохранена обратно-совместимой: 4-й аргумент может быть и старой CDN-ссылкой
 function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, linkText = 'Начать выполнение') {
   userId = parseInt(userId);
   if (!userId) return;
 
-  const portalOrigin = getPortalOrigin();
-  const fullTaskUrl = taskUrl ? (taskUrl.startsWith('http') ? taskUrl : portalOrigin + taskUrl) : '';
-  const fullItemUrl = itemUrl ? (itemUrl.startsWith('http') ? itemUrl : portalOrigin + itemUrl) : '';
+  const domain = getPortalDomain();
+
+  // Извлекаем itemId из переданного itemUrl (работает и для старых вызовов с CDN-ссылкой ?id=NNN)
+  let itemId = '';
+  if (itemUrl) {
+    const m = String(itemUrl).match(/[?&]id=(\d+)/);
+    if (m) itemId = m[1];
+  }
+
+  // Формируем ссылку на приложение ЧЕРЕЗ ПОРТАЛ (не на CDN!)
+  let fullItemUrl = '';
+  if (itemId) {
+    fullItemUrl = buildAppLink('view', itemId);
+  } else if (itemUrl) {
+    fullItemUrl = itemUrl.startsWith('http') ? itemUrl : (domain ? domain + itemUrl : itemUrl);
+  }
+
+  // Ссылка на задачу — тоже через портал
+  let fullTaskUrl = '';
+  if (taskUrl) {
+    if (taskUrl.startsWith('http')) fullTaskUrl = taskUrl;
+    else if (domain) fullTaskUrl = domain + taskUrl;
+    else fullTaskUrl = taskUrl;
+  }
 
   const links = [
     fullItemUrl ? { text: '📋 Открыть закупку', url: fullItemUrl } : null,
-    fullTaskUrl ? { text: '✅ ' + linkText, url: taskUrl } : null
+    fullTaskUrl ? { text: '✅ ' + linkText, url: fullTaskUrl } : null
   ].filter(function(l) { return l !== null; });
 
-  // 1. Основная отправка через чат-бота (создаст ЛС, если её нет, и даст push/unread)
+  // 1. Основная отправка через чат-бота (создаст ЛС, если его нет, и даст push/unread)
   notifyUserViaBot(userId, title, message, links, function(success) {
     if (!success) {
-      // 2. Fallback: если бот по какой-то причине не сработал, пробуем старый метод (колокольчик)
+      // 2. Fallback: если бот не сработал — колокольчик
       logAction('Fallback: отправка через im.notify', 'info');
-      
+
       let notifyText = title + '\n' + message;
       if (fullTaskUrl) {
         notifyText += '\n[url=' + fullTaskUrl + ']' + linkText + '[/url]';
@@ -107,33 +198,33 @@ function runScenarioAfterCreate(itemId) {
   scenarioRunning[itemId] = true;
   var item = items.find(function(i) { return i.id === itemId; });
   if (!item) return;
-  
+
   logAction('Запуск сценария "' + currentScenario + '" для закупки ID ' + itemId + '...', 'info');
-  
+
   var secDef = fieldDefs[actualFields.section];
   var dirDef = fieldDefs[actualFields.direction];
   var firstSec = secDef && secDef.items && secDef.items.length > 0 ? secDef.items[0].ID : null;
   var firstDir = dirDef && dirDef.items && dirDef.items.length > 0 ? dirDef.items[0].ID : null;
-  
+
   var secText = firstSec && secDef ? (secDef.items.find(function(i) { return String(i.ID) === String(firstSec); }) || {}).VALUE : '';
   var dirText = firstDir && dirDef ? (dirDef.items.find(function(i) { return String(i.ID) === String(firstDir); }) || {}).VALUE : '';
   var combinedText = (secText && dirText) ? (secText + ' / ' + dirText) : secText;
-  
+
   var targetStageName = '';
   if (currentScenario === 'upload') targetStageName = 'загрузка';
   else if (currentScenario === 'approval') targetStageName = 'согласование';
   else if (currentScenario === 'full') targetStageName = 'сбор данных';
-  
+
   var targetStageId = getStageIdByName(targetStageName);
   if (!targetStageId) {
     logAction('Не найдена стадия "' + targetStageName + '" для сценария', 'error');
     return;
   }
-  
+
   var fields = { stageId: targetStageId };
   if (actualFields.manager && fieldDefs[actualFields.manager]) fields[actualFields.manager] = [String(currentUser.ID)];
   if (actualFields.deptHead && fieldDefs[actualFields.deptHead]) fields[actualFields.deptHead] = [String(currentUser.ID)];
-  
+
   if (currentScenario === 'upload' || currentScenario === 'approval') {
     if (firstSec) fields[actualFields.section] = firstSec;
     if (firstDir) fields[actualFields.direction] = firstDir;
@@ -142,7 +233,7 @@ function runScenarioAfterCreate(itemId) {
       fields[actualFields.amountProduct] = 10000;
     }
   }
-  
+
   logAction('Автопроход до стадии "' + targetStageName + '" (ID: ' + targetStageId + ')...', 'info');
   BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: parseInt(itemId), fields: fields }, function(res) {
     if (res.error()) {
@@ -259,13 +350,15 @@ function syncManagersFromTasks(done) {
             STATUS: 2,
             ADD_IN_REPORT: 'Y'
           };
-          
+
           BX24.callMethod('tasks.task.add', { fields: taskPayload }, function(tr) {
             if (!tr.error()) {
               var newTaskId = tr.data().task.id;
               logAction('Задача менеджеру создана (ID: ' + newTaskId + ')', 'success');
 
               try {
+                // Передаём itemUrl со старой сигнатурой — sendNotificationWithMessage сам извлечёт id
+                // и построит ссылку НА ПОРТАЛ, а не на CDN
                 var itemUrl = appBaseUrl + '?action=view&id=' + f.item.id;
                 var taskUrl = '/company/personal/user/' + f.mgrId + '/tasks/task/view/' + newTaskId + '/';
                 sendNotificationWithMessage(
@@ -304,11 +397,11 @@ function syncManagersFromTasks(done) {
   });
 }
 
-// Обработка параметров из URL
+// Обработка параметров из URL / placement (открытие через портал)
 function handleUrlParams() {
-  var urlParams = new URLSearchParams(window.location.search);
-  var action = urlParams.get('action');
-  var itemId = urlParams.get('id');
+  var params = getIncomingParams();
+  var itemId = params.itemId;
+  var action = params.action;
   if (itemId) {
     var attempts = 0;
     var maxAttempts = 20;
@@ -322,8 +415,11 @@ function handleUrlParams() {
           else if (action === 'upload') openUploadModal(id);
           else if (action === 'approve') openActionModal(id, 'approve_terms');
           else openViewModal(id);
-          var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-          window.history.replaceState({ path: newUrl }, '', newUrl);
+          // Чистим query/hash, чтобы при повторном фокусе не открывалось заново
+          try {
+            var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+            window.history.replaceState({ path: newUrl }, '', newUrl);
+          } catch (e) {}
         } else {
           showToast('Не удалось загрузить данные для автоматического перехода.', 'error');
         }

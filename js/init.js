@@ -14,6 +14,37 @@ function setLoadingStep(step, total) {
   `;
 }
 
+// ✅ Защита от зависания: если приложение открыли напрямую по CDN-ссылке (без портала),
+// BX24.init никогда не вызовет колбэк. Показываем понятное сообщение вместо бесконечной загрузки.
+function showNoAuthError() {
+  const container = document.getElementById('app-container');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="error-box" style="text-align:center; padding:32px; max-width:560px; margin:0 auto;">
+      <h3 style="margin-top:0;">Откройте приложение через портал Битрикс24</h3>
+      <p style="line-height:1.5;">
+        Вы перешли по прямой ссылке на файл приложения (домен <code>cdn-*.bitrix24.ru</code>).
+        В этом режиме нет авторизации портала, поэтому данные не загрузятся.
+      </p>
+      <p style="line-height:1.5;">
+        Откройте приложение из меню портала, либо нажмите на уведомление бота —
+        там ссылка ведёт на портал и приложение запустится корректно.
+      </p>
+      <button class="btn btn-primary" onclick="tryRedirectToPortal()" style="margin-top:8px;">Перейти в Битрикс24</button>
+    </div>
+  `;
+  logAction('BX24.init не выполнился — приложение открыто без авторизации портала (прямая CDN-ссылка)', 'error');
+}
+
+function tryRedirectToPortal() {
+  const domain = (typeof getPortalDomain === 'function') ? getPortalDomain() : '';
+  if (domain) {
+    window.location.href = domain + '/crm/smartprocess/' + ENTITY_TYPE_ID + '/';
+  } else {
+    showToast('Не удалось определить адрес портала. Откройте приложение из меню Битрикс24.', 'error');
+  }
+}
+
 function init() {
   logAction('Инициализация приложения...', 'info');
   setLoadingStep(0, 5);
@@ -24,7 +55,17 @@ function init() {
     return;
   }
 
+  // Таймаут защиты от зависания при прямом открытии по CDN
+  let inited = false;
+  const initTimeout = setTimeout(function() {
+    if (inited) return;
+    showNoAuthError();
+  }, 8000);
+
   BX24.init(() => {
+    inited = true;
+    clearTimeout(initTimeout);
+
     setLoadingStep(1, 5);
     const initBatch = {
       user: ['user.current', {}],
