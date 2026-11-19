@@ -173,45 +173,51 @@
             <h4 class="form-section-title">Основная информация</h4>
             <div class="form-group"><label>Ответственный отдел *</label><select id="create-dept" required></select>
             </div>
+            <div class="form-group"><label>Крайний срок закупки *</label><input type="date" id="create-deadline"
+                required></div>
             <div class="form-row" style="display:flex; gap:16px; flex-wrap:wrap;">
               <div class="form-group" style="flex:1; min-width:200px;"><label>Раздел направления расхода д/с
                   *</label><select id="create-section" required onchange="updateDirectionsCreate()"></select></div>
               <div class="form-group" style="flex:1; min-width:200px;"><label>Направление расхода д/с *</label><select
                   id="create-direction" required></select></div>
             </div>
-            <div class="form-group"><label>Что нужно закупить (Кратко) *</label><input type="text"
-                id="create-short-desc" required></div>
           </div>
 
-          <!-- Блок 2: Детализация (сворачиваемый) -->
-          <details class="admin-section" style="margin-bottom:16px;">
-            <summary style="font-weight:700; color:var(--brand-blue);">Детализация закупки</summary>
-            <div class="section-content" style="background:#fff;">
-              <div class="detail-table-wrapper">
-                <table class="detail-table" id="detail-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 25%;">Наименование</th>
-                      <th style="width: 20%;">Цель использования</th>
-                      <th style="width: 15%;">Цена за 1 шт</th>
-                      <th style="width: 10%;">Количество</th>
-                      <th style="width: 15%;">Всего</th>
-                      <th style="width: 15%;">Ссылка</th>
-                      <th style="width: 40px;"></th>
-                    </tr>
-                  </thead>
-                  <tbody id="detail-tbody"></tbody>
-                </table>
+          <!-- Блок 2: Что закупить + Детализация (вместе) -->
+          <div class="form-section-block">
+            <h4 class="form-section-title">Что нужно закупить</h4>
+            <div class="form-group"><label>Краткое описание *</label><input type="text" id="create-short-desc" required
+                placeholder="Например: оборудование для лаборатории"></div>
+            <details class="admin-section" style="margin-bottom:0; margin-top:12px;">
+              <summary style="font-weight:600; color:var(--brand-blue);">Детализация закупки (нажмите, чтобы развернуть)
+              </summary>
+              <div class="section-content" style="background:#fff;">
+                <div class="detail-table-wrapper">
+                  <table class="detail-table" id="detail-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 25%;">Наименование</th>
+                        <th style="width: 20%;">Цель использования</th>
+                        <th style="width: 15%;">Цена за 1 шт</th>
+                        <th style="width: 10%;">Количество</th>
+                        <th style="width: 15%;">Всего</th>
+                        <th style="width: 15%;">Ссылка</th>
+                        <th style="width: 40px;"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="detail-tbody"></tbody>
+                  </table>
+                </div>
+                <button type="button" class="btn btn-sm" onclick="addDetailRow()">+ Добавить строку</button>
               </div>
-              <button type="button" class="btn btn-sm" onclick="addDetailRow()">+ Добавить строку</button>
-            </div>
-          </details>
+            </details>
+          </div>
 
           <!-- Блок 3: Сумма -->
           <div class="form-section-block">
             <h4 class="form-section-title">Сумма</h4>
-            <div class="form-group"><label>Сумма позиций (без доставки)</label><input type="number"
-                id="create-amount-product" step="0.01" placeholder="0.00"></div>
+            <div class="form-group" style="margin-bottom:0;"><label>Сумма позиций (без доставки)</label><input
+                type="number" id="create-amount-product" step="0.01" placeholder="0.00"></div>
           </div>
 
         </div>
