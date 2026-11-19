@@ -179,7 +179,7 @@ function createGroupChat(botId, seedUserId, cb) {
     localStorage.setItem('b24_group_chat_id', chatId);
     settings.chatId = chatId;
     saveSettingsToBoth();
-    logAction('Групповой чат создан, ID: ' + chatId, 'success');
+    logAction('Групповой чат создан (ботом), ID: ' + chatId, 'success');
     cb(chatId);
   });
 }
@@ -259,15 +259,18 @@ function sendToPersonalChat(botId, userId, title, message, links, cb) {
   });
 }
 
-// ✅ Полностью сбрасывает авто-чат (localStorage + settings + app.option), чтобы битый чат больше не подтягивался
+// ✅ Сбрасывает сохранённый/ручной chatId (localStorage + settings + app.option),
+// чтобы битый чат (созданный человеком, куда imbot не пишет) больше не подтягивался.
 function resetAutoChat() {
   localStorage.removeItem('b24_group_chat_id');
   settings.chatId = '';
   saveSettingsToBoth();
 }
 
-// ✅ Основной поток: если отправка в АВТО-чат упала — пересоздаём его и пробуем ещё раз (один раз).
-// Ручной чат из формы не трогаем — там подсказка.
+// ✅ Основной поток. Если отправка в ЛЮБОЙ чат упала (ручной из формы или сохранённый) —
+// это значит, что бот не является создателем этого диалога и imbot туда не пишет.
+// Приложение само сбрасывает chatId, создаёт чат ОТ ИМЕНИ БОТА (imbot.v2.Chat.add)
+// и повторяет отправку один раз. Только если и бот-чат упал — уходит в личный чат.
 function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
   if (dedupePass(fullKey)) { if (cb) cb(true); return; }
@@ -281,28 +284,17 @@ function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
           botSendToGroup(botId, cid, title, message, links, function (ok) {
             if (ok) { if (cb) cb(true); return; }
 
-            const autoChat = (localStorage.getItem('b24_group_chat_id') === cid);
-
-            // Битый авто-чат и ещё не пробовали пересоздать → чиним автоматически
-            if (autoChat && !isRetry) {
-              logAction('⚠ Авто-чат ' + cid + ' битый (бот не участник). Пересоздаю рабочий чат...', 'error');
+            if (!isRetry) {
+              logAction('⚠ Чат ' + cid + ' не принимает imbot-сообщения (бот не создатель диалога — его туда просто пригласили). Переключаюсь на чат, созданный ботом...', 'error');
               resetAutoChat();
               getGroupChatId(botId, userId, function (newId) {
-                if (!newId) { logAction('Не удалось пересоздать чат', 'error'); if (cb) cb(false); return; }
-                logAction('Создан новый чат ' + newId + ', повторяю отправку', 'info');
+                if (!newId) { logAction('Не удалось создать чат ботом', 'error'); if (cb) cb(false); return; }
+                logAction('Создан чат ботом ' + newId + ', повторяю отправку', 'info');
                 attempt(newId, true);
               });
               return;
             }
 
-            // Ручной чат из формы упал → не плодим личные чаты, даём подсказку
-            if (!autoChat) {
-              logAction('⚠ Не удалось отправить в настроенный вручную чат ' + cid + '. Бот должен быть его участником. Если не уверены — нажмите «Сбросить чат бота» в настройках: приложение создаст рабочий чат само.', 'error');
-              if (cb) cb(false);
-              return;
-            }
-
-            // Авто-чат упал даже после пересоздания → личный чат как последний шанс
             logAction('Fallback: личный чат', 'info');
             sendToPersonalChat(botId, userId, title, message, links, cb);
           });
