@@ -368,6 +368,21 @@
                   id="set-clientsecret" placeholder="xxxxxxxxxx"></div>
             </div>
             <div style="margin-top:16px; border-top:1px solid var(--border-color); padding-top:16px;">
+              <div class="form-group"><label>ID чат-бота (если авто-поиск не сработал)</label><input type="number"
+                  id="set-botid" placeholder="например 345">
+                <div style="font-size:11px; color:#64748b; margin-top:4px;">Число из URL карточки бота. Приоритет над
+                  авто-поиском. Переживает обновления архива.</div>
+              </div>
+              <div class="form-group"><label>URL обработчика событий бота (handler)</label><input type="text"
+                  id="set-bothandler" placeholder="оставьте пустым = текущий URL приложения">
+                <div style="font-size:11px; color:#64748b; margin-top:4px;">Обязателен при eventMode=fetch. По умолчанию
+                  используется адрес самого приложения.</div>
+              </div>
+              <div style="display:flex; gap:8px; margin:12px 0; flex-wrap:wrap;">
+                <button type="button" class="btn btn-sm btn-primary" onclick="forceCreateBot()">Создать бота
+                  сейчас</button>
+                <button type="button" class="btn btn-sm" onclick="testBotSend()">Тестовое сообщение себе</button>
+              </div>
               <div class="form-group"><label>ID группового чата бота (не обяз.)</label><input type="text"
                   id="set-chatid" placeholder="chat60875">
                 <div style="font-size:11px; color:#64748b; margin-top:4px;">Если задан — бот использует этот чат. Иначе
@@ -376,7 +391,7 @@
               <div class="form-group"><label>Код доп. поля статуса отсутствия (не обяз.)</label><input type="text"
                   id="set-absence-field" placeholder="оставьте пустым для авто-детекта UF_ABSENCE">
                 <div style="font-size:11px; color:#64748b; margin-top:4px;">По умолчанию отсутствие определяется из
-                  системного поля профиля UF_ABSENCE (пары дат). Доп. поле — опционально.</div>
+                  системного поля профиля UF_ABSENCE (пары дат).</div>
               </div>
               <div class="form-group"><label>Значения доп. поля, означающие отсутствие</label><input type="text"
                   id="set-absence-values" placeholder="отпуск,больничный,командировка">

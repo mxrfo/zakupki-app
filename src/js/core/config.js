@@ -45,6 +45,8 @@ let settings = {
   clientId: '',
   clientSecret: '',
   chatId: '',
+  botId: '',
+  botHandler: '',
   absenceField: '',
   absenceValues: 'отпуск,больничный,командировка',
   deptHeads: {},

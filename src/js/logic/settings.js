@@ -9,6 +9,8 @@ function openAdminPanel() {
     document.getElementById('set-clientid').value = settings.clientId || '';
     document.getElementById('set-clientsecret').value = settings.clientSecret || '';
     document.getElementById('set-chatid').value = settings.chatId || '';
+    document.getElementById('set-botid').value = settings.botId || '';
+    document.getElementById('set-bothandler').value = settings.botHandler || '';
     document.getElementById('set-absence-field').value = settings.absenceField || '';
     document.getElementById('set-absence-values').value = settings.absenceValues || 'отпуск,больничный,командировка';
     document.getElementById('set-deadline-red').value = settings.deadlineRedDays;
@@ -161,6 +163,8 @@ function saveSettings() {
   settings.clientId = document.getElementById('set-clientid').value.trim();
   settings.clientSecret = document.getElementById('set-clientsecret').value.trim();
   settings.chatId = document.getElementById('set-chatid').value.trim();
+  settings.botId = document.getElementById('set-botid').value.trim();
+  settings.botHandler = document.getElementById('set-bothandler').value.trim();
   settings.absenceField = document.getElementById('set-absence-field').value.trim();
   settings.absenceValues = document.getElementById('set-absence-values').value.trim();
   settings.deadlineRedDays = parseInt(document.getElementById('set-deadline-red').value) || 3;
@@ -179,4 +183,14 @@ function saveSettings() {
     if (res.error()) { showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); }
     else { showToast('Настройки сохранены'); setTimeout(() => location.reload(), 1000); }
   });
+}
+
+// ✅ Тестовая отправка себе в чат
+function testBotSend() {
+  const uid = parseInt(currentUser.ID);
+  logAction('Тестовая отправка ботом пользователю ' + uid + '...', 'info');
+  notifyUserViaBot(uid, 'Тестовое сообщение', 'Проверка работы чат-бота приложения «Закупки». Если вы видите это сообщение — бот работает.', [{ text: '📋 Открыть приложение', url: buildAppLink('view', 0, 'my_requests') }], function (ok) {
+    if (ok) showToast('Тестовое сообщение отправлено', 'success');
+    else showToast('Не удалось отправить — см. логи', 'error');
+  }, 'test_' + uid + '_' + Date.now());
 }
