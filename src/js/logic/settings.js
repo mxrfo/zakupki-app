@@ -1,4 +1,14 @@
-// js/settings.js — Панель настроек
+// js/settings.js — Панель настроек (вкладки)
+
+var adminActiveTab = 'main';
+
+function switchAdminTab(tab) {
+  adminActiveTab = tab;
+  document.querySelectorAll('.admin-tab').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
+  document.querySelectorAll('.admin-panel').forEach(function (p) { p.style.display = (p.getAttribute('data-panel') === tab) ? 'block' : 'none'; });
+  if (tab === 'bot') renderBotStatus();
+  if (tab === 'absence') renderUnavailableUsers();
+}
 
 function openAdminPanel() {
   if (!document.getElementById('modal-settings')) return;
@@ -20,27 +30,45 @@ function openAdminPanel() {
     renderMappingSettings();
     renderFieldsStatus();
     renderUnavailableUsers();
+    renderBotStatus();
+    switchAdminTab('main');
     document.getElementById('modal-settings').style.display = 'flex';
   } catch (e) { console.error('Ошибка открытия настроек:', e); showToast('Ошибка: ' + e.message, 'error'); }
 }
 
-// ✅ Полностью сбрасывает чат бота: localStorage + settings.chatId + app.option, затем перезагрузка.
+function renderBotStatus() {
+  const box = document.getElementById('bot-status-box');
+  if (!box) return;
+  const botId = (settings.botId || localStorage.getItem('b24_bot_id') || '—');
+  const chatId = (settings.chatId || localStorage.getItem('b24_group_chat_id') || '—');
+  const res = lastBotStatus.result || 'нет данных';
+  const ts = lastBotStatus.ts ? new Date(lastBotStatus.ts).toLocaleTimeString('ru-RU') : '—';
+  const ok = /ok/.test(res);
+  box.innerHTML = `
+    <div class="bot-stat"><span class="bot-stat-label">ID бота</span><span class="bot-stat-value">${botId}</span></div>
+    <div class="bot-stat"><span class="bot-stat-label">ID группового чата</span><span class="bot-stat-value">${chatId}</span></div>
+    <div class="bot-stat"><span class="bot-stat-label">Последняя доставка</span><span class="bot-stat-value" style="color:${ok ? '#10b981' : '#ef4444'}">${res} @ ${ts}</span></div>
+    <div class="bot-stat"><span class="bot-stat-label">Handler</span><span class="bot-stat-value" style="word-break:break-all;">${getBotHandlerUrl() || '—'}</span></div>
+  `;
+}
+
 function resetBotChat() {
   if (!confirm('Сбросить групповой чат бота? Приложение создаст новый рабочий чат при следующем уведомлении.')) return;
   localStorage.removeItem('b24_group_chat_id');
   Object.keys(localStorage).filter(function (k) { return k.indexOf('b24_bot_chat_') === 0 || k.indexOf('b24_dk_') === 0; }).forEach(function (k) { localStorage.removeItem(k); });
   settings.chatId = '';
   saveSettingsToBoth();
+  document.getElementById('set-chatid').value = '';
   logAction('Чат бота сброшен (localStorage + app.option). Перезагрузка...', 'info');
   showToast('Чат сброшен, перезагрузка...', 'success');
   setTimeout(function () { location.reload(); }, 800);
 }
 
-// ✅ Тестовая отправка себе
 function testBotSend() {
   const uid = parseInt(currentUser.ID);
   logAction('Тестовая отправка ботом пользователю ' + uid + '...', 'info');
   notifyUserViaBot(uid, 'Тестовое сообщение', 'Проверка работы чат-бота приложения «Закупки». Если вы видите это сообщение — бот работает.', [{ text: '📋 Открыть приложение', url: buildAppLink('view', 0, 'my_requests') }], function (ok) {
+    renderBotStatus();
     if (ok) showToast('Тестовое сообщение отправлено', 'success');
     else showToast('Не удалось отправить — см. логи', 'error');
   }, 'test_' + uid + '_' + Date.now());
@@ -50,11 +78,11 @@ function renderFieldsStatus() {
   const container = document.getElementById('fields-status-container');
   if (!container) return;
   container.innerHTML = '';
-  const required = ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory', 'combinedDir', 'postponeDate', 'detailSupplier', 'section', 'direction'];
+  const required = ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory', 'combinedDir', 'postponeDate', 'detailSupplier', 'section', 'direction', 'creator', 'comment', 'fileInvoice', 'deadlineZakup', 'deadlinePay'];
   required.forEach(key => {
     const code = settings.mapping[key];
     const exists = code && fieldDefs[code];
-    container.innerHTML += `<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border-color);"><span style="font-size:13px;">${key} <code style="font-size:11px; color:#64748b;">${code || '—'}</code></span><span style="color:${exists ? '#10b981' : '#ef4444'}; font-weight:600;">${exists ? '✓' : '✗'}</span></div>`;
+    container.innerHTML += `<div class="field-status-row"><span class="fs-name">${key} <code>${code || '—'}</code></span><span class="fs-badge ${exists ? 'ok' : 'bad'}">${exists ? '✓' : '✗'}</span></div>`;
   });
 }
 
@@ -113,13 +141,13 @@ function renderSettingsTable() {
     const shortName = settings.deptShortNames[d.ID] || '';
     const autoHeadId = d.UF_HEAD;
     const autoHeadName = autoHeadId ? (userNames[autoHeadId] || 'Сотрудник') : null;
-    const autoInfo = autoHeadName ? `<span style="font-size:11px; color:#64748b;">Б24: ${autoHeadName}</span>` : '';
+    const autoInfo = autoHeadName ? `<span class="dept-auto">Б24: ${autoHeadName}</span>` : '';
     let userOptions = '<option value="">-- Не выбран --</option>';
     allUsers.forEach(u => { userOptions += `<option value="${u.ID}" ${manualHead == u.ID ? 'selected' : ''}>${u.LAST_NAME} ${u.NAME}</option>`; });
     let userOptionsMgr = '<option value="">-- Не выбран --</option>';
     allUsers.forEach(u => { userOptionsMgr += `<option value="${u.ID}" ${manualMgr == u.ID ? 'selected' : ''}>${u.LAST_NAME} ${u.NAME}</option>`; });
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td style="font-weight:600;">${d.NAME} ${autoInfo}</td><td><input type="text" class="short-input" data-dept="${d.ID}" value="${shortName}" style="width:100px;"></td><td style="text-align:center;"><input type="checkbox" class="visible-check" data-dept="${d.ID}" ${isVisible}></td><td><select class="head-select" data-dept="${d.ID}">${userOptions}</select></td><td><select class="mgr-select" data-dept="${d.ID}">${userOptionsMgr}</select></td><td style="text-align:center;"><input type="checkbox" class="econ-check" data-dept="${d.ID}" ${isEcon}></td>`;
+    tr.innerHTML = `<td class="dept-name">${d.NAME} ${autoInfo}</td><td><input type="text" class="short-input" data-dept="${d.ID}" value="${shortName}"></td><td class="tc"><input type="checkbox" class="visible-check" data-dept="${d.ID}" ${isVisible}></td><td><select class="head-select" data-dept="${d.ID}">${userOptions}</select></td><td><select class="mgr-select" data-dept="${d.ID}">${userOptionsMgr}</select></td><td class="tc"><input type="checkbox" class="econ-check" data-dept="${d.ID}" ${isEcon}></td>`;
     tbody.appendChild(tr);
   });
 }
@@ -130,13 +158,13 @@ function renderListDependencies() {
   container.innerHTML = '';
   const secDef = fieldDefs[actualFields.section];
   const dirDef = fieldDefs[actualFields.direction];
-  if (!secDef || !secDef.items || !dirDef || !dirDef.items) { container.innerHTML = '<p style="color:var(--danger)">Не найдены поля "Раздел" или "Направление"</p>'; return; }
+  if (!secDef || !secDef.items || !dirDef || !dirDef.items) { container.innerHTML = '<p class="empty-note">Не найдены поля "Раздел" или "Направление"</p>'; return; }
   secDef.items.forEach(sec => {
     const secId = String(sec.ID);
     const checkedDirs = settings.listDependencies[secId] || [];
     let optionsHtml = '';
-    dirDef.items.forEach(dir => { const isChecked = checkedDirs.includes(String(dir.ID)) ? 'checked' : ''; optionsHtml += `<label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="dir-dep-check" data-sec="${secId}" value="${dir.ID}" ${isChecked}> ${dir.VALUE}</label>`; });
-    container.innerHTML += `<div style="border:1px solid var(--border-color); border-radius:6px; padding:12px; margin-bottom:12px; background:#f8fafc;"><div style="font-weight:700; color:var(--brand-blue); margin-bottom:8px;">Раздел: ${sec.VALUE}</div><div style="display:flex; flex-wrap:wrap; gap:12px;">${optionsHtml}</div></div>`;
+    dirDef.items.forEach(dir => { const isChecked = checkedDirs.includes(String(dir.ID)) ? 'checked' : ''; optionsHtml += `<label class="dep-chip"><input type="checkbox" class="dir-dep-check" data-sec="${secId}" value="${dir.ID}" ${isChecked}> ${dir.VALUE}</label>`; });
+    container.innerHTML += `<div class="dep-block"><div class="dep-title">Раздел: ${sec.VALUE}</div><div class="dep-list">${optionsHtml}</div></div>`;
   });
 }
 
@@ -144,13 +172,15 @@ function renderUnavailableUsers() {
   const container = document.getElementById('unavailable-users-container');
   if (!container) return;
   container.innerHTML = '';
-  if (!allUsers || !allUsers.length) { container.innerHTML = '<p>Список не загружен</p>'; return; }
+  const meta = document.getElementById('absence-meta');
+  if (meta) meta.innerText = 'Проверено: ' + (localStorage.getItem('b24_absence_check_date') || '—') + ' · сейчас отсутствуют: ' + ((settings.unavailableUsers || []).length);
+  if (!allUsers || !allUsers.length) { container.innerHTML = '<p class="empty-note">Список не загружен</p>'; return; }
   const list = (settings.unavailableUsers || []).map(String);
   allUsers.forEach(u => {
     if (String(u.ACTIVE) === 'N') return;
     const checked = list.includes(String(u.ID)) ? 'checked' : '';
     const deptName = userDepts[u.ID] || '';
-    container.innerHTML += `<label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0;"><input type="checkbox" class="unavail-check" data-uid="${u.ID}" ${checked}> ${u.LAST_NAME} ${u.NAME} <span style="color:#94a3b8; font-size:11px;">${deptName}</span></label>`;
+    container.innerHTML += `<label class="user-row"><input type="checkbox" class="unavail-check" data-uid="${u.ID}" ${checked}> <span class="ur-name">${u.LAST_NAME} ${u.NAME}</span> <span class="ur-dept">${deptName}</span></label>`;
   });
 }
 
@@ -163,7 +193,7 @@ function renderMappingSettings() {
     { key: 'deadlineZakup', label: 'Крайний срок закупки' }, { key: 'deadlinePay', label: 'Крайний срок оплаты' }, { key: 'section', label: 'Раздел' }, { key: 'direction', label: 'Направление' },
     { key: 'combinedDir', label: 'Раздел+Направление' }, { key: 'fileInvoice', label: 'Копия счета' }, { key: 'comment', label: 'Комментарий' }, { key: 'postponeDate', label: 'Дата отложения' },
     { key: 'detailName', label: 'Детализация: Наименование' }, { key: 'detailPurpose', label: 'Детализация: Цель' }, { key: 'detailSupplier', label: 'Детализация: Поставщик' }, { key: 'detailPrice', label: 'Детализация: Цена' }, { key: 'detailQty', label: 'Детализация: Количество' }, { key: 'detailLink', label: 'Детализация: Ссылка' },
-    { key: 'manager', label: 'Менеджер отдела' }, { key: 'deptHead', label: 'Руководитель отдела' }, { key: 'approver', label: 'Согласующий' },
+    { key: 'manager', label: 'Менеджер отдела' }, { key: 'deptHead', label: 'Руководитель отдела' }, { key: 'approver', label: 'Согласующий' }, { key: 'creator', label: 'Кто создал запрос' },
     { key: 'taskVyborSotr', label: '[Тех] ID задачи выбора сотрудника' }, { key: 'taskSbor', label: '[Тех] ID задачи сбора' }, { key: 'taskZagruz', label: '[Тех] ID задачи загрузки' }, { key: 'delegateHistory', label: '[Тех] История делегирований' }
   ];
   fieldsToMap.forEach(f => {
@@ -174,7 +204,7 @@ function renderMappingSettings() {
       options += `<option value="${code}" ${isSel}>${fieldDefs[code].title} (${code})</option>`;
     });
     const exists = settings.mapping[f.key] && fieldDefs[settings.mapping[f.key]];
-    container.innerHTML += `<div style="margin-bottom:12px;"><label style="font-size:13px; font-weight:600;">${f.label} ${exists ? '<span style="color:#10b981;">✓</span>' : '<span style="color:#ef4444;">✗</span>'}</label><select class="map-select" data-key="${f.key}" style="width:100%; margin-top:4px;">${options}</select></div>`;
+    container.innerHTML += `<div class="map-item"><label>${f.label} <span class="${exists ? 'ok' : 'bad'}">${exists ? '✓' : '✗'}</span></label><select class="map-select" data-key="${f.key}">${options}</select></div>`;
   });
 }
 
