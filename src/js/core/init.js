@@ -59,7 +59,6 @@ function tryRedirectToPortal() {
 
 // ✅ Надёжное получение client_id из всех возможных источников
 function getClientId() {
-  // 1. Из BX24.getAuth()
   try {
     const auth = BX24.getAuth();
     if (auth) {
@@ -67,15 +66,11 @@ function getClientId() {
       if (auth.CLIENT_ID) return auth.CLIENT_ID;
     }
   } catch (e) {}
-
-  // 2. Из URL-параметров (иногда портал передаёт client_id при открытии через портал)
   try {
     const params = new URLSearchParams(window.location.search);
     const clientId = params.get('client_id') || params.get('CLIENT_ID');
     if (clientId) return decodeURIComponent(clientId);
   } catch (e) {}
-
-  // 3. Из placement.info().options
   try {
     if (typeof BX24 !== 'undefined' && BX24.placement && typeof BX24.placement.info === 'function') {
       const info = BX24.placement.info();
@@ -84,49 +79,71 @@ function getClientId() {
       if (o.CLIENT_ID) return o.CLIENT_ID;
     }
   } catch (e) {}
-
-  // 4. Из настроек (сохранённый ранее, в т.ч. вписанный вручную)
   return (settings.clientId || '').trim();
 }
 
-// ✅ Принудительная перерегистрация placement: unbind старого handler + bind нового.
-//    НЕ требует client_id — handler строится из location.href. Вызывается всегда для админа,
-//    чтобы /marketplace/view/{client_id}/ резолвился в приложение.
+// ✅ Текущий путь обработчика = URL iframe без query/hash (app_local/{хеш}/index.html)
+function getCurrentHandlerUrl() {
+  return window.location.href.split('?')[0].split('#')[0];
+}
+
+// ✅ Перерегистрация placement: удаляем СТАРЫЙ handler (из lastHandlerUrl) и ставим НОВЫЙ.
+//    Вызывается ВСЕГДА для админа (не требует client_id).
 function ensureAppPlacement() {
-  const handlerUrl = window.location.href.split('?')[0].split('#')[0];
+  const current = getCurrentHandlerUrl();
+  const saved = (settings.lastHandlerUrl || '').trim();
 
-  BX24.callMethod('placement.unbind', {
-    PLACEMENT: 'REST_APP_URI',
-    HANDLER: handlerUrl
-  }, function (unbindRes) {
-    if (unbindRes.error()) {
-      const errStr = getApiErrorMessage(unbindRes);
-      if (!/not found|not binded/i.test(errStr)) {
-        logAction('placement.unbind: ' + errStr, 'info');
-      }
-    } else {
-      logAction('placement.unbind: старый handler удалён', 'success');
-    }
+  logAction('Текущий путь обработчика (из iframe): ' + current, 'info');
 
+  function doBind() {
     BX24.callMethod('placement.bind', {
       PLACEMENT: 'REST_APP_URI',
-      HANDLER: handlerUrl,
+      HANDLER: current,
       TITLE: 'Закупки'
     }, function (bindRes) {
       if (bindRes.error()) {
         const errStr = getApiErrorMessage(bindRes);
         if (/already|binded/i.test(errStr)) {
-          logAction('placement.bind: уже зарегистрирован (handler обновлён)', 'info');
+          logAction('placement.bind: handler уже привязан (' + current + ')', 'info');
         } else if (/UNKNOWN/i.test(errStr)) {
-          logAction('placement.bind: UNKNOWN — право "placement" не активно в токене. Пересохраните интеграцию (снять/поставить галку placement → Сохранить) и перезапустите приложение из меню портала.', 'error');
+          logAction('placement.bind: UNKNOWN — право "placement" не активно в токене. Снимите и заново поставьте галку placement в Интеграциях → Сохранить → переоткройте приложение из меню портала.', 'error');
         } else {
           logAction('placement.bind: ' + errStr, 'error');
         }
       } else {
-        logAction('placement.bind: виджет REST_APP_URI зарегистрирован: ' + handlerUrl, 'success');
+        logAction('placement.bind: виджет REST_APP_URI зарегистрирован на: ' + current, 'success');
       }
+      // фиксируем новый handler как сохранённый
+      settings.lastHandlerUrl = current;
+      saveSettingsToBoth();
     });
-  });
+  }
+
+  if (saved && saved !== current) {
+    logAction('Обнаружен старый handler: ' + saved + ' → удаляю привязку', 'info');
+    BX24.callMethod('placement.unbind', {
+      PLACEMENT: 'REST_APP_URI',
+      HANDLER: saved
+    }, function (unbindRes) {
+      if (unbindRes.error()) {
+        const errStr = getApiErrorMessage(unbindRes);
+        if (/not found|not binded|UNKNOWN/i.test(errStr)) {
+          logAction('placement.unbind(' + saved + '): старый handler уже не привязан — ок', 'info');
+        } else {
+          logAction('placement.unbind: ' + errStr, 'error');
+        }
+      } else {
+        logAction('placement.unbind: старый handler удалён', 'success');
+      }
+      doBind();
+    });
+  } else if (saved === current) {
+    logAction('Handler не изменился (' + current + ') — перебинд для надёжности', 'info');
+    doBind();
+  } else {
+    logAction('Первый запуск handler — привязываю: ' + current, 'info');
+    doBind();
+  }
 }
 
 // ✅ Авто-маппинг полей: если поле не выбрано, ищем по названию в fieldDefs
@@ -234,8 +251,7 @@ function syncClientIdAndBuild() {
     saveSettingsToBoth();
   } else if (!liveId) {
     logAction('⚠ client_id недоступен из iframe (статичное приложение не отдаёт его в SDK/URL). ' +
-      'Впишите его вручную: ⚙ Настройки → поле "Client ID приложения" → значение из карточки интеграции портала ' +
-      '(Разработчикам → Интеграции → Локальные приложения → ваше → Client ID) → Сохранить. ' +
+      'Впишите вручную: ⚙ Настройки → "Client ID приложения" → значение из карточки интеграции портала → Сохранить. ' +
       'Без него кнопки бота будут вести на карточку CRM, а не на приложение.', 'error');
   }
 
@@ -340,8 +356,8 @@ function init() {
 
         syncClientIdAndBuild();
 
-        // ✅ placement.bind ВСЕГДА для админа (не требует client_id) — регистрирует handler,
-        //    чтобы /marketplace/view/{client_id}/ открывал приложение, а не /online/ или 404.
+        // ✅ placement.bind ВСЕГДА для админа (не требует client_id).
+        //    Удаляет старый app_local/{хеш} и ставит текущий.
         try {
           if (actualRoles.isAdmin) ensureAppPlacement();
         } catch (e) {}
