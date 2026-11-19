@@ -176,7 +176,7 @@ function createGroupChat(botId, seedUserId, cb) {
     const chatData = d.chat || d;
     const chatId = chatData.dialogId || chatData.id || d.dialogId || d.CHAT_ID;
     if (!chatId) { logAction('Не удалось извлечь ID чата: ' + JSON.stringify(d), 'error'); return cb(null); }
-    localStorage.setItem('b24_group_chat_id', chatId); // синхронно — чтобы параллельные запросы его увидели
+    localStorage.setItem('b24_group_chat_id', chatId);
     settings.chatId = chatId;
     saveSettingsToBoth();
     logAction('Групповой чат создан, ID: ' + chatId, 'success');
@@ -198,6 +198,9 @@ function getGroupChatId(botId, seedUserId, cb) {
   });
 }
 
+// ✅ ИСПРАВЛЕНО: НЕ пересоздаём чат при ошибке добавления.
+// imbot.v2.Chat.user.add часто возвращает UNKNOWN/ALREADY_EXISTS, если пользователь уже в чате — это НЕ ошибка.
+// Пересоздание раньше плодило пустые чаты. Теперь просто логируем и продолжаем.
 function addUserToGroupChat(botId, chatId, userId, cb) {
   cb = cb || function () {};
   if (!chatId || !userId) return cb();
@@ -208,18 +211,10 @@ function addUserToGroupChat(botId, chatId, userId, cb) {
   }, function (res) {
     if (res.error()) {
       const errStr = describeError(res);
-      logAction('Добавление пользователя ' + userId + ' в чат: ' + errStr, 'info');
-      if (/NOT_FOUND|PARAM|ACCESS|404|UNKNOWN/i.test(errStr)) {
-        logAction('Пробую пересоздать чат с пользователем внутри...', 'info');
-        localStorage.removeItem('b24_group_chat_id');
-        settings.chatId = '';
-        createGroupChat(botId, userId, function (newId) {
-          if (newId) { settings.chatId = newId; saveSettingsToBoth(); logAction('Чат пересоздан, ID: ' + newId, 'success'); }
-          cb();
-        });
-        return;
-      }
-    } else logAction('Пользователь ' + userId + ' добавлен в чат', 'success');
+      logAction('Добавление пользователя ' + userId + ' в чат ' + chatId + ': ' + errStr + ' (возможно уже участник — продолжаем без пересоздания)', 'info');
+    } else {
+      logAction('Пользователь ' + userId + ' добавлен в чат ' + chatId, 'success');
+    }
     cb();
   });
 }
@@ -236,7 +231,7 @@ function botSendToGroup(botId, chatId, title, message, links, cb) {
     botId: botId, dialogId: chatId,
     fields: { message: '[B]' + title + '[/B]\n' + message, keyboard: buildKeyboard(links) }
   }, (res) => {
-    if (res.error()) { logAction('Ошибка отправки в чат: ' + describeError(res), 'error'); if (cb) cb(false); return; }
+    if (res.error()) { logAction('Ошибка отправки в чат ' + chatId + ': ' + describeError(res), 'error'); if (cb) cb(false); return; }
     logAction('Сообщение отправлено в чат ' + chatId, 'success');
     if (cb) cb(true);
   });
@@ -277,8 +272,18 @@ function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
       if (!chatId) { logAction('Нет группового чата, пробую личный чат...', 'info'); sendToPersonalChat(botId, userId, title, message, links, cb); return; }
       addUserToGroupChat(botId, chatId, userId, function () {
         botSendToGroup(botId, chatId, title, message, links, function (ok) {
-          if (!ok) { logAction('Fallback: личный чат', 'info'); sendToPersonalChat(botId, userId, title, message, links, cb); }
-          else if (cb) cb(true);
+          if (!ok) {
+            // ✅ Fallback в личный чат делаем ТОЛЬКО если групповой чат НЕ задан вручную.
+            // Если задан вручную и отправка в него упала — не плодим личные чаты, а чётко сигналим.
+            const manualChat = (settings.chatId || '').trim();
+            if (manualChat) {
+              logAction('⚠ Не удалось отправить в настроенный чат ' + manualChat + '. Проверьте, что бот состоит в этом чате. Если не уверены — очистите поле «ID группового чата бота» в настройках и сохраните: приложение создаст рабочий чат само.', 'error');
+              if (cb) cb(false);
+            } else {
+              logAction('Fallback: личный чат', 'info');
+              sendToPersonalChat(botId, userId, title, message, links, cb);
+            }
+          } else if (cb) cb(true);
         });
       });
     });
