@@ -5,7 +5,6 @@ const BOT_CODE = 'purchase_app_bot';
 const BOT_NAME = 'Альтернатива · Закупки';
 const GROUP_CHAT_TITLE = 'Закупки · Альтернатива';
 
-// Живой статус для админки
 var lastBotStatus = { botId: '', chatId: '', result: '', ts: 0 };
 
 function callIfFn(v) {
@@ -69,10 +68,8 @@ function extractDialogId(d) {
 /* ================= МЬЮТЕКС СОЗДАНИЯ БОТА ================= */
 let botInFlight = false;
 let botQueue = [];
-function drainBotQueue(id) {
-  const q = botQueue.slice(); botQueue = [];
-  q.forEach(function (cb) { cb(id); });
-}
+function drainBotQueue(id) { const q = botQueue.slice(); botQueue = []; q.forEach(function (cb) { cb(id); }); }
+
 function registerBotNew(cb) {
   const handler = getBotHandlerUrl();
   logAction('Регистрация бота (v2)... handler=' + handler, 'info');
@@ -98,11 +95,13 @@ function registerBotNew(cb) {
     if (!botId) { logAction('Не удалось извлечь ID из ответа: ' + JSON.stringify(res.data()), 'error'); return cb(null); }
     localStorage.setItem('b24_bot_id', botId);
     settings.botId = String(botId);
+    lastBotStatus.botId = botId;
     saveSettingsToBoth();
     logAction('Бот зарегистрирован (v2), ID: ' + botId, 'success');
     cb(botId);
   });
 }
+
 function registerBotV1(cb) {
   logAction('Резервная регистрация (v1)...', 'info');
   BX24.callMethod('imbot.register', {
@@ -113,11 +112,13 @@ function registerBotV1(cb) {
     const botIdV1 = resV1.data().user_id;
     localStorage.setItem('b24_bot_id', botIdV1);
     settings.botId = String(botIdV1);
+    lastBotStatus.botId = botIdV1;
     saveSettingsToBoth();
     logAction('Бот зарегистрирован (v1), ID: ' + botIdV1, 'success');
     cb(botIdV1);
   });
 }
+
 function findBotViaList(done) {
   BX24.callMethod('imbot.v2.Bot.list', { fields: {} }, function (res) {
     if (res.error()) { logAction('imbot.v2.Bot.list: ' + describeError(res), 'info'); return done(null); }
@@ -132,11 +133,12 @@ function findBotViaList(done) {
     done(null);
   });
 }
+
 function getBotId(cb) {
   const manual = (settings.botId || '').trim();
-  if (manual) { const id = parseInt(manual); if (id) { localStorage.setItem('b24_bot_id', id); logAction('Использую ручной ID бота из настроек: ' + id, 'info'); return cb(id); } }
+  if (manual) { const id = parseInt(manual); if (id) { localStorage.setItem('b24_bot_id', id); lastBotStatus.botId = id; logAction('Использую ручной ID бота из настроек: ' + id, 'info'); return cb(id); } }
   const cachedBotId = localStorage.getItem('b24_bot_id');
-  if (cachedBotId) return cb(parseInt(cachedBotId));
+  if (cachedBotId) { lastBotStatus.botId = parseInt(cachedBotId); return cb(parseInt(cachedBotId)); }
 
   if (botInFlight) { logAction('Бот уже создаётся — в очередь', 'info'); botQueue.push(cb); return; }
   botInFlight = true;
@@ -145,15 +147,12 @@ function getBotId(cb) {
     if (id) {
       localStorage.setItem('b24_bot_id', id);
       settings.botId = String(id);
+      lastBotStatus.botId = id;
       saveSettingsToBoth();
       logAction('Найден бот через imbot.v2.Bot.list, ID: ' + id, 'success');
       botInFlight = false; cb(id); drainBotQueue(id); return;
     }
-    registerBotNew(function (newId) {
-      botInFlight = false;
-      cb(newId);
-      drainBotQueue(newId);
-    });
+    registerBotNew(function (newId) { botInFlight = false; cb(newId); drainBotQueue(newId); });
   });
 }
 
@@ -173,35 +172,49 @@ let chatInFlight = false;
 let chatQueue = [];
 function drainChatQueue(id) { const q = chatQueue.slice(); chatQueue = []; q.forEach(function (cb) { cb(id); }); }
 
-// ✅ КРИТИЧНО: чат создаётся ПУСТЫМ (userIds: []). Бот становится владельцем диалога,
-// и только тогда imbot.v2.Chat.Message.send имеет право писать в него.
-// Пользователь добавляется отдельно через addUserToGroupChat (именно так работало в первой версии).
-function createGroupChat(botId, cb) {
-  logAction('Создание группового чата (пустой, userIds=[])...', 'info');
-  BX24.callMethod('imbot.v2.Chat.add', {
-    botId: botId,
-    fields: { title: GROUP_CHAT_TITLE, userIds: [] }
-  }, (res) => {
-    if (res.error()) { logAction('Ошибка imbot.v2.Chat.add: ' + describeError(res), 'error'); return cb(null); }
-    const chatId = extractDialogId(res.data());
-    if (!chatId) { logAction('Не удалось извлечь ID чата: ' + JSON.stringify(res.data()), 'error'); return cb(null); }
-    localStorage.setItem('b24_group_chat_id', chatId);
-    settings.chatId = chatId;
-    saveSettingsToBoth();
-    lastBotStatus.chatId = chatId;
-    logAction('Групповой чат создан (ботом), ID: ' + chatId, 'success');
-    cb(chatId);
-  });
+// ✅ Чат создаётся СРАЗУ с получателем внутри (userIds:[seedUserId]).
+// Пустой чат портал сейчас отбивает UNKNOWN'ом. Если userIds не прокатил —
+// пробуем users:[seed], затем пустой чат.
+function createGroupChat(botId, seedUserId, cb) {
+  const uid = parseInt(seedUserId) || 0;
+  const variants = [];
+  if (uid) {
+    variants.push({ title: GROUP_CHAT_TITLE, userIds: [uid] });
+    variants.push({ title: GROUP_CHAT_TITLE, users: [uid] });
+  }
+  variants.push({ title: GROUP_CHAT_TITLE, userIds: [] });
+
+  let idx = 0;
+  function tryVariant() {
+    if (idx >= variants.length) { logAction('Все варианты создания чата не сработали', 'error'); return cb(null); }
+    const payload = variants[idx++];
+    logAction('Создание чата (' + JSON.stringify(payload) + ')...', 'info');
+    BX24.callMethod('imbot.v2.Chat.add', { botId: botId, fields: payload }, (res) => {
+      if (res.error()) {
+        logAction('imbot.v2.Chat.add (' + describeError(res) + ') — пробуем следующий вариант', 'info');
+        return tryVariant();
+      }
+      const chatId = extractDialogId(res.data());
+      if (!chatId) { logAction('Не удалось извлечь ID чата: ' + JSON.stringify(res.data()), 'error'); return tryVariant(); }
+      localStorage.setItem('b24_group_chat_id', chatId);
+      settings.chatId = chatId;
+      lastBotStatus.chatId = chatId;
+      saveSettingsToBoth();
+      logAction('Чат создан, ID: ' + chatId, 'success');
+      cb(chatId);
+    });
+  }
+  tryVariant();
 }
 
-function getGroupChatId(botId, cb) {
-  if (settings.chatId) { logAction('Использую чат ID (настроенный/сохранённый): ' + settings.chatId, 'info'); return cb(settings.chatId); }
+function getGroupChatId(botId, seedUserId, cb) {
+  if (settings.chatId) { logAction('Использую чат ID (настроенный/сохранённый): ' + settings.chatId, 'info'); lastBotStatus.chatId = settings.chatId; return cb(settings.chatId); }
   const cached = localStorage.getItem('b24_group_chat_id');
-  if (cached) { logAction('Использую чат ID из localStorage: ' + cached, 'info'); settings.chatId = cached; return cb(cached); }
+  if (cached) { logAction('Использую чат ID из localStorage: ' + cached, 'info'); settings.chatId = cached; lastBotStatus.chatId = cached; return cb(cached); }
 
   if (chatInFlight) { logAction('Чат уже создаётся — в очередь', 'info'); chatQueue.push(cb); return; }
   chatInFlight = true;
-  createGroupChat(botId, function (chatId) {
+  createGroupChat(botId, seedUserId, function (chatId) {
     chatInFlight = false;
     cb(chatId);
     drainChatQueue(chatId);
@@ -244,41 +257,32 @@ function botSendToGroup(botId, chatId, title, message, links, cb) {
   });
 }
 
-// ✅ Личной чат тоже создаётся пустым + user.add, иначе бот не может писать
 function sendToPersonalChat(botId, userId, title, message, links, cb) {
   const key = 'b24_bot_chat_' + userId;
   let dialogId = localStorage.getItem(key);
-  function sendMsg(dId) {
-    botSendToGroup(botId, dId, title, message, links, cb);
-  }
+  function sendMsg(dId) { botSendToGroup(botId, dId, title, message, links, cb); }
   if (dialogId) return sendMsg(dialogId);
-  BX24.callMethod('imbot.v2.Chat.add', {
-    botId: botId, fields: { title: 'Закупки · ' + (userNames[userId] || userId), userIds: [] }
-  }, (res) => {
-    if (res.error()) { logAction('Ошибка создания личного чата: ' + describeError(res), 'error'); if (cb) cb(false); return; }
-    const dId = extractDialogId(res.data());
-    if (!dId) { logAction('Не удалось извлечь ID личного чата', 'error'); if (cb) cb(false); return; }
+  createGroupChat(botId, userId, function (dId) {
+    if (!dId) { logAction('Не удалось создать персональный чат', 'error'); if (cb) cb(false); return; }
     localStorage.setItem(key, dId);
-    addUserToGroupChat(botId, dId, userId, function () { sendMsg(dId); });
+    sendMsg(dId);
   });
 }
 
-// ✅ Сбрасывает сохранённый/ручной chatId (localStorage + settings + app.option)
 function resetAutoChat() {
   localStorage.removeItem('b24_group_chat_id');
   settings.chatId = '';
   saveSettingsToBoth();
 }
 
-// ✅ Основной поток. Чат создаётся пустым + user.add → send работает.
-// Если сохранённый chatId битый (чужой диалог) — один раз пересоздаём пустой чат и повторяем.
-// Фолбэк в личный чат УБРАН, чтобы не плодить пустые диалоги.
+// ✅ Основной поток: чат создаётся сразу с получателем → пользователь участник → send работает.
+// Если сохранённый chatId битый — один раз пересоздаём чат (с новым получателем) и повторяем.
 function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
   if (dedupePass(fullKey)) { if (cb) cb(true); return; }
   getBotId(function (botId) {
     if (!botId) { logAction('Не удалось получить ID бота — уведомление пропущено', 'error'); lastBotStatus.result = 'no bot'; lastBotStatus.ts = Date.now(); if (cb) cb(false); return; }
-    getGroupChatId(botId, function (chatId) {
+    getGroupChatId(botId, userId, function (chatId) {
       if (!chatId) { logAction('Не удалось получить/создать чат', 'error'); lastBotStatus.result = 'no chat'; lastBotStatus.ts = Date.now(); if (cb) cb(false); return; }
 
       const attempt = function (cid, isRetry) {
@@ -286,9 +290,9 @@ function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
           botSendToGroup(botId, cid, title, message, links, function (ok) {
             if (ok) { if (cb) cb(true); return; }
             if (!isRetry) {
-              logAction('⚠ Чат ' + cid + ' не принимает imbot-сообщения (битый/чужой). Пересоздаю пустой чат ботом...', 'error');
+              logAction('⚠ Чат ' + cid + ' не принимает imbot-сообщения (битый/чужой). Пересоздаю чат с получателем...', 'error');
               resetAutoChat();
-              createGroupChat(botId, function (newId) {
+              createGroupChat(botId, userId, function (newId) {
                 if (!newId) { logAction('Не удалось пересоздать чат', 'error'); lastBotStatus.result = 'chat recreate fail'; lastBotStatus.ts = Date.now(); if (cb) cb(false); return; }
                 logAction('Создан новый чат ' + newId + ', повторяю отправку', 'info');
                 attempt(newId, true);
@@ -307,7 +311,6 @@ function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   });
 }
 
-// ✅ НЕ удаляем b24_bot_id / b24_group_chat_id — они живут на портале и в app.option
 function clearBotCache() {
   Object.keys(localStorage).filter(function (k) { return k.indexOf('b24_bot_chat_') === 0 || k.indexOf('b24_dk_') === 0; }).forEach(function (k) { localStorage.removeItem(k); });
   logAction('Кэш личных чатов и дедупа сброшен (ID бота и группового чата сохранены)', 'info');

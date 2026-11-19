@@ -462,6 +462,10 @@ body {
 .settings-table td { padding: 10px; border-bottom: 1px solid var(--border-color); font-size: 13px; vertical-align: middle; }
 .settings-table select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 13px; }
 .auto-head-info { font-size: 11px; color: #64748b; margin-top: 4px; display: block; }
+.settings-table td.tc { text-align: center; }
+.settings-table td .dept-name { font-weight: 600; }
+.settings-table td .dept-auto { font-size: 11px; color: #64748b; margin-left: 6px; }
+.settings-table td .short-input { width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 13px; }
 
 /* === Формы === */
 .form-group { margin-bottom: 16px; }
@@ -739,9 +743,7 @@ body {
 }
 
 /* ============================================================
-   ✅ ФИКС: кнопка "Сохранить"/"Согласовать" залипала яркой
-   (остаточный :focus/:active glow). Сбрасываем анимацию и тень
-   после клика, оставляя только мягкий hover.
+   Кнопка "Сохранить"/"Согласовать" — без залипания glow
    ============================================================ */
 .btn-primary,
 .btn-primary:focus,
@@ -767,14 +769,118 @@ body {
   animation: none !important;
 }
 
-/* Убираем залипание transform у всех кнопок */
 .btn:active,
 .btn:focus,
 .btn-primary:active {
   transform: none !important;
 }
 
-/* Отключаем любые keyframe-анимации пульсации на кнопках */
 .btn-primary {
   transition: background-color 0.2s ease, box-shadow 0.2s ease !important;
 }
+
+/* ============================================================
+   === Админка: вкладки, статусы, списки ===
+   (эти классы использует settings.js; без них текст слипается)
+   ============================================================ */
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 12px;
+}
+.admin-tab {
+  padding: 8px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.admin-tab:hover { color: var(--brand-blue); background: #f8fafc; }
+.admin-tab.active { color: #fff; background: var(--brand-blue); border-color: var(--brand-blue); }
+.admin-panel { display: none; }
+
+/* Статус чат-бота */
+.bot-status-box { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.bot-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.bot-stat-label { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+.bot-stat-value { font-weight: 700; color: var(--text-main); text-align: right; word-break: break-all; }
+
+/* Статус полей CRM */
+.field-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+}
+.field-status-row:last-child { border-bottom: none; }
+.fs-name { color: var(--text-main); }
+.fs-name code { font-size: 11px; color: var(--text-muted); background: #f1f5f9; padding: 1px 5px; border-radius: 4px; margin-left: 6px; }
+.fs-badge { font-weight: 800; font-size: 14px; min-width: 20px; text-align: center; }
+.fs-badge.ok { color: var(--success); }
+.fs-badge.bad { color: var(--danger); }
+
+/* Связи списков */
+.dep-block {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #f8fafc;
+}
+.dep-title { font-weight: 700; color: var(--brand-blue); margin-bottom: 8px; font-size: 13px; }
+.dep-list { display: flex; flex-wrap: wrap; gap: 10px; }
+.dep-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.dep-chip:hover { border-color: var(--brand-blue); }
+
+/* Недоступные сотрудники */
+.user-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+}
+.user-row:last-child { border-bottom: none; }
+.ur-name { font-weight: 600; color: var(--text-main); }
+.ur-dept { color: #94a3b8; font-size: 11px; margin-left: auto; }
+
+/* Маппинг */
+.map-item { margin-bottom: 12px; }
+.map-item label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155; }
+.map-item label .ok { color: var(--success); font-weight: 800; }
+.map-item label .bad { color: var(--danger); font-weight: 800; }
+.map-item select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+
+.empty-note { color: var(--text-muted); font-style: italic; font-size: 13px; }
