@@ -71,17 +71,14 @@ function getClientId() {
 }
 
 // ✅ Принудительная перерегистрация placement: unbind старого handler + bind нового
-//    Вызывается ПРИ КАЖДОМ запуске, чтобы handler URL всегда был актуальным.
 function ensureAppPlacement() {
   const handlerUrl = window.location.href.split('?')[0].split('#')[0];
   
-  // Сначала пытаемся unbind (на случай если старый handler уже привязан)
   BX24.callMethod('placement.unbind', {
     PLACEMENT: 'REST_APP_URI',
     HANDLER: handlerUrl
   }, function (unbindRes) {
     if (unbindRes.error()) {
-      // unbind мог вернуть ошибку если handler не был привязан — это нормально
       const errStr = getApiErrorMessage(unbindRes);
       if (!/not found|not binded/i.test(errStr)) {
         logAction('placement.unbind: ' + errStr, 'info');
@@ -90,7 +87,6 @@ function ensureAppPlacement() {
       logAction('placement.unbind: старый handler удалён', 'success');
     }
     
-    // Теперь bind нового handler
     BX24.callMethod('placement.bind', {
       PLACEMENT: 'REST_APP_URI',
       HANDLER: handlerUrl,
@@ -101,7 +97,7 @@ function ensureAppPlacement() {
         if (/already|binded/i.test(errStr)) {
           logAction('placement.bind: уже зарегистрирован (handler обновлён)', 'info');
         } else if (/UNKNOWN/i.test(errStr)) {
-          logAction('placement.bind: UNKNOWN — пересохраните интеграцию (снять/поставить галку placement и сохранить)', 'error');
+          logAction('placement.bind: UNKNOWN — пересоздайте приложение с правом placement и загрузите архив заново', 'error');
         } else {
           logAction('placement.bind: ' + errStr, 'error');
         }
@@ -109,6 +105,60 @@ function ensureAppPlacement() {
         logAction('placement.bind: виджет REST_APP_URI зарегистрирован: ' + handlerUrl, 'success');
       }
     });
+  });
+}
+
+// ✅ Загрузка настроек с fallback на localStorage (если app.option пуст после пересоздания приложения)
+function loadSettingsWithFallback() {
+  return new Promise(function (resolve) {
+    BX24.callMethod('app.option.get', {}, function (res) {
+      let loaded = false;
+      if (res && !res.error() && res.data() && res.data().settings) {
+        try {
+          const parsed = JSON.parse(res.data().settings);
+          settings = { ...settings, ...parsed };
+          loaded = true;
+          logAction('Настройки загружены из app.option', 'success');
+        } catch (e) {
+          logAction('Ошибка парсинга настроек из app.option: ' + e.message, 'error');
+        }
+      }
+      
+      // Если app.option пуст (новое приложение) — берём из localStorage
+      if (!loaded) {
+        try {
+          const backup = localStorage.getItem('purchase_settings_backup');
+          if (backup) {
+            const parsed = JSON.parse(backup);
+            settings = { ...settings, ...parsed };
+            logAction('Настройки восстановлены из localStorage (app.option был пуст)', 'info');
+            // Сохраняем обратно в app.option
+            BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function () {});
+          } else {
+            logAction('Настройки не найдены ни в app.option, ни в localStorage — используются значения по умолчанию', 'info');
+          }
+        } catch (e) {
+          logAction('Ошибка чтения backup из localStorage: ' + e.message, 'error');
+        }
+      }
+      
+      resolve();
+    });
+  });
+}
+
+// ✅ Сохранение настроек в оба места: app.option + localStorage backup
+function saveSettingsToBoth() {
+  const json = JSON.stringify(settings);
+  try {
+    localStorage.setItem('purchase_settings_backup', json);
+  } catch (e) {}
+  BX24.callMethod('app.option.set', { options: { settings: json } }, function (res) {
+    if (res && res.error()) {
+      logAction('Ошибка сохранения в app.option: ' + getApiErrorMessage(res), 'error');
+    } else {
+      logAction('Настройки сохранены в app.option + localStorage', 'success');
+    }
   });
 }
 
@@ -121,7 +171,7 @@ function syncClientIdAndBuild() {
     logAction('client_id обновлён: ' + (savedId || '—') + ' → ' + liveId, 'info');
     settings.clientId = liveId;
   } else if (!liveId) {
-    logAction('client_id не удалось получить из getAuth/URL (в iframe это нормально). Использую сохранённый: ' + (savedId || '—'), 'info');
+    logAction('client_id не удалось получить из getAuth/URL. Использую сохранённый: ' + (savedId || '—'), 'info');
   }
 
   const savedBuild = (settings.lastBuildId || '').trim();
@@ -133,12 +183,9 @@ function syncClientIdAndBuild() {
       if (typeof clearBotCache === 'function') clearBotCache();
     } catch (e) {}
     settings.lastBuildId = APP_BUILD_ID;
-    BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function (r) {
-      if (r.error()) logAction('Ошибка сохранения lastBuildId: ' + getApiErrorMessage(r), 'error');
-      else logAction('lastBuildId сохранён: ' + APP_BUILD_ID, 'success');
-    });
+    saveSettingsToBoth();
   } else if (liveId && liveId !== savedId) {
-    BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function () {});
+    saveSettingsToBoth();
   }
 }
 
@@ -172,7 +219,6 @@ function init() {
     setLoadingStep(1, 5);
     const initBatch = {
       user: ['user.current', {}],
-      options: ['app.option.get', {}],
       isAdmin: ['user.admin', {}]
     };
 
@@ -200,161 +246,150 @@ function init() {
         }
       }
 
-      if (res.options && !res.options.error() && res.options.data() && res.options.data().settings) {
-        try {
-          const parsed = JSON.parse(res.options.data().settings);
-          settings = { ...settings, ...parsed };
-          if (!Array.isArray(settings.visibleDepts)) settings.visibleDepts = [];
-          if (!settings.listDependencies) settings.listDependencies = {};
-          if (!settings.mapping) settings.mapping = { ...DEFAULT_MAPPING };
-        } catch (e) {
-          logAction('Ошибка парсинга настроек: ' + e.message, 'error');
-        }
-      }
-
-      // ✅ Синхронизация client_id + детект нового архива (после загрузки настроек)
-      syncClientIdAndBuild();
-
-      let mappingMigrated = false;
-      if (!settings.mapping) {
-        settings.mapping = { ...DEFAULT_MAPPING };
-        mappingMigrated = true;
-      } else {
-        if (settings.mapping.shortDesc === 'ufCrm17_1792761268') { settings.mapping.shortDesc = DEFAULT_MAPPING.shortDesc; mappingMigrated = true; }
-        if (settings.mapping.postponeDate === 'ufCrm17_1793859756') { settings.mapping.postponeDate = DEFAULT_MAPPING.postponeDate; mappingMigrated = true; }
-        if (settings.mapping.detailPrice === 'ufCrm17_price_ed') { settings.mapping.detailPrice = DEFAULT_MAPPING.detailPrice; mappingMigrated = true; }
-        ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory'].forEach(k => {
-          if (!settings.mapping[k]) { settings.mapping[k] = DEFAULT_MAPPING[k]; mappingMigrated = true; }
-        });
-      }
-      if (mappingMigrated) {
-        logAction('Миграция маппинга полей выполнена, сохраняем...', 'info');
-        BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, () => {});
-      }
-
-      isTestMode = localStorage.getItem('purchase_test_mode') === 'true';
-      document.getElementById('test-mode-toggle').checked = isTestMode;
-      currentScenario = localStorage.getItem('purchase_scenario') || 'none';
-
-      ENTITY_TYPE_ID = settings.entityTypeId || 1072;
-      INVOICE_ENTITY_ID = settings.invoiceEntityTypeId || 15;
-      currentCategoryId = settings.categoryId || 65;
-      systemUserId = settings.systemUserId || 175;
-
-      setLoadingStep(2, 5);
-
-      // ✅ Принудительная перерегистрация placement (unbind + bind) при каждом запуске
-      try {
-        if (settings.clientId && actualRoles.isAdmin) ensureAppPlacement();
-      } catch (e) {}
-
-      const CACHE_TTL = 5 * 60 * 1000;
-      const cachedMeta = localStorage.getItem(CACHE_KEY);
-      let useCache = false;
-      if (cachedMeta) {
-        try {
-          const parsed = JSON.parse(cachedMeta);
-          if (parsed.timestamp && (Date.now() - parsed.timestamp) < CACHE_TTL) {
-            useCache = true;
-            fieldDefs = parsed.fieldDefs || {};
-            spStages = parsed.spStages || {};
-            spStagesSorted = parsed.spStagesSorted || [];
-            departments = parsed.departments || [];
-            allUsers = parsed.allUsers || [];
-            userNames = { ...userNames, ...(parsed.userNames || {}) };
-            userDepts = { ...userDepts, ...(parsed.userDepts || {}) };
-            logAction(`Использован свежий кэш метаданных (${Math.round((Date.now() - parsed.timestamp) / 1000)} сек назад)`, 'info');
-          }
-        } catch (e) {
-          console.warn('Ошибка чтения кэша', e);
-        }
-      }
-
-      if (useCache) {
-        applyActualFieldsFromMapping();
-        checkUserRoles();
-        setLoadingStep(5, 5);
-        loadAllData();
-        return;
-      }
-
-      logAction('Загрузка свежих полей и справочников...', 'info');
-      setLoadingStep(3, 5);
-
-      const metaBatch = {
-        uCurrent: ['user.get', { ID: currentUser.ID }],
-        fields: ['crm.item.fields', { entityTypeId: ENTITY_TYPE_ID }],
-        statuses: ['crm.status.list', {}],
-        depts: ['department.get', {}]
-      };
-
-      const userFilter = { active: true };
-      if (settings.visibleDepts && settings.visibleDepts.length > 0) {
-        userFilter.UF_DEPARTMENT = settings.visibleDepts;
-        logAction(`Фильтр пользователей по отделам: ${settings.visibleDepts.join(', ')}`, 'info');
-      }
-      userFilter.SELECT = ['ID', 'NAME', 'LAST_NAME', 'UF_DEPARTMENT'];
-      userFilter.ORDER = { LAST_NAME: 'ASC' };
-      metaBatch.users = ['user.get', userFilter];
-
-      BX24.callBatch(metaBatch, (metaRes) => {
-        setLoadingStep(4, 5);
-
-        if (metaRes.uCurrent && !metaRes.uCurrent.error() && metaRes.uCurrent.data().length > 0) {
-          currentUser.UF_DEPARTMENT = metaRes.uCurrent.data()[0].UF_DEPARTMENT;
-        }
-
-        if (metaRes.fields && !metaRes.fields.error()) {
-          fieldDefs = metaRes.fields.data().fields;
-          applyActualFieldsFromMapping();
-          logAction('Поля успешно обновлены', 'success');
-        }
-
-        if (metaRes.statuses && !metaRes.statuses.error()) {
-          spStages = {};
-          spStagesSorted = [];
-          const prefix = `DT${ENTITY_TYPE_ID}_${currentCategoryId}:`;
-          metaRes.statuses.data().forEach(s => {
-            if (s.STATUS_ID && s.STATUS_ID.startsWith(prefix)) {
-              spStages[s.STATUS_ID] = { name: s.NAME, color: s.COLOR };
-              spStagesSorted.push({ id: s.STATUS_ID, name: s.NAME, sort: parseInt(s.SORT) || 0 });
-            }
+      // ✅ Загрузка настроек с fallback на localStorage
+      loadSettingsWithFallback().then(function () {
+        let mappingMigrated = false;
+        if (!settings.mapping) {
+          settings.mapping = { ...DEFAULT_MAPPING };
+          mappingMigrated = true;
+        } else {
+          if (settings.mapping.shortDesc === 'ufCrm17_1792761268') { settings.mapping.shortDesc = DEFAULT_MAPPING.shortDesc; mappingMigrated = true; }
+          if (settings.mapping.postponeDate === 'ufCrm17_1793859756') { settings.mapping.postponeDate = DEFAULT_MAPPING.postponeDate; mappingMigrated = true; }
+          if (settings.mapping.detailPrice === 'ufCrm17_price_ed') { settings.mapping.detailPrice = DEFAULT_MAPPING.detailPrice; mappingMigrated = true; }
+          ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory'].forEach(k => {
+            if (!settings.mapping[k]) { settings.mapping[k] = DEFAULT_MAPPING[k]; mappingMigrated = true; }
           });
-          spStagesSorted.sort((a, b) => a.sort - b.sort);
+        }
+        if (mappingMigrated) {
+          logAction('Миграция маппинга полей выполнена, сохраняем...', 'info');
+          saveSettingsToBoth();
         }
 
-        if (metaRes.depts && !metaRes.depts.error()) {
-          departments = metaRes.depts.data() || [];
-          departments.sort((a, b) => a.NAME.localeCompare(b.NAME));
+        isTestMode = localStorage.getItem('purchase_test_mode') === 'true';
+        document.getElementById('test-mode-toggle').checked = isTestMode;
+        currentScenario = localStorage.getItem('purchase_scenario') || 'none';
+
+        ENTITY_TYPE_ID = settings.entityTypeId || 1072;
+        INVOICE_ENTITY_ID = settings.invoiceEntityTypeId || 15;
+        currentCategoryId = settings.categoryId || 65;
+        systemUserId = settings.systemUserId || 175;
+
+        setLoadingStep(2, 5);
+
+        // ✅ Синхронизация client_id + детект нового архива
+        syncClientIdAndBuild();
+
+        // ✅ Принудительная перерегистрация placement
+        try {
+          if (settings.clientId && actualRoles.isAdmin) ensureAppPlacement();
+        } catch (e) {}
+
+        const CACHE_TTL = 5 * 60 * 1000;
+        const cachedMeta = localStorage.getItem(CACHE_KEY);
+        let useCache = false;
+        if (cachedMeta) {
+          try {
+            const parsed = JSON.parse(cachedMeta);
+            if (parsed.timestamp && (Date.now() - parsed.timestamp) < CACHE_TTL) {
+              useCache = true;
+              fieldDefs = parsed.fieldDefs || {};
+              spStages = parsed.spStages || {};
+              spStagesSorted = parsed.spStagesSorted || [];
+              departments = parsed.departments || [];
+              allUsers = parsed.allUsers || [];
+              userNames = { ...userNames, ...(parsed.userNames || {}) };
+              userDepts = { ...userDepts, ...(parsed.userDepts || {}) };
+              logAction(`Использован свежий кэш метаданных (${Math.round((Date.now() - parsed.timestamp) / 1000)} сек назад)`, 'info');
+            }
+          } catch (e) {
+            console.warn('Ошибка чтения кэша', e);
+          }
         }
 
-        if (metaRes.users && !metaRes.users.error()) {
-          allUsers = metaRes.users.data() || [];
-          allUsers.forEach(u => {
-            userNames[u.ID] = `${u.NAME} ${u.LAST_NAME}`;
-            if (u.UF_DEPARTMENT && Array.isArray(u.UF_DEPARTMENT) && u.UF_DEPARTMENT.length > 0) {
-              let deptNames = u.UF_DEPARTMENT.map(dId => {
+        if (useCache) {
+          applyActualFieldsFromMapping();
+          checkUserRoles();
+          setLoadingStep(5, 5);
+          loadAllData();
+          return;
+        }
+
+        logAction('Загрузка свежих полей и справочников...', 'info');
+        setLoadingStep(3, 5);
+
+        // ✅ Загружаем ВСЕХ активных пользователей (без фильтра по отделам), но только нужные поля
+        //    Это гарантирует, что руководители других отделов будут в allUsers
+        const metaBatch = {
+          uCurrent: ['user.get', { ID: currentUser.ID }],
+          fields: ['crm.item.fields', { entityTypeId: ENTITY_TYPE_ID }],
+          statuses: ['crm.status.list', {}],
+          depts: ['department.get', {}],
+          users: ['user.get', { 
+            active: true,
+            SELECT: ['ID', 'NAME', 'LAST_NAME', 'UF_DEPARTMENT', 'ACTIVE'],
+            ORDER: { LAST_NAME: 'ASC' }
+          }]
+        };
+
+        BX24.callBatch(metaBatch, (metaRes) => {
+          setLoadingStep(4, 5);
+
+          if (metaRes.uCurrent && !metaRes.uCurrent.error() && metaRes.uCurrent.data().length > 0) {
+            currentUser.UF_DEPARTMENT = metaRes.uCurrent.data()[0].UF_DEPARTMENT;
+          }
+
+          if (metaRes.fields && !metaRes.fields.error()) {
+            fieldDefs = metaRes.fields.data().fields;
+            applyActualFieldsFromMapping();
+            logAction('Поля успешно обновлены', 'success');
+          }
+
+          if (metaRes.statuses && !metaRes.statuses.error()) {
+            spStages = {};
+            spStagesSorted = [];
+            const prefix = `DT${ENTITY_TYPE_ID}_${currentCategoryId}:`;
+            metaRes.statuses.data().forEach(s => {
+              if (s.STATUS_ID && s.STATUS_ID.startsWith(prefix)) {
+                spStages[s.STATUS_ID] = { name: s.NAME, color: s.COLOR };
+                spStagesSorted.push({ id: s.STATUS_ID, name: s.NAME, sort: parseInt(s.SORT) || 0 });
+              }
+            });
+            spStagesSorted.sort((a, b) => a.sort - b.sort);
+          }
+
+          if (metaRes.depts && !metaRes.depts.error()) {
+            departments = metaRes.depts.data() || [];
+            departments.sort((a, b) => a.NAME.localeCompare(b.NAME));
+          }
+
+          if (metaRes.users && !metaRes.users.error()) {
+            allUsers = metaRes.users.data() || [];
+            allUsers.forEach(u => {
+              userNames[u.ID] = `${u.NAME} ${u.LAST_NAME}`;
+              if (u.UF_DEPARTMENT && Array.isArray(u.UF_DEPARTMENT) && u.UF_DEPARTMENT.length > 0) {
+                let deptNames = u.UF_DEPARTMENT.map(dId => {
+                  let dept = departments.find(d => String(d.ID) === String(dId));
+                  return dept ? dept.NAME : '';
+                }).filter(n => n);
+                if (deptNames.length > 0) userDepts[u.ID] = deptNames.join(', ');
+              }
+            });
+            if (!userDepts[currentUser.ID] && currentUser.UF_DEPARTMENT) {
+              let dIds = Array.isArray(currentUser.UF_DEPARTMENT) ? currentUser.UF_DEPARTMENT : [currentUser.UF_DEPARTMENT];
+              let deptNames = dIds.map(dId => {
                 let dept = departments.find(d => String(d.ID) === String(dId));
                 return dept ? dept.NAME : '';
               }).filter(n => n);
-              if (deptNames.length > 0) userDepts[u.ID] = deptNames.join(', ');
+              if (deptNames.length > 0) userDepts[currentUser.ID] = deptNames.join(', ');
             }
-          });
-          if (!userDepts[currentUser.ID] && currentUser.UF_DEPARTMENT) {
-            let dIds = Array.isArray(currentUser.UF_DEPARTMENT) ? currentUser.UF_DEPARTMENT : [currentUser.UF_DEPARTMENT];
-            let deptNames = dIds.map(dId => {
-              let dept = departments.find(d => String(d.ID) === String(dId));
-              return dept ? dept.NAME : '';
-            }).filter(n => n);
-            if (deptNames.length > 0) userDepts[currentUser.ID] = deptNames.join(', ');
+            logAction(`Загружено пользователей: ${allUsers.length} (все активные)`, 'info');
           }
-          logAction(`Загружено пользователей: ${allUsers.length}`, 'info');
-        }
 
-        saveToCacheWithTimestamp();
-        checkUserRoles();
-        setLoadingStep(5, 5);
-        loadAllData();
+          saveToCacheWithTimestamp();
+          checkUserRoles();
+          setLoadingStep(5, 5);
+          loadAllData();
+        });
       });
     });
   });
