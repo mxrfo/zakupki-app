@@ -2,12 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 
-// === НАСТРОЙКИ ===
 const INPUT_HTML = 'src/index.html';
 const OUTPUT_HTML = 'dist/index.html';
 const CSS_FILE = 'src/css/styles.css';
 
-// Генерируем временную метку для имени файла: YYYYMMDD_HHMMSS
 const now = new Date();
 const timestamp = now.getFullYear() +
   String(now.getMonth() + 1).padStart(2, '0') +
@@ -16,11 +14,8 @@ const timestamp = now.getFullYear() +
   String(now.getMinutes()).padStart(2, '0') +
   String(now.getSeconds()).padStart(2, '0');
 
-// Архив сохраняется в папке releases с уникальным именем
 const ZIP_OUTPUT = `dist/releases/app_${timestamp}.zip`;
 
-// ВАЖНО: порядок подключения скриптов!
-// Зависимости: config → state → utils → bot → api → cache → roles → dragdrop → render → modals → forms → actions → settings → init
 const JS_FILES_ORDER = [
   'src/js/core/config.js',
   'src/js/core/state.js',
@@ -38,19 +33,16 @@ const JS_FILES_ORDER = [
   'src/js/core/init.js'
 ];
 
-// ✅ Файл, в котором build.js подставит актуальную метку сборки
 const BUILD_ID_FILE = 'src/js/core/config.js';
 
-// === ФУНКЦИИ ===
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-// ✅ Подставляет метку сборки в строку `let APP_BUILD_ID = '...';`
 function injectBuildId(content, buildId) {
   const re = /let\s+APP_BUILD_ID\s*=\s*'[^']*'\s*;/;
   if (!re.test(content)) {
-    console.warn('⚠️  В ' + BUILD_ID_FILE + ' не найден маркер APP_BUILD_ID — метка не будет подставлена!');
+    console.warn('⚠️  В ' + BUILD_ID_FILE + ' не найден маркер APP_BUILD_ID');
     return content;
   }
   return content.replace(re, "let APP_BUILD_ID = '" + buildId + "';");
@@ -59,21 +51,16 @@ function injectBuildId(content, buildId) {
 function build() {
   console.log('🔨 Начинаю сборку...\n');
 
-  // 1. Читаем CSS
   let css = '';
   if (fs.existsSync(CSS_FILE)) {
     css = fs.readFileSync(CSS_FILE, 'utf8');
     console.log('✅ CSS загружен: ' + CSS_FILE + ' (' + (css.length / 1024).toFixed(1) + ' КБ)');
-  } else {
-    console.warn('⚠️  CSS файл не найден: ' + CSS_FILE);
   }
 
-  // 2. Читаем все JS файлы в правильном порядке
   let js = '';
   JS_FILES_ORDER.forEach(file => {
     if (fs.existsSync(file)) {
       let content = fs.readFileSync(file, 'utf8');
-      // ✅ Для config.js подставляем живую метку сборки = timestamp архива
       if (file === BUILD_ID_FILE) {
         content = injectBuildId(content, timestamp);
         console.log('🏷️  APP_BUILD_ID подставлен: ' + timestamp);
@@ -88,54 +75,32 @@ function build() {
     }
   });
 
-  // 3. Читаем HTML
   if (!fs.existsSync(INPUT_HTML)) {
     console.error('❌ HTML файл не найден: ' + INPUT_HTML);
     process.exit(1);
   }
   let html = fs.readFileSync(INPUT_HTML, 'utf8');
 
-  // 4. Заменяем подключение CSS на inline <style>
-  html = html.replace(
-    /<link\s+[^>]*href=["']css\/styles\.css["'][^>]*\/?>/gi,
-    '<style>\n' + css + '\n</style>'
-  );
-
-  // 5. Удаляем ТОЛЬКО скрипты из папки js/ (наши модули).
-  //    Скрипт BX24 SDK (<script src="//api.bitrix24.com/api/v1/"></script>) СОХРАНЯЕТСЯ.
+  html = html.replace(/<link\s+[^>]*href=["']css\/styles\.css["'][^>]*\/?>/gi, '<style>\n' + css + '\n</style>');
   html = html.replace(/<script\s+src=["']js\/[^"']+["'][^>]*><\/script>/gi, '');
+  html = html.replace('</body>', '<script>\n' + js + '\n</script>\n</body>');
 
-  // 6. Вставляем объединённый JS перед </body>
-  html = html.replace(
-    '</body>',
-    '<script>\n' + js + '\n</script>\n</body>'
-  );
-
-  // 7. Сохраняем результат HTML
   ensureDir('dist');
   fs.writeFileSync(OUTPUT_HTML, html, 'utf8');
 
   const totalSize = (html.length / 1024).toFixed(1);
   console.log('\n🎉 Сборка HTML завершена!');
   console.log('📦 Результат: ' + OUTPUT_HTML + ' (' + totalSize + ' КБ)');
-  console.log('\n📊 Статистика:');
-  console.log('   HTML: ' + (html.length / 1024).toFixed(1) + ' КБ');
-  console.log('   CSS:  ' + (css.length / 1024).toFixed(1) + ' КБ');
-  console.log('   JS:   ' + (js.length / 1024).toFixed(1) + ' КБ');
 
-  // 8. Создаем ZIP-архив с версионированием для загрузки в Битрикс24
-  console.log('\n🗜️  Начинаю создание ZIP-архива с временной меткой...');
+  console.log('\n🗜️  Начинаю создание ZIP-архива...');
   ensureDir('dist/releases');
 
   const output = fs.createWriteStream(ZIP_OUTPUT);
-  const archive = archiver('zip', {
-    zlib: { level: 9 }
-  });
+  const archive = archiver('zip', { zlib: { level: 9 } });
 
   output.on('close', function() {
     console.log('✅ ZIP-архив успешно создан: ' + ZIP_OUTPUT + ' (' + (archive.pointer() / 1024).toFixed(1) + ' КБ)');
-    console.log('🚀 Готов к загрузке в раздел "Локальные приложения" Битрикс24!');
-    console.log('💡 Предыдущие версии архивов сохранены в папке dist/releases/ для возможного отката.');
+    console.log('🚀 Готов к загрузке в Битрикс24!');
   });
 
   archive.on('error', function(err) {
