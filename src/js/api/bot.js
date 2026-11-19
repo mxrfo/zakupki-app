@@ -34,10 +34,52 @@ function dedupePass(key) {
   return false;
 }
 
-function getBotId(cb) {
-  const cachedBotId = localStorage.getItem('b24_bot_id');
-  if (cachedBotId) return cb(parseInt(cachedBotId));
-  logAction('Инициализация чат-бота (код: ' + BOT_CODE + ')...', 'info');
+// ✅ Извлекаем ID бота из разных форматов ответа
+function extractBotId(b) {
+  if (!b) return null;
+  const id = b.ID || b.id || (b.bot && b.bot.id) || b.botId;
+  return id ? parseInt(id) : null;
+}
+
+// ✅ Ищем существующего бота по коду через imbot.list (v1) — доступен без права на регистрацию
+function findBotViaListV1(done) {
+  BX24.callMethod('imbot.list', { FILTER: { CODE: BOT_CODE } }, function (res) {
+    if (res.error()) { return done(null); }
+    const arr = res.data() || [];
+    const list = Array.isArray(arr) ? arr : (arr.result || []);
+    for (let i = 0; i < list.length; i++) {
+      const b = list[i];
+      const code = String(b.CODE || b.code || '');
+      if (code === String(BOT_CODE)) {
+        const id = extractBotId(b);
+        if (id) return done(id);
+      }
+    }
+    done(null);
+  });
+}
+
+// ✅ Ищем существующего бота через imbot.v2.Bot.list
+function findBotViaListV2(done) {
+  BX24.callMethod('imbot.v2.Bot.list', {}, function (res) {
+    if (res.error()) { return done(null); }
+    const arr = (res.data() && (res.data().result || res.data())) || [];
+    const list = Array.isArray(arr) ? arr : [];
+    for (let i = 0; i < list.length; i++) {
+      const b = list[i];
+      const code = String(b.CODE || b.code || '');
+      if (code === String(BOT_CODE)) {
+        const id = extractBotId(b);
+        if (id) return done(id);
+      }
+    }
+    done(null);
+  });
+}
+
+// ✅ Регистрация нового бота (когда не нашли существующего)
+function registerBotNew(cb) {
+  logAction('Бот не найден — регистрация (v2)...', 'info');
   BX24.callMethod('imbot.v2.Bot.register', {
     CODE: BOT_CODE,
     TYPE: 'bot',
@@ -46,31 +88,16 @@ function getBotId(cb) {
   }, (res) => {
     if (res.error()) {
       const errStr = describeError(res);
-      if (/already|exist|duplicate|taken|существует|занят/i.test(errStr.toLowerCase())) {
-        logAction('Бот уже существует, ищу его ID...', 'info');
-        BX24.callMethod('imbot.v2.Bot.list', {}, function (listRes) {
-          if (listRes.error()) { logAction('Bot.list ошибка: ' + describeError(listRes), 'error'); return cb(null); }
-          const arr = (listRes.data() && (listRes.data().result || listRes.data())) || [];
-          const list = Array.isArray(arr) ? arr : [];
-          for (let i = 0; i < list.length; i++) {
-            const b = list[i];
-            if (String((b && (b.CODE || b.code)) || '') === String(BOT_CODE) && b && (b.ID || b.id)) {
-              const id = parseInt(b.ID || b.id);
-              localStorage.setItem('b24_bot_id', id);
-              logAction('Найден существующий бот, ID: ' + id, 'success');
-              return cb(id);
-            }
-          }
-          logAction('Бот с кодом ' + BOT_CODE + ' не найден в списке', 'error');
-          cb(null);
-        });
-        return;
+      if (/NO_AUTH|auth/i.test(errStr)) {
+        logAction('⚠ Регистрация бота запрещена политикой портала (NO_AUTH_FOUND). Бот должен существовать — ищем через imbot.list...', 'error');
+      } else {
+        logAction('Ошибка регистрации (v2): ' + errStr, 'error');
       }
-      logAction('Ошибка регистрации бота (v2): ' + errStr, 'error');
       registerBotV1(cb);
       return;
     }
-    const botId = res.data().BOT_ID || res.data().botId || res.data().id;
+    const botId = extractBotId(res.data());
+    if (!botId) { logAction('Не удалось извлечь ID из ответа регистрации', 'error'); return cb(null); }
     localStorage.setItem('b24_bot_id', botId);
     logAction('Бот зарегистрирован (v2), ID: ' + botId, 'success');
     cb(botId);
@@ -78,13 +105,46 @@ function getBotId(cb) {
 }
 
 function registerBotV1(cb) {
-  logAction('Резервная регистрация (imbot.v1)...', 'info');
+  logAction('Резервная регистрация (v1)...', 'info');
   BX24.callMethod('imbot.register', { CODE: BOT_CODE, TYPE: 'bot', NAME: BOT_NAME, FIRST_NAME: 'Альтернатива', LAST_NAME: 'Бот', EVENT_HANDLER: '' }, (resV1) => {
-    if (resV1.error()) { logAction('Ошибка регистрации (v1): ' + describeError(resV1), 'error'); return cb(null); }
+    if (resV1.error()) {
+      const errStr = describeError(resV1);
+      if (/NO_AUTH|auth/i.test(errStr)) {
+        logAction('❌ Не удалось получить ID бота. Бот отсутствует на портале, а права на регистрацию (imbot) у приложения нет. Создайте бота вручную через REST-приложение или добавьте право "imbot" в Интеграции.', 'error');
+      } else {
+        logAction('Ошибка регистрации (v1): ' + errStr, 'error');
+      }
+      cb(null);
+      return;
+    }
     const botIdV1 = resV1.data().user_id;
     localStorage.setItem('b24_bot_id', botIdV1);
     logAction('Бот зарегистрирован (v1), ID: ' + botIdV1, 'success');
     cb(botIdV1);
+  });
+}
+
+// ✅ КРИТИЧНО: сначала ищем существующего бота, только потом регистрируем
+function getBotId(cb) {
+  const cachedBotId = localStorage.getItem('b24_bot_id');
+  if (cachedBotId) return cb(parseInt(cachedBotId));
+
+  logAction('Поиск существующего бота (код: ' + BOT_CODE + ')...', 'info');
+  findBotViaListV1(function (id1) {
+    if (id1) {
+      localStorage.setItem('b24_bot_id', id1);
+      logAction('Найден бот через imbot.list, ID: ' + id1, 'success');
+      return cb(id1);
+    }
+    findBotViaListV2(function (id2) {
+      if (id2) {
+        localStorage.setItem('b24_bot_id', id2);
+        logAction('Найден бот через imbot.v2.Bot.list, ID: ' + id2, 'success');
+        return cb(id2);
+      }
+      logAction('Бот с кодом ' + BOT_CODE + ' не найден — пробую зарегистрировать...', 'info');
+      registerBotNew(cb);
+    });
   });
 }
 
@@ -99,7 +159,9 @@ function getGroupChatId(botId, cb) {
     USER_IDS: []
   }, (res) => {
     if (res.error()) { logAction('Ошибка создания группового чата: ' + describeError(res), 'error'); return cb(null); }
-    const chatId = res.data().CHAT_ID || res.data().chatId || res.data().id;
+    const d = res.data();
+    const chatId = d.CHAT_ID || d.chatId || (d.chat && (d.chat.id || d.chat.dialogId)) || d.id;
+    if (!chatId) { logAction('Не удалось извлечь ID чата', 'error'); return cb(null); }
     localStorage.setItem('b24_group_chat_id', chatId);
     settings.chatId = chatId;
     logAction('Групповой чат создан, ID: ' + chatId, 'success');
@@ -107,7 +169,6 @@ function getGroupChatId(botId, cb) {
   });
 }
 
-// ✅ imchat.user.add — правильный метод добавления в чат
 function addUserToGroupChat(botId, chatId, userId, cb) {
   cb = cb || function () {};
   if (!chatId || !userId) return cb();
@@ -131,7 +192,6 @@ function buildKeyboard(links) {
   return btns.length ? [btns] : [];
 }
 
-// ✅ imbot.v2.Chat.Message.send — UPPER_SNAKE_CASE параметры
 function botSendToGroup(botId, chatId, title, message, links, cb) {
   BX24.callMethod('imbot.v2.Chat.Message.send', {
     BOT_ID: botId,
@@ -167,7 +227,9 @@ function sendToPersonalChat(botId, userId, title, message, links, cb) {
     USER_IDS: [parseInt(userId)]
   }, (res) => {
     if (res.error()) { logAction('Ошибка создания личного чата: ' + describeError(res), 'error'); if (cb) cb(false); return; }
-    dialogId = res.data().CHAT_ID || res.data().chatId || res.data().id;
+    const d = res.data();
+    dialogId = d.CHAT_ID || d.chatId || (d.chat && (d.chat.id || d.chat.dialogId)) || d.id;
+    if (!dialogId) { logAction('Не удалось извлечь ID личного чата', 'error'); if (cb) cb(false); return; }
     localStorage.setItem(key, dialogId);
     sendMsg(dialogId);
   });
@@ -177,7 +239,7 @@ function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
   if (dedupePass(fullKey)) { if (cb) cb(true); return; }
   getBotId(function (botId) {
-    if (!botId) { logAction('Не удалось получить ID бота', 'error'); if (cb) cb(false); return; }
+    if (!botId) { logAction('Не удалось получить ID бота — уведомление пропущено', 'error'); if (cb) cb(false); return; }
     getGroupChatId(botId, function (chatId) {
       if (!chatId) { logAction('Не удалось получить ID чата', 'error'); if (cb) cb(false); return; }
       addUserToGroupChat(botId, chatId, userId, function () {
@@ -192,9 +254,9 @@ function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   });
 }
 
+// ✅ КРИТИЧНО: НЕ сбрасываем b24_bot_id — бот живёт на портале и не меняется при обновлении архива
 function clearBotCache() {
-  localStorage.removeItem('b24_bot_id');
   localStorage.removeItem('b24_group_chat_id');
   Object.keys(localStorage).filter(function (k) { return k.indexOf('b24_bot_chat_') === 0 || k.indexOf('b24_dk_') === 0; }).forEach(function (k) { localStorage.removeItem(k); });
-  logAction('Кэш бота и дедупа сброшен', 'info');
+  logAction('Кэш чатов и дедупа сброшен (ID бота сохранён)', 'info');
 }
