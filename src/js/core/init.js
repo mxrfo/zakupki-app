@@ -57,16 +57,34 @@ function tryRedirectToPortal() {
   }
 }
 
-// ✅ Надёжное получение client_id (getAuth → URL → settings)
+// ✅ Надёжное получение client_id из всех возможных источников
 function getClientId() {
+  // 1. Из BX24.getAuth()
   try {
     const auth = BX24.getAuth();
-    if (auth) { if (auth.client_id) return auth.client_id; if (auth.CLIENT_ID) return auth.CLIENT_ID; }
+    if (auth) {
+      if (auth.client_id) return auth.client_id;
+      if (auth.CLIENT_ID) return auth.CLIENT_ID;
+      if (auth.appSid) return auth.appSid;
+    }
   } catch (e) {}
+  
+  // 2. Из URL-параметров (placement передаёт client_id)
   try {
-    const m = window.location.search.match(/[?&]client_id=([^&]+)/);
-    if (m) return decodeURIComponent(m[1]);
+    const params = new URLSearchParams(window.location.search);
+    const clientId = params.get('client_id') || params.get('CLIENT_ID') || params.get('appSid');
+    if (clientId) return decodeURIComponent(clientId);
   } catch (e) {}
+  
+  // 3. Из placement.info()
+  try {
+    if (typeof BX24 !== 'undefined' && BX24.placement && typeof BX24.placement.info === 'function') {
+      const info = BX24.placement.info();
+      if (info && info.options && info.options.client_id) return info.options.client_id;
+    }
+  } catch (e) {}
+  
+  // 4. Из настроек (сохранённый ранее)
   return (settings.clientId || '').trim();
 }
 
@@ -97,7 +115,7 @@ function ensureAppPlacement() {
         if (/already|binded/i.test(errStr)) {
           logAction('placement.bind: уже зарегистрирован (handler обновлён)', 'info');
         } else if (/UNKNOWN/i.test(errStr)) {
-          logAction('placement.bind: UNKNOWN — пересоздайте приложение с правом placement и загрузите архив заново', 'error');
+          logAction('placement.bind: UNKNOWN — проверьте право placement и пересохраните интеграцию', 'error');
         } else {
           logAction('placement.bind: ' + errStr, 'error');
         }
@@ -108,7 +126,48 @@ function ensureAppPlacement() {
   });
 }
 
-// ✅ Загрузка настроек с fallback на localStorage (если app.option пуст после пересоздания приложения)
+// ✅ Авто-маппинг полей: если поле не выбрано, ищем по названию в fieldDefs
+function autoMapFields() {
+  const fieldDefs = window.fieldDefs || {};
+  const mapping = settings.mapping || {};
+  let changed = false;
+  
+  const searchTerms = {
+    comment: ['комментарий', 'comment'],
+    detailPrice: ['цена за 1', 'price', 'цена за единицу'],
+    manager: ['менеджер отдела', 'исполнитель', 'manager'],
+    deptHead: ['руководитель отдела', 'dept head', 'head'],
+    taskVyborSotr: ['задача по выбору', 'vybor', 'выбор сотрудника'],
+    taskSbor: ['задача по сбору', 'sbor', 'сбор данных'],
+    taskZagruz: ['задача по загрузке', 'zagruz', 'загрузка счёта'],
+    delegateHistory: ['делегирован', 'delegate', 'история делегирований']
+  };
+  
+  for (const key in searchTerms) {
+    if (!mapping[key] || mapping[key] === '') {
+      const terms = searchTerms[key];
+      for (const fieldCode in fieldDefs) {
+        const title = (fieldDefs[fieldCode].title || '').toLowerCase();
+        for (const term of terms) {
+          if (title.includes(term.toLowerCase())) {
+            mapping[key] = fieldCode;
+            changed = true;
+            logAction(`Авто-маппинг: ${key} → ${fieldCode} (${fieldDefs[fieldCode].title})`, 'info');
+            break;
+          }
+        }
+        if (mapping[key]) break;
+      }
+    }
+  }
+  
+  if (changed) {
+    settings.mapping = mapping;
+    saveSettingsToBoth();
+  }
+}
+
+// ✅ Загрузка настроек с fallback на localStorage
 function loadSettingsWithFallback() {
   return new Promise(function (resolve) {
     BX24.callMethod('app.option.get', {}, function (res) {
@@ -124,7 +183,7 @@ function loadSettingsWithFallback() {
         }
       }
       
-      // Если app.option пуст (новое приложение) — берём из localStorage
+      // Если app.option пуст — берём из localStorage
       if (!loaded) {
         try {
           const backup = localStorage.getItem('purchase_settings_backup');
@@ -132,10 +191,9 @@ function loadSettingsWithFallback() {
             const parsed = JSON.parse(backup);
             settings = { ...settings, ...parsed };
             logAction('Настройки восстановлены из localStorage (app.option был пуст)', 'info');
-            // Сохраняем обратно в app.option
             BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function () {});
           } else {
-            logAction('Настройки не найдены ни в app.option, ни в localStorage — используются значения по умолчанию', 'info');
+            logAction('Настройки не найдены — используются значения по умолчанию', 'info');
           }
         } catch (e) {
           logAction('Ошибка чтения backup из localStorage: ' + e.message, 'error');
@@ -147,7 +205,7 @@ function loadSettingsWithFallback() {
   });
 }
 
-// ✅ Сохранение настроек в оба места: app.option + localStorage backup
+// ✅ Сохранение настроек в оба места
 function saveSettingsToBoth() {
   const json = JSON.stringify(settings);
   try {
@@ -162,7 +220,7 @@ function saveSettingsToBoth() {
   });
 }
 
-// ✅ Синхронизация client_id + детект нового архива по build id
+// ✅ Синхронизация client_id + детект нового архива
 function syncClientIdAndBuild() {
   const liveId = getClientId();
   const savedId = (settings.clientId || '').trim();
@@ -170,8 +228,9 @@ function syncClientIdAndBuild() {
   if (liveId && liveId !== savedId) {
     logAction('client_id обновлён: ' + (savedId || '—') + ' → ' + liveId, 'info');
     settings.clientId = liveId;
+    saveSettingsToBoth();
   } else if (!liveId) {
-    logAction('client_id не удалось получить из getAuth/URL. Использую сохранённый: ' + (savedId || '—'), 'info');
+    logAction('client_id не удалось получить. Использую сохранённый: ' + (savedId || '—'), 'info');
   }
 
   const savedBuild = (settings.lastBuildId || '').trim();
@@ -183,8 +242,6 @@ function syncClientIdAndBuild() {
       if (typeof clearBotCache === 'function') clearBotCache();
     } catch (e) {}
     settings.lastBuildId = APP_BUILD_ID;
-    saveSettingsToBoth();
-  } else if (liveId && liveId !== savedId) {
     saveSettingsToBoth();
   }
 }
@@ -246,8 +303,11 @@ function init() {
         }
       }
 
-      // ✅ Загрузка настроек с fallback на localStorage
+      // ✅ Загрузка настроек с fallback
       loadSettingsWithFallback().then(function () {
+        // ✅ Авто-маппинг полей, если какие-то не выбраны
+        autoMapFields();
+
         let mappingMigrated = false;
         if (!settings.mapping) {
           settings.mapping = { ...DEFAULT_MAPPING };
@@ -317,8 +377,7 @@ function init() {
         logAction('Загрузка свежих полей и справочников...', 'info');
         setLoadingStep(3, 5);
 
-        // ✅ Загружаем ВСЕХ активных пользователей (без фильтра по отделам), но только нужные поля
-        //    Это гарантирует, что руководители других отделов будут в allUsers
+        // ✅ Загружаем ВСЕХ активных пользователей (без фильтра по отделам)
         const metaBatch = {
           uCurrent: ['user.get', { ID: currentUser.ID }],
           fields: ['crm.item.fields', { entityTypeId: ENTITY_TYPE_ID }],
