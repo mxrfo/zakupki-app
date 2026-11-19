@@ -1,6 +1,5 @@
 // js/render.js — Рендер карточек и таблицы
 
-// ✅ Отделы, которыми «руководит» текущий пользователь (с учётом симуляции head)
 function getManagedDeptIds() {
   let d = (currentUser && currentUser.UF_DEPARTMENT) || [];
   if (!Array.isArray(d)) d = d ? [d] : [];
@@ -9,7 +8,6 @@ function getManagedDeptIds() {
   return ids;
 }
 
-// ✅ Отделы пользователя для фильтра «Все закупки» (employee/manager/head)
 function getUserDeptIds() {
   let d = (currentUser && currentUser.UF_DEPARTMENT) || [];
   if (!Array.isArray(d)) d = d ? [d] : [];
@@ -26,7 +24,6 @@ function getUserDeptIds() {
   return ids;
 }
 
-// ✅ Утилита: пользователь — руководитель отдела закупки?
 function isDeptHeadForItem(item) {
   if (currentRole === 'admin') return true;
   const deptVal = item[actualFields.dept];
@@ -94,8 +91,8 @@ function render() {
       if (isEconUI && (stName.includes('согласование') || stName.includes('обработка') || stName.includes('ожидание'))) return true;
       const deptId = String(Array.isArray(i[actualFields.dept]) ? i[actualFields.dept][0] : (i[actualFields.dept] || ''));
       if (isHeadUI && getManagedDeptIds().includes(deptId) &&
-          (stName.includes('согласование') || stName.includes('сбор данных') || stName.includes('загрузка') || stName.includes('обработка') || stName.includes('ожидание') || stName.includes('получение'))) return true;
-      if (isMgrUI && (stName.includes('сбор данных') || stName.includes('загрузка') || stName.includes('согласование'))) {
+          (stName.includes('согласование') || stName.includes('доработка') || stName.includes('сбор данных') || stName.includes('загрузка') || stName.includes('обработка') || stName.includes('ожидание') || stName.includes('получение'))) return true;
+      if (isMgrUI && (stName.includes('сбор данных') || stName.includes('загрузка') || stName.includes('согласование') || stName.includes('доработка'))) {
         const mgrVal = i[actualFields.manager];
         const mgrIds = Array.isArray(mgrVal) ? mgrVal : (mgrVal ? [mgrVal] : []);
         if (mgrIds.some(id => String(id) === String(currentUser.ID))) return true;
@@ -223,6 +220,11 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
           buttonsHtml += `<button class="btn btn-dark" style="flex:1; background:#1e293b; color:#fff; border:none;" onclick="event.stopPropagation(); openDataModal(${item.id})">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Заполнить</button>`;
         }
+        // ✅ Доработка — менеджер/руководитель видит кнопку «Исправить данные»
+        if ((isMgrUI || isHeadUI) && stName.includes('доработка')) {
+          buttonsHtml += `<button class="btn btn-dark" style="flex:1; background:#f59e0b; color:#fff; border:none;" onclick="event.stopPropagation(); openDataModal(${item.id})">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Исправить данные</button>`;
+        }
         if (isMgrUI && stName.includes('загрузка')) {
           buttonsHtml += `<button class="btn btn-dark" style="flex:1; background:#1e293b; color:#fff; border:none;" onclick="event.stopPropagation(); openUploadModal(${item.id})">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Загрузить счет</button>`;
@@ -230,9 +232,10 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
         if (currentRole === 'manager' && stName.includes('согласование')) {
           buttonsHtml += `<button class="btn btn-primary" style="flex:1;" onclick="event.stopPropagation(); openEditAmountModal(${item.id})">Изменить сумму</button>`;
         }
-        // ✅ Согласование условий — и для экономиста, и для руководителя
+        // ✅ Согласование условий — три кнопки: Согласовать / На доработку / Отклонить
         if ((isEconUI || isHeadUI) && stName.includes('согласование условий')) {
           buttonsHtml += `<button class="action-icon-btn approve" style="width:auto; padding:0 16px;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_terms')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Согласовать</button>`;
+          buttonsHtml += `<button class="action-icon-btn" style="width:auto; padding:0 16px; background:#fef3c7; color:#b45309; border:1px solid #fcd34d;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_rework')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6a3 3 0 0 0-4.2 4.2L4 16.7V20h3.3l6.5-6.5a3 3 0 0 0 0-4.2z"/><path d="M18 8l2-2"/></svg> На доработку</button>`;
           buttonsHtml += `<button class="action-icon-btn reject" style="width:auto; padding:0 16px;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_terms')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Отклонить</button>`;
         }
         if (isEconUI && stName.includes('обработка входящего счета')) {
@@ -413,6 +416,9 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       if (isMgrUI && stName.includes('сбор данных')) {
         buttonsHtml += `<button class="btn btn-dark btn-sm" style="background:#1e293b;color:#fff;border:none;" onclick="event.stopPropagation(); openDataModal(${item.id})">Заполнить</button>`;
       }
+      if ((isMgrUI || isHeadUI) && stName.includes('доработка')) {
+        buttonsHtml += `<button class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none;" onclick="event.stopPropagation(); openDataModal(${item.id})">Исправить данные</button>`;
+      }
       if (isMgrUI && stName.includes('загрузка')) {
         buttonsHtml += `<button class="btn btn-dark btn-sm" style="background:#1e293b;color:#fff;border:none;" onclick="event.stopPropagation(); openUploadModal(${item.id})">Загрузить счет</button>`;
       }
@@ -421,6 +427,7 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       }
       if ((isEconUI || isHeadUI) && stName.includes('согласование условий')) {
         buttonsHtml += `<button class="action-icon-btn approve btn-sm" style="width:auto;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_terms')">Согласовать</button>`;
+        buttonsHtml += `<button class="action-icon-btn btn-sm" style="width:auto; background:#fef3c7; color:#b45309; border:1px solid #fcd34d;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_rework')">На доработку</button>`;
         buttonsHtml += `<button class="action-icon-btn reject btn-sm" style="width:auto;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_terms')">Отклонить</button>`;
       }
       if (isEconUI && stName.includes('обработка входящего счета')) {

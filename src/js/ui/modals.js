@@ -22,7 +22,6 @@ function openDelegateModal(id) {
   document.getElementById('delegate-id').value = id;
   document.getElementById('delegate-note').value = '';
 
-  // Отдел: из поля dept, иначе — отдел создателя
   let deptId = '';
   const deptVal = item[actualFields.dept];
   if (deptVal) deptId = String(Array.isArray(deptVal) ? deptVal[0] : deptVal);
@@ -33,7 +32,6 @@ function openDelegateModal(id) {
   }
   const deptObj = departments.find(d => String(d.ID) === deptId);
 
-  // Текущий исполнитель: manager, иначе createdBy
   const mgrVal = item[actualFields.manager];
   const mgrIds = Array.isArray(mgrVal) ? mgrVal : (mgrVal ? [mgrVal] : []);
   const currentMgr = mgrIds[0] || '';
@@ -58,7 +56,6 @@ function openDelegateModal(id) {
     }
   });
   if (added === 0) {
-    // fallback: все активные
     allUsers.forEach(u => {
       if (String(u.ID) === String(currentMgr)) return;
       if (String(u.ACTIVE) === 'N') return;
@@ -337,6 +334,10 @@ function openActionModal(id, type) {
     label.innerText = 'Комментарий (увидят менеджеры)';
     postponeGroup.style.display = 'block';
     btnHtml += `<button type="submit" class="btn btn-success">Согласовать</button>`;
+  } else if (type === 'send_to_rework') {
+    title.innerText = 'Отправить на доработку';
+    label.innerText = 'Комментарий — что исправить (обязательно)';
+    btnHtml += `<button type="submit" class="btn btn-primary" style="background:#f59e0b; border-color:#f59e0b; color:#fff;">Отправить на доработку</button>`;
   } else if (type === 'reject_terms') {
     title.innerText = 'Отклонить условия';
     label.innerText = 'Причина отказа';

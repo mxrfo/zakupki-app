@@ -1,7 +1,7 @@
 // ============================================================
 // МОДУЛЬ: actions.js
 // ============================================================
-// js/actions.js — Действия: согласование, отклонение, откат, отправка в работу
+// js/actions.js — Действия: согласование, отклонение, доработка, откат, отправка в работу
 
 function submitAction(e) {
   e.preventDefault();
@@ -148,7 +148,6 @@ ${shortDescText}`,
         const taskId = taskRes.data().task.id;
         logAction(`Задача для руководителя создана (ID: ${taskId})`, 'success');
 
-        // ✅ Уведомление руководителю: карточка + кнопки «Открыть закупку» (my_requests) и «Открыть задачу»
         try {
           notifySelectExecutor(headIdNum, item, taskId);
         } catch (e) {
@@ -202,6 +201,45 @@ ${shortDescText}`,
     return;
   }
 
+  // ✅ ОТПРАВКА НА ДОРАБОТКУ — стадия "доработка", комментарий обязателен
+  if (type === 'send_to_rework') {
+    if (!comment || !comment.trim()) {
+      showToast('Для отправки на доработку обязательно укажите комментарий (что исправить)', 'error');
+      return;
+    }
+    targetStageId = getStageIdByName('доработка');
+    if (!targetStageId) {
+      logAction('ОШИБКА: стадия "Доработка" не найдена в справочнике статусов', 'error');
+      showToast('Не найдена стадия «Доработка». Добавьте её в справочник статусов smart-процесса «Закупки» (см. инструкцию).', 'error');
+      return;
+    }
+    const item = items.find(i => i.id == id);
+    if (!item) return showToast('Закупка не найдена', 'error');
+
+    fields.stageId = targetStageId;
+    if (actualFields.comment && fieldDefs[actualFields.comment]) fields[actualFields.comment] = comment;
+
+    BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: id, fields: fields }, (res) => {
+      if (res.error()) {
+        logAction('Ошибка отправки на доработку: ' + getApiErrorMessage(res), 'error');
+        showToast('Ошибка: ' + getApiErrorMessage(res), 'error');
+      } else {
+        logAction('Закупка отправлена на доработку', 'success');
+        showToast('Отправлено на доработку', 'success');
+        try {
+          const mgrArr = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []);
+          const mgrId = mgrArr.length > 0 ? parseInt(mgrArr[0]) : null;
+          if (mgrId) notifyReworkNeeded(mgrId, item, comment);
+        } catch (e) {
+          logAction('Ошибка при отправке уведомления о доработке: ' + e.message, 'error');
+        }
+        closeModal('modal-action');
+        loadAllData();
+      }
+    });
+    return;
+  }
+
   // Остальные действия
   if (type === 'approve_terms') {
     targetStageId = getStageIdByName('загрузка');
@@ -248,7 +286,6 @@ ${shortDescText}`,
     } else {
       showToast('Статус обновлен', 'success');
 
-      // ✅ Уведомление менеджеру после согласования/отклонения условий
       if (type === 'approve_terms' || type === 'reject_terms') {
         try {
           const mgrArr = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []);

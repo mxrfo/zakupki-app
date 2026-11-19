@@ -84,6 +84,12 @@ function formatDeadline(v) {
   return s;
 }
 
+// ✅ Адресное обращение — упоминание получателя (в групповом чате подсветит нужного)
+function greetUser(userId) {
+  const n = (typeof userNames !== 'undefined' && userNames[userId]) ? userNames[userId] : 'коллега';
+  return '[USER=' + parseInt(userId) + ']' + n + '[/USER], здравствуйте!';
+}
+
 function buildPurchaseMeta(item) {
   const no = item.id;
   const dateStr = formatCreatedDate(item.createdTime);
@@ -94,21 +100,19 @@ function buildPurchaseMeta(item) {
     shortDesc = item.title || '—';
   }
   const deadlineStr = formatDeadline(item[actualFields.deadlineZakup]);
-
-  // ✅ Имя заказчика: поле creator (если заполнено) ИЛИ системное createdBy (всегда есть)
   const creatorRaw = item[actualFields.creator];
   const creatorId = Array.isArray(creatorRaw) ? creatorRaw[0] : creatorRaw;
   const fallbackId = item.createdBy;
-  const creatorName = (creatorId && (userNames[creatorId] || creatorId)) ||
-                      (fallbackId && (userNames[fallbackId] || fallbackId)) ||
-                      '—';
-  return { no, dateStr, shortDesc, deadlineStr, creatorName, creatorId: creatorId || fallbackId };
+  const realCreatorId = creatorId || fallbackId;
+  const creatorName = (realCreatorId && (userNames[realCreatorId] || realCreatorId)) || '—';
+  const creatorDept = (realCreatorId && userDepts[realCreatorId]) || '—';
+  return { no, dateStr, shortDesc, deadlineStr, creatorName, creatorDept, creatorId: realCreatorId };
 }
 
 function formatPurchaseBody(meta) {
-  return 'Что нужно закупить: ' + meta.shortDesc + '\n' +
-         'Крайний срок закупки: ' + meta.deadlineStr + '\n' +
-         'Кто создал запрос: ' + meta.creatorName;
+  return '[B]Что нужно закупить (Кратко):[/B] ' + meta.shortDesc + '\n' +
+         '[B]Крайний срок закупки:[/B] ' + meta.deadlineStr + '\n' +
+         '[B]Кто создал запрос:[/B] ' + meta.creatorName;
 }
 
 function resolveDeptHeadId(item, respectTestMode) {
@@ -127,9 +131,8 @@ function sendBotNotification(userId, title, message, links, cb) {
     if (!success) {
       logAction('Fallback: отправка через im.notify', 'info');
       const firstLink = (links && links[0] && links[0].url) ? links[0].url : '';
-      const plain = title + '\n' + message;
       BX24.callMethod('im.notify', {
-        to: userId, message: plain, type: 'SYSTEM',
+        to: userId, message: title + '\n' + message, type: 'SYSTEM',
         link: firstLink, button_text: firstLink ? 'Открыть' : ''
       }, function (r) {
         if (r.error()) logAction('im.notify (ID ' + userId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
@@ -139,67 +142,81 @@ function sendBotNotification(userId, title, message, links, cb) {
   });
 }
 
+// ✅ Уведомление №1: руководителю — выбрать исполнителя (обращение к получателю)
 function notifySelectExecutor(userId, item, taskId) {
   userId = parseInt(userId);
   if (!userId || !item) return;
   const meta = buildPurchaseMeta(item);
   const title = 'Необходимо выбрать исполнителя для закупки №' + meta.no + ' от ' + meta.dateStr;
-  const message = formatPurchaseBody(meta);
+  const message = greetUser(userId) + '\n\n' + formatPurchaseBody(meta);
+
   const domain = getPortalDomain();
   const taskLink = taskId ? (domain ? domain + '/company/personal/user/' + userId + '/tasks/task/view/' + taskId + '/' : '') : '';
+
   const links = [
     { text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'my_requests') },
     taskLink ? { text: '✅ Открыть задачу', url: taskLink } : null
   ].filter(function (l) { return l && l.url; });
+
   sendBotNotification(userId, title, message, links);
 }
 
+// ✅ Уведомление №2: менеджеру — собрать данные (обращение к менеджеру)
 function notifyCollectData(userId, item) {
   userId = parseInt(userId);
   if (!userId || !item) return;
   const meta = buildPurchaseMeta(item);
   const title = 'Необходимо собрать данные и рассчитать стоимость по закупке №' + meta.no + ' от ' + meta.dateStr;
-  const message = formatPurchaseBody(meta);
+  const message = greetUser(userId) + '\n\n' + formatPurchaseBody(meta);
+
   const links = [
     { text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }
   ].filter(function (l) { return l && l.url; });
+
   sendBotNotification(userId, title, message, links);
 }
 
+// ✅ Карточка согласования: новый формат, выделение жирным, без "Создал запрос" и "Требуется..."
 function buildApprovalCard(item) {
   const meta = buildPurchaseMeta(item);
-  const shortDesc = meta.shortDesc;
   const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
-  const deadline = item[actualFields.deadlineZakup] || 'не указан';
+  const deadline = formatDeadline(item[actualFields.deadlineZakup]);
   const deptId = String(Array.isArray(item[actualFields.dept]) ? item[actualFields.dept][0] : (item[actualFields.dept] || ''));
   const deptName = settings.deptShortNames[deptId] || (departments.find(d => String(d.ID) === deptId)?.NAME || '—');
   const mgrId = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager][0] : (item[actualFields.manager] || '');
   const mgrName = mgrId ? (userNames[mgrId] || mgrId) : '—';
-  const combined = item[actualFields.combinedDir] || '—';
-  const comment = item[actualFields.comment] ? cleanText(item[actualFields.comment]) : '—';
-  const title = item.title || shortDesc;
 
-  const text =
-    `[B]${title}[/B]\n` +
-    `Описание: ${shortDesc}\n` +
-    `Срок: ${deadline}\n` +
-    `Заказчик (отдел): ${deptName}\n` +
-    `Исполнитель: ${mgrName}\n` +
-    `Сумма: ${amount}\n` +
-    `Раздел/Напр: ${combined}\n` +
-    `Комментарий: ${comment}\n` +
-    `Создал запрос: ${meta.creatorName}\n\n` +
-    `Требуется согласование условий.`;
+  let combinedDirText = item[actualFields.combinedDir] || '';
+  if (!combinedDirText && item[actualFields.section]) {
+    const secName = getDisplayValue(item, actualFields.section, 'enum');
+    const dirName = getDisplayValue(item, actualFields.direction, 'enum');
+    if (secName !== '—') combinedDirText = `${secName} / ${dirName}`;
+  }
+
+  const comment = item[actualFields.comment] ? cleanText(item[actualFields.comment]) : '';
+
+  const lines = [
+    '[B]Что нужно закупить (Кратко):[/B] ' + meta.shortDesc,
+    '[B]Срок:[/B] ' + deadline,
+    '[B]Заказчик:[/B] ' + meta.creatorName + ' (' + meta.creatorDept + ')',
+    '[B]Менеджер:[/B] ' + mgrName,
+    '[B]Сумма:[/B] ' + amount
+  ];
+  if (combinedDirText) lines.push('[B]Раздел/Направление:[/B] ' + combinedDirText);
+  if (comment) lines.push('[B]Комментарий:[/B] ' + comment);
+
+  const text = lines.join('\n');
 
   const links = [
     { text: '✅ Согласовать', url: buildAppLink('approve', item.id, 'inbox') },
-    { text: '❌ Отклонить', url: buildAppLink('reject', item.id, 'inbox') },
-    { text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'inbox') }
+    { text: '🔧 На доработку', url: buildAppLink('rework', item.id, 'inbox') },
+    { text: '❌ Отклонить', url: buildAppLink('reject', item.id, 'inbox') }
   ].filter(l => l.url);
 
-  return { text, links };
+  return { text, links, deptName, no: meta.no, date: meta.dateStr };
 }
 
+// ✅ Уведомление о согласовании: новый заголовок + обращение к согласующему
 function notifyApprovalNeeded(headId, item) {
   headId = parseInt(headId);
   if (!headId || !item) {
@@ -207,11 +224,14 @@ function notifyApprovalNeeded(headId, item) {
     return;
   }
   const card = buildApprovalCard(item);
-  notifyUserViaBot(headId, 'Закупка на согласовании', card.text, card.links, function (success) {
+  const title = 'Согласование по закупке отделом ' + card.deptName + ' №' + card.no + ' от ' + card.date;
+  const message = greetUser(headId) + '\n\n' + card.text;
+
+  notifyUserViaBot(headId, title, message, card.links, function (success) {
     if (!success) {
       logAction('Fallback: im.notify о согласовании', 'info');
       BX24.callMethod('im.notify', {
-        to: headId, message: 'Закупка на согласовании: ' + (item.title || ''), type: 'SYSTEM',
+        to: headId, message: title + '\n' + message, type: 'SYSTEM',
         link: buildAppLink('approve', item.id, 'inbox'), button_text: 'Согласовать'
       }, function (r) {
         if (r.error()) logAction('im.notify (ID ' + headId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
@@ -220,23 +240,49 @@ function notifyApprovalNeeded(headId, item) {
   });
 }
 
-function notifyAfterDecision(managerId, item, approved) {
+// ✅ Уведомление менеджеру о доработке (новая логика)
+function notifyReworkNeeded(managerId, item, reworkComment) {
   managerId = parseInt(managerId);
   if (!managerId || !item) return;
   const meta = buildPurchaseMeta(item);
-  const shortDesc = meta.shortDesc;
-  const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
-  const title = approved ? 'Условия согласованы' : 'Закупка отклонена';
-  const message = approved
-    ? `Условия по закупке "${shortDesc}" (сумма ${amount}) согласованы.\nНеобходимо загрузить входящий счёт.`
-    : `Закупка "${shortDesc}" отклонена на этапе согласования.\nТребуется корректировка.`;
+  const title = 'Закупка №' + meta.no + ' отправлена на доработку';
+  const message = greetUser(managerId) + '\n\n' +
+    'Закупка «' + meta.shortDesc + '» отправлена на доработку по результатам согласования.\n' +
+    (reworkComment ? '[B]Комментарий:[/B] ' + reworkComment + '\n' : '') +
+    'Необходимо скорректировать данные и отправить на согласование повторно.';
   const links = [
-    { text: approved ? '📄 Загрузить счёт' : '📋 Открыть закупку', url: buildAppLink(approved ? 'upload' : 'view', item.id, 'inbox') }
+    { text: '🔧 Исправить данные', url: buildAppLink('fill', item.id, 'inbox') }
   ].filter(l => l.url);
   notifyUserViaBot(managerId, title, message, links, function (success) {
     if (!success) {
       BX24.callMethod('im.notify', {
-        to: managerId, message: title + ': ' + shortDesc, type: 'SYSTEM',
+        to: managerId, message: title + '\n' + message, type: 'SYSTEM',
+        link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : ''
+      }, function (r) {
+        if (r.error()) logAction('im.notify (ID ' + managerId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
+      });
+    }
+  });
+}
+
+// ✅ Уведомление менеджеру после согласования/отклонения (обращение к менеджеру)
+function notifyAfterDecision(managerId, item, approved) {
+  managerId = parseInt(managerId);
+  if (!managerId || !item) return;
+  const meta = buildPurchaseMeta(item);
+  const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
+  const title = approved ? 'Условия согласованы' : 'Закупка отклонена';
+  const message = greetUser(managerId) + '\n\n' + (approved
+    ? 'Условия по закупке «' + meta.shortDesc + '» (сумма ' + amount + ') согласованы.\nНеобходимо загрузить входящий счёт.'
+    : 'Закупка «' + meta.shortDesc + '» отклонена на этапе согласования.\nТребуется корректировка.');
+  const links = [
+    { text: approved ? '📄 Загрузить счёт' : '📋 Открыть закупку', url: buildAppLink(approved ? 'upload' : 'view', item.id, 'inbox') }
+  ].filter(l => l.url);
+
+  notifyUserViaBot(managerId, title, message, links, function (success) {
+    if (!success) {
+      BX24.callMethod('im.notify', {
+        to: managerId, message: title + '\n' + message, type: 'SYSTEM',
         link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : ''
       }, function (r) {
         if (r.error()) logAction('im.notify (ID ' + managerId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
@@ -329,7 +375,7 @@ function delegatePurchase(itemId, toUserId, note, cb) {
       try {
         const meta = buildPurchaseMeta(item);
         const title = 'Закупка делегирована вам: №' + meta.no + ' от ' + meta.dateStr;
-        const message = formatPurchaseBody(meta) + '\n\nДелегировал: ' + (fromName || '—') + (actorName && actorName !== fromName ? (' (от имени ' + actorName + ')') : '') + (note ? ('\nПричина: ' + note) : '');
+        const message = greetUser(toUserId) + '\n\n' + formatPurchaseBody(meta) + '\n\nДелегировал: ' + (fromName || '—') + (actorName && actorName !== fromName ? (' (от имени ' + actorName + ')') : '') + (note ? ('\nПричина: ' + note) : '');
         const links = [{ text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }].filter(l => l.url);
         notifyUserViaBot(toUserId, title, message, links, function (ok) { if (!ok) sendBotNotification(toUserId, title, message, links); });
       } catch (e) { logAction('Ошибка уведомления о делегировании: ' + e.message, 'error'); }
@@ -527,7 +573,7 @@ function syncManagersFromTasks(done) {
           const headId = resolveDeptHeadId(f.item, true);
           if (headId) {
             const meta = buildPurchaseMeta(f.item);
-            sendBotNotification(headId, 'Исполнитель недоступен', 'Выбранный исполнитель ' + (userNames[f.mgrId] || f.mgrId) + ' недоступен (отпуск/больничный). Делегируйте закупку №' + meta.no + ' другому сотруднику отдела.', [{ text: '📋 Открыть закупку', url: buildAppLink('view', f.item.id, 'my_requests') }].filter(l => l.url));
+            sendBotNotification(headId, 'Исполнитель недоступен', greetUser(headId) + '\n\nВыбранный исполнитель ' + (userNames[f.mgrId] || f.mgrId) + ' недоступен (отпуск/больничный). Делегируйте закупку №' + meta.no + ' другому сотруднику отдела.', [{ text: '📋 Открыть закупку', url: buildAppLink('view', f.item.id, 'my_requests') }].filter(l => l.url));
           }
         } catch (e) { logAction('Ошибка уведомления о недоступности: ' + e.message, 'error'); }
         finish(f.item.id);
@@ -601,6 +647,7 @@ function handleUrlParams() {
           else if (action === 'upload') openUploadModal(id);
           else if (action === 'approve') openActionModal(id, 'approve_terms');
           else if (action === 'reject') openActionModal(id, 'reject_terms');
+          else if (action === 'rework') openActionModal(id, 'send_to_rework');
           else openViewModal(id);
           try {
             var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
