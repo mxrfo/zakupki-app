@@ -21,7 +21,6 @@ function syncSupplierColumns() {
   });
 }
 
-// ✅ Заполнение разделов/направлений в модалке СОЗДАНИЯ
 function populateCreateSection() {
   const secSelect = document.getElementById('create-section');
   const dirSelect = document.getElementById('create-direction');
@@ -211,7 +210,6 @@ function submitCreateRequest(e) {
   }
 }
 
-// ✅ submitData: БЕЗ раздела/направления (они на этапе создания)
 function submitData(e) {
   e.preventDefault();
   const id = document.getElementById('data-id').value;
@@ -290,7 +288,6 @@ function submitEditAmount(e) {
   });
 }
 
-// ✅ submitUpload: БЕЗ входящих счетов, всё в закупке; уведомляем согласующего
 function submitUpload(e) {
   e.preventDefault();
   const id = document.getElementById('upload-id').value;

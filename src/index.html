@@ -1,363 +1,490 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Закупки (Приложение)</title>
-<script src="//api.bitrix24.com/api/v1/"></script>
-<link rel="stylesheet" href="css/styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Закупки (Приложение)</title>
+  <script src="//api.bitrix24.com/api/v1/"></script>
+  <link rel="stylesheet" href="css/styles.css">
 </head>
+
 <body>
-<div class="app-layout">
-<aside class="sidebar">
-<a href="#" class="brand-text">АЛЬТЕРНАТИВА</a>
-<div class="nav-tabs" id="tabs-container">
-<button class="tab-btn active" data-tab="my_requests" onclick="switchTab('my_requests')">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-Мои запросы
-</button>
-<button class="tab-btn" data-tab="inbox" onclick="switchTab('inbox')">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-Входящие (Действия)
-</button>
-<button class="tab-btn" data-tab="all" onclick="switchTab('all')">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-Все закупки
-</button>
-</div>
-</aside>
-<div class="main-wrapper">
-<header class="topbar">
-<div style="display:flex; align-items:center; gap:16px;">
-<div class="search-bar">
-<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="21.65"/></svg>
-<input type="text" id="search-input" placeholder="Поиск..." oninput="onSearchChange(this.value)">
-</div>
-<button class="btn btn-primary btn-sm" onclick="openCreateModal()" id="btn-create-top" style="white-space: nowrap;">+ Создать запрос</button>
-</div>
-<div class="user-info">
-<div class="test-mode-wrapper" id="test-mode-container" style="display:none;">
-<input type="checkbox" id="test-mode-toggle" onchange="toggleTestMode(this.checked)">
-<label for="test-mode-toggle" style="cursor:pointer;">Тест</label>
-</div>
-<div id="scenario-container" style="display:none; align-items:center; gap:8px; margin-left:8px;">
-<span style="color:var(--text-muted); font-size:12px; font-weight:600;">Сценарий:</span>
-<select id="scenario-select" class="role-viewer" onchange="changeScenario(this.value)" style="min-width:180px;">
-<option value="none">Обычный тест</option><option value="full">Полный проход</option><option value="upload">Тест загрузки счёта</option><option value="approval">Тест согласования</option>
-</select>
-</div>
-<div id="role-viewer-container" style="display:none; align-items:center; gap:8px;">
-<span style="color:var(--text-muted); font-size:12px; font-weight:600;">Просмотр:</span>
-<select id="role-viewer" class="role-viewer" onchange="simulateRole(this.value)">
-<option value="admin">Администратор</option><option value="econ">Экономист</option><option value="head">Руководитель</option><option value="manager">Менеджер</option><option value="employee">Сотрудник</option>
-</select>
-</div>
-<span id="user-display">Загрузка...</span>
-<button class="btn btn-icon" onclick="openAdminPanel()" id="btn-settings" style="display: none;" title="Настройки">
-<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-</button>
-<button class="btn btn-icon" onclick="loadAllData()" title="Обновить">
-<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
-</button>
-</div>
-</header>
-<main class="main-content">
-<div class="toolbar">
-<div class="toolbar-left">
-<div style="display:flex; align-items:center; gap:8px;">
-<span style="font-size:13px; font-weight:600; color:var(--text-muted);">Сортировка:</span>
-<select id="sort-select" class="sort-select" onchange="changeSort(this.value)">
-<option value="default">По умолчанию (Ручная)</option><option value="deadline_asc">По сроку (ближайшие)</option><option value="amount_desc">По сумме (большие)</option><option value="amount_asc">По сумме (меньшие)</option><option value="date_desc">По дате создания (новые)</option>
-</select>
-</div>
-<div class="view-toggle">
-<button class="view-btn active" id="view-btn-grid" onclick="switchView('grid')" title="Карточки">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-</button>
-<button class="view-btn" id="view-btn-table" onclick="switchView('table')" title="Таблица">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-</button>
-</div>
-</div>
-</div>
-<div id="app-container" class="notes-grid">
-<div class="loading" style="grid-column: 1/-1;">Загрузка данных...</div>
-</div>
-</main>
-</div>
-</div>
-<button class="fab-btn" onclick="openCreateModal()" title="Создать запрос">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-</button>
-<div id="modal-view" class="modal-overlay">
-<div class="modal" id="view-modal-content" style="max-width: 1000px;">
-<div class="modal-header"><h2 id="view-title">Детали закупки</h2><button onclick="closeModal('modal-view')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
-<div class="modal-body" id="view-body"></div>
-<div class="modal-footer"><button class="btn" onclick="closeModal('modal-view')">Закрыть</button></div>
-</div>
-</div>
-<div id="modal-create" class="modal-overlay">
-<div class="modal" id="create-modal-content" style="max-width: 1000px;">
-<div class="modal-header"><h2 id="create-modal-title">Создать запрос на закупку</h2><button onclick="closeModal('modal-create')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
-<form id="form-create" onsubmit="submitCreateRequest(event)">
-<div class="modal-body">
-<input type="hidden" id="edit-item-id">
-<div class="form-group"><label>Ответственный отдел *</label><select id="create-dept" required></select></div>
-<div class="form-group"><label>Крайний срок закупки *</label><input type="date" id="create-deadline" required></div>
-<div class="form-group"><label>Что нужно закупить (Кратко) *</label><input type="text" id="create-short-desc" required></div>
-<div class="form-row" style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
-<div class="form-group" style="flex:1; min-width:200px;"><label>Раздел направления расхода д/с *</label><select id="create-section" required onchange="updateDirectionsCreate()"></select></div>
-<div class="form-group" style="flex:1; min-width:200px;"><label>Направление расхода д/с *</label><select id="create-direction" required></select></div>
-</div>
-<div class="form-row" style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
-<div class="form-group" style="flex:1; min-width:200px;"><label>Сумма позиций (без доставки)</label><input type="number" id="create-amount-product" step="0.01" placeholder="0.00"></div>
-</div>
-<div class="form-section" style="background:#f8fafc; padding:16px; border-radius:8px; border:1px solid var(--border-color); margin-top:16px;">
-<label style="font-size:13px; font-weight:700; color:var(--brand-blue); margin-bottom:12px; display:block;">Детализация закупки</label>
-<div class="detail-table-wrapper">
-<table class="detail-table" id="detail-table">
-<thead><tr><th style="width: 25%;">Наименование</th><th style="width: 20%;">Цель использования</th><th style="width: 15%;">Цена за 1 шт</th><th style="width: 10%;">Количество</th><th style="width: 15%;">Всего</th><th style="width: 15%;">Ссылка</th><th style="width: 40px;"></th></tr></thead>
-<tbody id="detail-tbody"></tbody>
-</table>
-</div>
-<button type="button" class="btn btn-sm" onclick="addDetailRow()">+ Добавить строку</button>
-</div>
-</div>
-<div class="modal-footer">
-<button type="button" class="btn" onclick="closeModal('modal-create')">Отмена</button>
-<button type="submit" class="btn btn-primary" id="btn-save-create">Сохранить</button>
-</div>
-</form>
-</div>
-</div>
-<div id="modal-data" class="modal-overlay">
-<div class="modal" style="max-width: 1000px;">
-<div class="modal-header"><h2 id="data-modal-title">Сбор данных и расчет</h2><button onclick="closeModal('modal-data')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
-<form id="form-data" onsubmit="submitData(event)">
-<div class="modal-body">
-<input type="hidden" id="data-id">
-<div class="modal-summary">
-<div class="modal-summary-title" id="data-modal-title-inner">Закупка</div>
-<div class="modal-summary-desc" id="data-modal-desc">Описание</div>
-</div>
-<div style="background: #fff; border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; margin-bottom: 24px;">
-<h4 style="margin-top:0; margin-bottom:16px; font-size:15px; color:#334155;">Основные данные расчета</h4>
-<div class="form-row" style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:0;">
-<div class="form-group" style="flex:1; min-width:200px; margin-bottom:0;"><label>Сумма товаров (без доставки) *</label><input type="number" id="data-amount-product" required step="0.01" placeholder="0.00"></div>
-<div class="form-group" style="flex:1; min-width:200px; margin-bottom:0;"><label>Сумма доставки</label><input type="number" id="data-amount-delivery" step="0.01" placeholder="0.00"></div>
-</div>
-</div>
-<details class="admin-section" style="margin-bottom:0;">
-<summary>Детализация закупки (нажмите, чтобы развернуть и редактировать)</summary>
-<div class="section-content" style="background:#fff;">
-<div class="detail-table-wrapper">
-<table class="detail-table" id="data-detail-table">
-<thead><tr><th style="width: 25%;">Наименование товара</th><th style="width: 20%;">Цель использования</th><th style="width: 15%;">Цена за 1 шт. (без НДС)</th><th style="width: 10%;">Количество</th><th style="width: 15%;">Всего</th><th style="width: 15%;">Ссылка на товар</th><th style="width: 40px;"></th></tr></thead>
-<tbody id="data-detail-tbody"></tbody>
-</table>
-</div>
-<button type="button" class="btn btn-sm" onclick="addDataDetailRow()">+ Добавить строку</button>
-</div>
-</details>
-</div>
-<div class="modal-footer">
-<button type="button" class="btn" onclick="closeModal('modal-data')">Отмена</button>
-<button type="submit" class="btn btn-primary">Отправить на согласование</button>
-</div>
-</form>
-</div>
-</div>
-<div id="modal-edit-amount" class="modal-overlay">
-<div class="modal" style="max-width: 400px;">
-<div class="modal-header"><h2>Изменить сумму</h2><button onclick="closeModal('modal-edit-amount')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
-<form id="form-edit-amount" onsubmit="submitEditAmount(event)">
-<div class="modal-body">
-<input type="hidden" id="edit-amount-id">
-<div class="form-group"><label>Новая сумма товаров (без доставки) *</label><input type="number" id="edit-amount-value" step="0.01" required></div>
-</div>
-<div class="modal-footer">
-<button type="button" class="btn" onclick="closeModal('modal-edit-amount')">Отмена</button>
-<button type="submit" class="btn btn-primary">Сохранить</button>
-</div>
-</form>
-</div>
-</div>
-<div id="modal-upload" class="modal-overlay">
-<div class="modal">
-<div class="modal-header"><h2>Загрузка входящего счета</h2><button onclick="closeModal('modal-upload')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
-<form id="form-upload" onsubmit="submitUpload(event)">
-<div class="modal-body">
-<input type="hidden" id="upload-id">
-<div class="form-group"><label>Копия счета (файл) *</label><div class="file-upload-wrapper"><input type="file" id="upload-file" required style="display: none;" onchange="updateFileName(this)"><label for="upload-file" class="file-upload-label"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span id="file-name-display" class="file-name-display">Нажмите, чтобы выбрать файл</span></label></div></div>
-<div class="form-group"><label>Крайний срок оплаты *</label><input type="date" id="upload-deadline" required></div>
-</div>
-<div class="modal-footer">
-<button type="button" class="btn" onclick="closeModal('modal-upload')">Отмена</button>
-<button type="submit" class="btn btn-primary">Передать экономисту</button>
-</div>
-</form>
-</div>
-</div>
-<div id="modal-action" class="modal-overlay">
-<div class="modal">
-<div class="modal-header"><h2 id="action-title">Действие</h2><button onclick="closeModal('modal-action')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
-<form id="form-action" onsubmit="submitAction(event)">
-<div class="modal-body">
-<input type="hidden" id="action-id">
-<input type="hidden" id="action-type">
-<div class="form-group" id="action-postpone-group" style="display:none;"><label>Отложить до даты</label><input type="date" id="action-postpone-date" value=""><div style="font-size:11px; color:#64748b; margin-top:4px;">Если указана дата, закупка не будет передана дальше до её наступления.</div></div>
-<div class="form-group"><label id="action-comment-label">Комментарий</label><textarea id="action-comment" rows="3"></textarea></div>
-</div>
-<div class="modal-footer" id="action-footer-buttons"></div>
-</form>
-</div>
-</div>
-<div id="modal-delegate" class="modal-overlay">
-<div class="modal" style="max-width: 500px;">
-<div class="modal-header"><h2 id="delegate-title">Делегировать закупку</h2><button onclick="closeModal('modal-delegate')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
-<form id="form-delegate" onsubmit="submitDelegate(event)">
-<div class="modal-body">
-<input type="hidden" id="delegate-id">
-<div class="form-group"><label>Текущий исполнитель</label><input type="text" id="delegate-from" disabled style="background:#f1f5f9;"></div>
-<div class="form-group"><label>Отдел</label><input type="text" id="delegate-dept" disabled style="background:#f1f5f9;"></div>
-<div class="form-group"><label>Передать сотруднику *</label><select id="delegate-to" required></select></div>
-<div class="form-group"><label>Причина / комментарий</label><textarea id="delegate-note" rows="3" placeholder="Напр.: основной исполнитель в отпуске"></textarea></div>
-<div style="font-size:12px; color:#64748b; background:#fffbeb; border:1px solid #fcd34d; border-radius:6px; padding:10px;">История делегирований сохраняется в карточке закупки.</div>
-</div>
-<div class="modal-footer">
-<button type="button" class="btn" onclick="closeModal('modal-delegate')">Отмена</button>
-<button type="submit" class="btn btn-primary" id="btn-delegate-save">Делегировать</button>
-</div>
-</form>
-</div>
-</div>
-<div id="modal-executor" class="modal-overlay">
-  <div class="modal" style="max-width: 500px;">
-    <div class="modal-header">
-      <h2 id="executor-title">Выбор исполнителя</h2>
-      <button onclick="closeModal('modal-executor')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <a href="#" class="brand-text">АЛЬТЕРНАТИВА</a>
+      <div class="nav-tabs" id="tabs-container">
+        <button class="tab-btn active" data-tab="my_requests" onclick="switchTab('my_requests')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+          </svg>
+          Мои запросы
+        </button>
+        <button class="tab-btn" data-tab="inbox" onclick="switchTab('inbox')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+            <path
+              d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+          </svg>
+          Входящие (Действия)
+        </button>
+        <button class="tab-btn" data-tab="all" onclick="switchTab('all')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6" />
+            <line x1="8" y1="12" x2="21" y2="12" />
+            <line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="3.01" y2="6" />
+            <line x1="3" y1="12" x2="3.01" y2="12" />
+            <line x1="3" y1="18" x2="3.01" y2="18" />
+          </svg>
+          Все закупки
+        </button>
+      </div>
+    </aside>
+    <div class="main-wrapper">
+      <header class="topbar">
+        <div style="display:flex; align-items:center; gap:16px;">
+          <div class="search-bar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="21.65" />
+            </svg>
+            <input type="text" id="search-input" placeholder="Поиск..." oninput="onSearchChange(this.value)">
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openCreateModal()" id="btn-create-top"
+            style="white-space: nowrap;">+ Создать запрос</button>
+        </div>
+        <div class="user-info">
+          <div class="test-mode-wrapper" id="test-mode-container" style="display:none;">
+            <input type="checkbox" id="test-mode-toggle" onchange="toggleTestMode(this.checked)">
+            <label for="test-mode-toggle" style="cursor:pointer;">Тест</label>
+          </div>
+          <div id="scenario-container" style="display:none; align-items:center; gap:8px; margin-left:8px;">
+            <span style="color:var(--text-muted); font-size:12px; font-weight:600;">Сценарий:</span>
+            <select id="scenario-select" class="role-viewer" onchange="changeScenario(this.value)"
+              style="min-width:180px;">
+              <option value="none">Обычный тест</option>
+              <option value="full">Полный проход</option>
+              <option value="upload">Тест загрузки счёта</option>
+              <option value="approval">Тест согласования</option>
+            </select>
+          </div>
+          <div id="role-viewer-container" style="display:none; align-items:center; gap:8px;">
+            <span style="color:var(--text-muted); font-size:12px; font-weight:600;">Просмотр:</span>
+            <select id="role-viewer" class="role-viewer" onchange="simulateRole(this.value)">
+              <option value="admin">Администратор</option>
+              <option value="econ">Экономист</option>
+              <option value="head">Руководитель</option>
+              <option value="manager">Менеджер</option>
+              <option value="employee">Сотрудник</option>
+            </select>
+          </div>
+          <span id="user-display">Загрузка...</span>
+          <button class="btn btn-icon" onclick="openAdminPanel()" id="btn-settings" style="display: none;"
+            title="Настройки">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
+          <button class="btn btn-icon" onclick="loadAllData()" title="Обновить">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+              <path d="M21 3v5h-5" />
+            </svg>
+          </button>
+        </div>
+      </header>
+      <main class="main-content">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:13px; font-weight:600; color:var(--text-muted);">Сортировка:</span>
+              <select id="sort-select" class="sort-select" onchange="changeSort(this.value)">
+                <option value="default">По умолчанию (Ручная)</option>
+                <option value="deadline_asc">По сроку (ближайшие)</option>
+                <option value="amount_desc">По сумме (большие)</option>
+                <option value="amount_asc">По сумме (меньшие)</option>
+                <option value="date_desc">По дате создания (новые)</option>
+              </select>
+            </div>
+            <div class="view-toggle">
+              <button class="view-btn active" id="view-btn-grid" onclick="switchView('grid')" title="Карточки">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="7" height="7" />
+                  <rect x="14" y="3" width="7" height="7" />
+                  <rect x="14" y="14" width="7" height="7" />
+                  <rect x="3" y="14" width="7" height="7" />
+                </svg>
+              </button>
+              <button class="view-btn" id="view-btn-table" onclick="switchView('table')" title="Таблица">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="8" y1="6" x2="21" y2="6" />
+                  <line x1="8" y1="12" x2="21" y2="12" />
+                  <line x1="8" y1="18" x2="21" y2="18" />
+                  <line x1="3" y1="6" x2="3.01" y2="6" />
+                  <line x1="3" y1="12" x2="3.01" y2="12" />
+                  <line x1="3" y1="18" x2="3.01" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="app-container" class="notes-grid">
+          <div class="loading" style="grid-column: 1/-1;">Загрузка данных...</div>
+        </div>
+      </main>
     </div>
-    <form id="form-executor" onsubmit="submitExecutor(event)">
-      <div class="modal-body">
-        <input type="hidden" id="executor-id">
-        <input type="hidden" id="executor-task-id">
-        <div class="form-group">
-          <label>Закупка</label>
-          <input type="text" id="executor-desc" disabled style="background:#f1f5f9;">
-        </div>
-        <div class="form-group">
-          <label>Назначить исполнителем *</label>
-          <select id="executor-to" required></select>
-        </div>
-        <div style="font-size:12px; color:#64748b; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:10px;">
-          После утверждения задача будет автоматически закрыта, сотрудник станет менеджером закупки, и ему придёт уведомление о сборе данных.
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn" onclick="closeModal('modal-executor')">Отмена</button>
-        <button type="submit" class="btn btn-primary" id="btn-executor-save">Утвердить</button>
-      </div>
-    </form>
   </div>
-</div>
-<div id="modal-settings" class="modal-overlay">
-<div class="modal" style="max-width: 1000px;">
-<div class="modal-header"><h2>Настройки приложения</h2><button onclick="closeModal('modal-settings')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
-<div class="modal-body">
-<details class="admin-section" open>
-<summary>Основные настройки</summary>
-<div class="section-content">
-<div style="display:flex; gap:16px; margin-bottom: 16px;">
-<div class="form-group" style="flex:1;"><label>ID Смарт-процесса (Закупки)</label><input type="number" id="set-entityid" value="1072"></div>
-<div class="form-group" style="flex:1;"><label>ID Воронки (Category ID)</label><input type="number" id="set-categoryid" value="65"></div>
-</div>
-<div style="display:flex; gap:16px;">
-<div class="form-group" style="flex:1;"><label>ID Системного пользователя</label><input type="number" id="set-systemuserid" value="175"><div style="font-size:11px; color:#64748b; margin-top:4px;">От его имени отправляются уведомления.</div></div>
-<div class="form-group" style="flex:1;"><label>Client ID приложения</label><input type="text" id="set-clientid" placeholder="local.xxxxxxxxxx"><div style="font-size:11px; color:#64748b; margin-top:4px;">Из карточки интеграции портала.</div></div>
-<div class="form-group" style="flex:1;"><label>Client Secret (не обяз.)</label><input type="text" id="set-clientsecret" placeholder="xxxxxxxxxx"></div>
-</div>
-<div style="margin-top:16px; border-top:1px solid var(--border-color); padding-top:16px;">
-  <div class="form-group"><label>ID группового чата бота (не обяз.)</label><input type="text" id="set-chatid" placeholder="chat60875"><div style="font-size:11px; color:#64748b; margin-top:4px;">Если задан — бот использует этот чат. Иначе создаёт новый автоматически.</div></div>
-  <div class="form-group"><label>Код доп. поля статуса отсутствия (не обяз.)</label><input type="text" id="set-absence-field" placeholder="оставьте пустым для авто-детекта UF_ABSENCE"><div style="font-size:11px; color:#64748b; margin-top:4px;">По умолчанию отсутствие определяется из системного поля профиля UF_ABSENCE (пары дат). Доп. поле — опционально.</div></div>
-  <div class="form-group"><label>Значения доп. поля, означающие отсутствие</label><input type="text" id="set-absence-values" placeholder="отпуск,больничный,командировка"><div style="font-size:11px; color:#64748b; margin-top:4px;">Используется только если задано доп. поле выше.</div></div>
-</div>
-</div>
-</details>
-<details class="admin-section" open>
-<summary>Настройки дедлайнов</summary>
-<div class="section-content">
-<div style="display:flex; gap:16px;">
-<div class="form-group" style="flex:1;"><label>Дней до дедлайна для КРАСНОГО</label><input type="number" id="set-deadline-red" value="3" min="0"></div>
-<div class="form-group" style="flex:1;"><label>Дней до дедлайна для ЖЁЛТОГО</label><input type="number" id="set-deadline-yellow" value="7" min="0"></div>
-</div>
-</div>
-</details>
-<details class="admin-section" open>
-<summary>Поля CRM (статус)</summary>
-<div class="section-content">
-<p style="font-size:12px; color:#64748b; margin-bottom:10px;">Зелёная галочка — поле найдено. Красный крест — отсутствует.</p>
-<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
-<button type="button" class="btn btn-sm btn-primary" onclick="autoMapFields()">Автонастроить маппинг</button>
-<button type="button" class="btn btn-sm" onclick="autoFillHeadsFromB24()">Заполнить руководителей из Б24</button>
-<button type="button" class="btn btn-sm" onclick="createField('delegateHistory')">Создать поле «История делегирований»</button>
-<button type="button" class="btn btn-sm" onclick="createField('detailSupplier')">Создать поле «Поставщик»</button>
-<button type="button" class="btn btn-sm" onclick="runManualAbsenceCheck()" id="btn-absence-check">Проверить отсутствия сейчас</button>
-</div>
-<div id="fields-status-container"></div>
-</div>
-</details>
-<details class="admin-section" open>
-<summary>Недоступные сотрудники</summary>
-<div class="section-content">
-<p style="font-size:12px; color:#64748b; margin-bottom:10px;">Отметьте сотрудников в отпуске/на больничном (авто-детект по UF_ABSENCE).</p>
-<div id="unavailable-users-container" style="max-height:260px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; padding:8px;"></div>
-</div>
-</details>
-<details class="admin-section" open>
-<summary>Роли по отделам</summary>
-<div class="section-content" style="overflow-x: auto;">
-<table class="settings-table" id="dept-roles-table">
-<thead><tr><th>Отдел</th><th>Краткое имя</th><th>Выводить</th><th>Руководитель</th><th>Менеджер по ум.</th><th style="text-align:center;">Экономисты?</th></tr></thead>
-<tbody></tbody>
-</table>
-</div>
-</details>
-<details class="admin-section" open>
-<summary>Связи списков (Раздел → Направление)</summary>
-<div class="section-content">
-<p style="font-size:12px; color:#64748b; margin-bottom:10px;">Выберите направления для каждого раздела.</p>
-<div id="list-dependencies-container"></div>
-</div>
-</details>
-<details class="admin-section" open>
-<summary>Сопоставление полей CRM</summary>
-<div class="section-content"><div id="mapping-container"></div></div>
-</details>
-</div>
-<div class="modal-footer"><button class="btn btn-primary" onclick="saveSettings()">Сохранить</button></div>
-</div>
-</div>
-<div class="log-panel" id="log-panel">
-<div class="log-header" onclick="toggleLogPanel()"><span>Консоль логов</span><div class="log-header-actions"><button type="button" class="log-clear-btn" onclick="event.stopPropagation(); clearLogPanel()">Очистить</button><button type="button" class="log-close-btn" onclick="event.stopPropagation(); toggleLogPanel(false)" title="Закрыть">✕</button></div></div>
-<div class="log-content" id="log-content"></div>
-</div>
-<button class="btn-logs" onclick="toggleLogPanel()" title="Логи">
-<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-</button>
-<div id="toast" class="toast"></div>
-<script src="js/core/config.js"></script>
-<script src="js/core/state.js"></script>
-<script src="js/core/utils.js"></script>
-<script src="js/api/bot.js"></script>
-<script src="js/api/api.js"></script>
-<script src="js/api/cache.js"></script>
-<script src="js/logic/roles.js"></script>
-<script src="js/ui/dragdrop.js"></script>
-<script src="js/ui/render.js"></script>
-<script src="js/ui/modals.js"></script>
-<script src="js/ui/forms.js"></script>
-<script src="js/logic/actions.js"></script>
-<script src="js/logic/settings.js"></script>
-<script src="js/core/init.js"></script>
+  <button class="fab-btn" onclick="openCreateModal()" title="Создать запрос">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+      stroke-linejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  </button>
+  <div id="modal-view" class="modal-overlay">
+    <div class="modal" id="view-modal-content" style="max-width: 1000px;">
+      <div class="modal-header">
+        <h2 id="view-title">Детали закупки</h2><button onclick="closeModal('modal-view')"
+          style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
+      </div>
+      <div class="modal-body" id="view-body"></div>
+      <div class="modal-footer"><button class="btn" onclick="closeModal('modal-view')">Закрыть</button></div>
+    </div>
+  </div>
+  <div id="modal-create" class="modal-overlay">
+    <div class="modal" id="create-modal-content" style="max-width: 1000px;">
+      <div class="modal-header">
+        <h2 id="create-modal-title">Создать запрос на закупку</h2><button onclick="closeModal('modal-create')"
+          style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
+      </div>
+      <form id="form-create" onsubmit="submitCreateRequest(event)">
+        <div class="modal-body">
+          <input type="hidden" id="edit-item-id">
+
+          <!-- Блок 1: Основная информация -->
+          <div class="form-section-block">
+            <h4 class="form-section-title">Основная информация</h4>
+            <div class="form-group"><label>Ответственный отдел *</label><select id="create-dept" required></select>
+            </div>
+            <div class="form-row" style="display:flex; gap:16px; flex-wrap:wrap;">
+              <div class="form-group" style="flex:1; min-width:200px;"><label>Раздел направления расхода д/с
+                  *</label><select id="create-section" required onchange="updateDirectionsCreate()"></select></div>
+              <div class="form-group" style="flex:1; min-width:200px;"><label>Направление расхода д/с *</label><select
+                  id="create-direction" required></select></div>
+            </div>
+            <div class="form-group"><label>Что нужно закупить (Кратко) *</label><input type="text"
+                id="create-short-desc" required></div>
+          </div>
+
+          <!-- Блок 2: Детализация (сворачиваемый) -->
+          <details class="admin-section" style="margin-bottom:16px;">
+            <summary style="font-weight:700; color:var(--brand-blue);">Детализация закупки</summary>
+            <div class="section-content" style="background:#fff;">
+              <div class="detail-table-wrapper">
+                <table class="detail-table" id="detail-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 25%;">Наименование</th>
+                      <th style="width: 20%;">Цель использования</th>
+                      <th style="width: 15%;">Цена за 1 шт</th>
+                      <th style="width: 10%;">Количество</th>
+                      <th style="width: 15%;">Всего</th>
+                      <th style="width: 15%;">Ссылка</th>
+                      <th style="width: 40px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="detail-tbody"></tbody>
+                </table>
+              </div>
+              <button type="button" class="btn btn-sm" onclick="addDetailRow()">+ Добавить строку</button>
+            </div>
+          </details>
+
+          <!-- Блок 3: Сумма -->
+          <div class="form-section-block">
+            <h4 class="form-section-title">Сумма</h4>
+            <div class="form-group"><label>Сумма позиций (без доставки)</label><input type="number"
+                id="create-amount-product" step="0.01" placeholder="0.00"></div>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="closeModal('modal-create')">Отмена</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-create">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div id="modal-upload" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Загрузка входящего счета</h2><button onclick="closeModal('modal-upload')"
+          style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
+      </div>
+      <form id="form-upload" onsubmit="submitUpload(event)">
+        <div class="modal-body">
+          <input type="hidden" id="upload-id">
+          <div class="form-group"><label>Копия счета (файл) *</label>
+            <div class="file-upload-wrapper"><input type="file" id="upload-file" required style="display: none;"
+                onchange="updateFileName(this)"><label for="upload-file" class="file-upload-label"><svg width="32"
+                  height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg><span id="file-name-display" class="file-name-display">Нажмите, чтобы выбрать файл</span></label>
+            </div>
+          </div>
+          <div class="form-group"><label>Крайний срок оплаты *</label><input type="date" id="upload-deadline" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="closeModal('modal-upload')">Отмена</button>
+          <button type="submit" class="btn btn-primary">Передать экономисту</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div id="modal-action" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="action-title">Действие</h2><button onclick="closeModal('modal-action')"
+          style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
+      </div>
+      <form id="form-action" onsubmit="submitAction(event)">
+        <div class="modal-body">
+          <input type="hidden" id="action-id">
+          <input type="hidden" id="action-type">
+          <div class="form-group" id="action-postpone-group" style="display:none;"><label>Отложить до даты</label><input
+              type="date" id="action-postpone-date" value="">
+            <div style="font-size:11px; color:#64748b; margin-top:4px;">Если указана дата, закупка не будет передана
+              дальше до её наступления.</div>
+          </div>
+          <div class="form-group"><label id="action-comment-label">Комментарий</label><textarea id="action-comment"
+              rows="3"></textarea></div>
+        </div>
+        <div class="modal-footer" id="action-footer-buttons"></div>
+      </form>
+    </div>
+  </div>
+  <div id="modal-delegate" class="modal-overlay">
+    <div class="modal" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 id="delegate-title">Делегировать закупку</h2><button onclick="closeModal('modal-delegate')"
+          style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
+      </div>
+      <form id="form-delegate" onsubmit="submitDelegate(event)">
+        <div class="modal-body">
+          <input type="hidden" id="delegate-id">
+          <div class="form-group"><label>Текущий исполнитель</label><input type="text" id="delegate-from" disabled
+              style="background:#f1f5f9;"></div>
+          <div class="form-group"><label>Отдел</label><input type="text" id="delegate-dept" disabled
+              style="background:#f1f5f9;"></div>
+          <div class="form-group"><label>Передать сотруднику *</label><select id="delegate-to" required></select></div>
+          <div class="form-group"><label>Причина / комментарий</label><textarea id="delegate-note" rows="3"
+              placeholder="Напр.: основной исполнитель в отпуске"></textarea></div>
+          <div
+            style="font-size:12px; color:#64748b; background:#fffbeb; border:1px solid #fcd34d; border-radius:6px; padding:10px;">
+            История делегирований сохраняется в карточке закупки.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="closeModal('modal-delegate')">Отмена</button>
+          <button type="submit" class="btn btn-primary" id="btn-delegate-save">Делегировать</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div id="modal-executor" class="modal-overlay">
+    <div class="modal" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 id="executor-title">Выбор исполнителя</h2>
+        <button onclick="closeModal('modal-executor')"
+          style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
+      </div>
+      <form id="form-executor" onsubmit="submitExecutor(event)">
+        <div class="modal-body">
+          <input type="hidden" id="executor-id">
+          <input type="hidden" id="executor-task-id">
+          <div class="form-group">
+            <label>Закупка</label>
+            <input type="text" id="executor-desc" disabled style="background:#f1f5f9;">
+          </div>
+          <div class="form-group">
+            <label>Назначить исполнителем *</label>
+            <select id="executor-to" required></select>
+          </div>
+          <div
+            style="font-size:12px; color:#64748b; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:10px;">
+            После утверждения задача будет автоматически закрыта, сотрудник станет менеджером закупки, и ему придёт
+            уведомление о сборе данных.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="closeModal('modal-executor')">Отмена</button>
+          <button type="submit" class="btn btn-primary" id="btn-executor-save">Утвердить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div id="modal-settings" class="modal-overlay">
+    <div class="modal" style="max-width: 1000px;">
+      <div class="modal-header">
+        <h2>Настройки приложения</h2><button onclick="closeModal('modal-settings')"
+          style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
+      </div>
+      <div class="modal-body">
+        <details class="admin-section" open>
+          <summary>Основные настройки</summary>
+          <div class="section-content">
+            <div style="display:flex; gap:16px; margin-bottom: 16px;">
+              <div class="form-group" style="flex:1;"><label>ID Смарт-процесса (Закупки)</label><input type="number"
+                  id="set-entityid" value="1072"></div>
+              <div class="form-group" style="flex:1;"><label>ID Воронки (Category ID)</label><input type="number"
+                  id="set-categoryid" value="65"></div>
+            </div>
+            <div style="display:flex; gap:16px;">
+              <div class="form-group" style="flex:1;"><label>ID Системного пользователя</label><input type="number"
+                  id="set-systemuserid" value="175">
+                <div style="font-size:11px; color:#64748b; margin-top:4px;">От его имени отправляются уведомления.</div>
+              </div>
+              <div class="form-group" style="flex:1;"><label>Client ID приложения</label><input type="text"
+                  id="set-clientid" placeholder="local.xxxxxxxxxx">
+                <div style="font-size:11px; color:#64748b; margin-top:4px;">Из карточки интеграции портала.</div>
+              </div>
+              <div class="form-group" style="flex:1;"><label>Client Secret (не обяз.)</label><input type="text"
+                  id="set-clientsecret" placeholder="xxxxxxxxxx"></div>
+            </div>
+            <div style="margin-top:16px; border-top:1px solid var(--border-color); padding-top:16px;">
+              <div class="form-group"><label>ID группового чата бота (не обяз.)</label><input type="text"
+                  id="set-chatid" placeholder="chat60875">
+                <div style="font-size:11px; color:#64748b; margin-top:4px;">Если задан — бот использует этот чат. Иначе
+                  создаёт новый автоматически.</div>
+              </div>
+              <div class="form-group"><label>Код доп. поля статуса отсутствия (не обяз.)</label><input type="text"
+                  id="set-absence-field" placeholder="оставьте пустым для авто-детекта UF_ABSENCE">
+                <div style="font-size:11px; color:#64748b; margin-top:4px;">По умолчанию отсутствие определяется из
+                  системного поля профиля UF_ABSENCE (пары дат). Доп. поле — опционально.</div>
+              </div>
+              <div class="form-group"><label>Значения доп. поля, означающие отсутствие</label><input type="text"
+                  id="set-absence-values" placeholder="отпуск,больничный,командировка">
+                <div style="font-size:11px; color:#64748b; margin-top:4px;">Используется только если задано доп. поле
+                  выше.</div>
+              </div>
+            </div>
+          </div>
+        </details>
+        <details class="admin-section" open>
+          <summary>Настройки дедлайнов</summary>
+          <div class="section-content">
+            <div style="display:flex; gap:16px;">
+              <div class="form-group" style="flex:1;"><label>Дней до дедлайна для КРАСНОГО</label><input type="number"
+                  id="set-deadline-red" value="3" min="0"></div>
+              <div class="form-group" style="flex:1;"><label>Дней до дедлайна для ЖЁЛТОГО</label><input type="number"
+                  id="set-deadline-yellow" value="7" min="0"></div>
+            </div>
+          </div>
+        </details>
+        <details class="admin-section" open>
+          <summary>Поля CRM (статус)</summary>
+          <div class="section-content">
+            <p style="font-size:12px; color:#64748b; margin-bottom:10px;">Зелёная галочка — поле найдено. Красный крест
+              — отсутствует.</p>
+            <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-sm btn-primary" onclick="autoMapFields()">Автонастроить
+                маппинг</button>
+              <button type="button" class="btn btn-sm" onclick="autoFillHeadsFromB24()">Заполнить руководителей из
+                Б24</button>
+              <button type="button" class="btn btn-sm" onclick="createField('delegateHistory')">Создать поле «История
+                делегирований»</button>
+              <button type="button" class="btn btn-sm" onclick="createField('detailSupplier')">Создать поле
+                «Поставщик»</button>
+              <button type="button" class="btn btn-sm" onclick="runManualAbsenceCheck()"
+                id="btn-absence-check">Проверить отсутствия сейчас</button>
+            </div>
+            <div id="fields-status-container"></div>
+          </div>
+        </details>
+        <details class="admin-section" open>
+          <summary>Недоступные сотрудники</summary>
+          <div class="section-content">
+            <p style="font-size:12px; color:#64748b; margin-bottom:10px;">Отметьте сотрудников в отпуске/на больничном
+              (авто-детект по UF_ABSENCE).</p>
+            <div id="unavailable-users-container"
+              style="max-height:260px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; padding:8px;">
+            </div>
+          </div>
+        </details>
+        <details class="admin-section" open>
+          <summary>Роли по отделам</summary>
+          <div class="section-content" style="overflow-x: auto;">
+            <table class="settings-table" id="dept-roles-table">
+              <thead>
+                <tr>
+                  <th>Отдел</th>
+                  <th>Краткое имя</th>
+                  <th>Выводить</th>
+                  <th>Руководитель</th>
+                  <th>Менеджер по ум.</th>
+                  <th style="text-align:center;">Экономисты?</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </details>
+        <details class="admin-section" open>
+          <summary>Связи списков (Раздел → Направление)</summary>
+          <div class="section-content">
+            <p style="font-size:12px; color:#64748b; margin-bottom:10px;">Выберите направления для каждого раздела.</p>
+            <div id="list-dependencies-container"></div>
+          </div>
+        </details>
+        <details class="admin-section" open>
+          <summary>Сопоставление полей CRM</summary>
+          <div class="section-content">
+            <div id="mapping-container"></div>
+          </div>
+        </details>
+      </div>
+      <div class="modal-footer"><button class="btn btn-primary" onclick="saveSettings()">Сохранить</button></div>
+    </div>
+  </div>
+  <div class="log-panel" id="log-panel">
+    <div class="log-header" onclick="toggleLogPanel()"><span>Консоль логов</span>
+      <div class="log-header-actions"><button type="button" class="log-clear-btn"
+          onclick="event.stopPropagation(); clearLogPanel()">Очистить</button><button type="button"
+          class="log-close-btn" onclick="event.stopPropagation(); toggleLogPanel(false)" title="Закрыть">✕</button>
+      </div>
+    </div>
+    <div class="log-content" id="log-content"></div>
+  </div>
+  <button class="btn-logs" onclick="toggleLogPanel()" title="Логи">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  </button>
+  <div id="toast" class="toast"></div>
+  <script src="js/core/config.js"></script>
+  <script src="js/core/state.js"></script>
+  <script src="js/core/utils.js"></script>
+  <script src="js/api/bot.js"></script>
+  <script src="js/api/api.js"></script>
+  <script src="js/api/cache.js"></script>
+  <script src="js/logic/roles.js"></script>
+  <script src="js/ui/dragdrop.js"></script>
+  <script src="js/ui/render.js"></script>
+  <script src="js/ui/modals.js"></script>
+  <script src="js/ui/forms.js"></script>
+  <script src="js/logic/actions.js"></script>
+  <script src="js/logic/settings.js"></script>
+  <script src="js/core/init.js"></script>
 </body>
+
 </html>

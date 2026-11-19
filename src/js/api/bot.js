@@ -100,19 +100,21 @@ function getGroupChatId(botId, cb) {
   });
 }
 
+// ✅ Добавление пользователя в чат — ошибка не фатальная, продолжаем
 function addUserToGroupChat(botId, chatId, userId, cb) {
   cb = cb || function () {};
   if (!chatId || !userId) return cb();
   BX24.callMethod('imbot.v2.Chat.user.add', { botId: botId, dialogId: chatId, userIds: [parseInt(userId)] }, function (res) {
     if (res.error()) {
-      if (/already|exist|member/i.test(describeError(res).toLowerCase())) return cb();
-      logAction('Ошибка добавления пользователя ' + userId + ' в чат: ' + describeError(res), 'error');
-    } else logAction('Пользователь ' + userId + ' добавлен в групповой чат', 'success');
-    cb();
+      // Пользователь может быть уже в чате — не считаем ошибкой
+      logAction('Добавление пользователя ' + userId + ' в чат: ' + describeError(res) + ' (продолжаем)', 'info');
+    } else {
+      logAction('Пользователь ' + userId + ' добавлен в групповой чат', 'success');
+    }
+    cb(); // Всегда продолжаем
   });
 }
 
-// ✅ Кнопки в ОДИН ряд: keyboard = [[btn1, btn2, ...]]
 function buildKeyboard(links) {
   const btns = (links || []).filter(function (l) { return l && l.url; }).map(function (l) {
     return { TEXT: l.text, LINK: l.url, BG_COLOR_TOKEN: 'primary' };
@@ -147,6 +149,7 @@ function sendToPersonalChat(botId, userId, title, message, links, cb) {
   });
 }
 
+// ✅ Только бот в чате, без im.notify
 function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
   if (dedupePass(fullKey)) { if (cb) cb(true); return; }
@@ -156,8 +159,10 @@ function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
       if (!chatId) { logAction('Не удалось получить ID группового чата', 'error'); if (cb) cb(false); return; }
       addUserToGroupChat(botId, chatId, userId, function () {
         botSendToGroup(botId, chatId, title, message, links, function (ok) {
-          if (!ok) { logAction('Fallback: личный чат', 'info'); sendToPersonalChat(botId, userId, title, message, links, cb); }
-          else if (cb) cb(true);
+          if (!ok) {
+            logAction('Fallback: личный чат', 'info');
+            sendToPersonalChat(botId, userId, title, message, links, cb);
+          } else if (cb) cb(true);
         });
       });
     });

@@ -77,11 +77,8 @@ function resolveCombinedDir(item) {
   return text;
 }
 
-function getMgrInfo(item) {
-  const mgrId = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager][0] : (item[actualFields.manager] || '');
-  const name = mgrId ? (userNames[mgrId] || mgrId) : '—';
-  const dept = mgrId ? (userDepts[mgrId] || '—') : '—';
-  return { id: mgrId, name, dept };
+function getShortDesc(item) {
+  try { return (typeof cleanText === 'function' ? cleanText(item[actualFields.shortDesc]) : (item[actualFields.shortDesc] || '')) || item.title || '—'; } catch (e) { return item.title || '—'; }
 }
 
 function getCreatorInfo(item) {
@@ -91,16 +88,17 @@ function getCreatorInfo(item) {
   return { id: realId, name: (realId && (userNames[realId] || realId)) || '—', dept: (realId && userDepts[realId]) || '—' };
 }
 
-function getShortDesc(item) {
-  try { return (typeof cleanText === 'function' ? cleanText(item[actualFields.shortDesc]) : (item[actualFields.shortDesc] || '')) || item.title || '—'; } catch (e) { return item.title || '—'; }
+function getMgrInfo(item) {
+  const mgrId = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager][0] : (item[actualFields.manager] || '');
+  const name = mgrId ? (userNames[mgrId] || mgrId) : '—';
+  const dept = mgrId ? (userDepts[mgrId] || '—') : '—';
+  return { id: mgrId, name, dept };
 }
 
-// ✅ Единый заголовок: "{kind} (Закупка отделом {deptShort} №{id} от {date})"
 function buildTitle(kind, item) {
   return kind + ' (Закупка отделом ' + getDeptShort(item) + ' №' + item.id + ' от ' + formatCreatedDate(item.createdTime) + ')';
 }
 
-// ✅ Единый порядок тела: Срок, Раздел/Направление, Что закупить, [Менеджер], Кто создал, Сумма, Комментарий, Файл
 function buildBody(item, opts) {
   opts = opts || {};
   const lines = [];
@@ -138,20 +136,11 @@ function resolveDeptHeadId(item, respectTestMode) {
   return null;
 }
 
+// ✅ Только бот, без im.notify
 function sendBotNotification(userId, title, message, links, cb, dedupeBase) {
-  notifyUserViaBot(userId, title, message, links, function (success) {
-    if (!success) {
-      logAction('Fallback: im.notify', 'info');
-      const firstLink = (links && links[0] && links[0].url) ? links[0].url : '';
-      BX24.callMethod('im.notify', { to: userId, message: title + '\n' + message, type: 'SYSTEM', link: firstLink, button_text: firstLink ? 'Открыть' : '' }, function (r) {
-        if (r.error()) logAction('im.notify (ID ' + userId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
-      });
-    }
-    if (cb) cb(success);
-  }, dedupeBase);
+  notifyUserViaBot(userId, title, message, links, cb, dedupeBase);
 }
 
-// ✅ Выбор исполнителя: кнопки Выбрать исполнителя, Открыть задачу, Открыть закупку №id
 function notifySelectExecutor(userId, item, taskId) {
   userId = parseInt(userId);
   if (!userId || !item) return;
@@ -187,13 +176,7 @@ function notifyApprovalNeeded(headId, item) {
     { text: '❌ Отклонить', url: buildAppLink('reject', item.id, 'inbox') },
     { text: '📋 Открыть закупку №' + item.id, url: buildAppLink('view', item.id, 'inbox') }
   ].filter(l => l.url);
-  notifyUserViaBot(headId, title, message, links, function (success) {
-    if (!success) {
-      BX24.callMethod('im.notify', { to: headId, message: title + '\n' + message, type: 'SYSTEM', link: buildAppLink('approve', item.id, 'inbox'), button_text: 'Согласовать' }, function (r) {
-        if (r.error()) logAction('im.notify (ID ' + headId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
-      });
-    }
-  }, 'approval_' + item.id);
+  notifyUserViaBot(headId, title, message, links, null, 'approval_' + item.id);
 }
 
 function notifyReworkNeeded(managerId, item, reworkComment) {
@@ -203,9 +186,7 @@ function notifyReworkNeeded(managerId, item, reworkComment) {
   const body = buildBody(item, {});
   const message = greetUser(managerId) + '\n\n' + body + (reworkComment ? '\n[B]Комментарий:[/B] ' + reworkComment : '');
   const links = [{ text: '🔧 Исправить данные', url: buildAppLink('fill', item.id, 'inbox') }].filter(l => l.url);
-  notifyUserViaBot(managerId, title, message, links, function (success) {
-    if (!success) BX24.callMethod('im.notify', { to: managerId, message: title + '\n' + message, type: 'SYSTEM', link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : '' }, function () {});
-  }, 'rework_' + item.id);
+  notifyUserViaBot(managerId, title, message, links, null, 'rework_' + item.id);
 }
 
 function notifyAfterDecision(managerId, item, approved) {
@@ -215,16 +196,12 @@ function notifyAfterDecision(managerId, item, approved) {
     const title = buildTitle('Условия согласованы', item);
     const message = greetUser(managerId) + '\n\n' + buildBody(item, { sum: true, sumSplit: true });
     const links = [{ text: '📄 Загрузить счёт', url: buildAppLink('upload', item.id, 'inbox') }].filter(l => l.url);
-    notifyUserViaBot(managerId, title, message, links, function (success) {
-      if (!success) BX24.callMethod('im.notify', { to: managerId, message: title + '\n' + message, type: 'SYSTEM', link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : '' }, function () {});
-    }, 'decision_' + item.id + '_ok');
+    notifyUserViaBot(managerId, title, message, links, null, 'decision_' + item.id + '_ok');
   } else {
     const title = buildTitle('Закупка отклонена', item);
     const message = greetUser(managerId) + '\n\n' + buildBody(item, { comment: true });
     const links = [{ text: '📋 Открыть закупку №' + item.id, url: buildAppLink('view', item.id, 'inbox') }].filter(l => l.url);
-    notifyUserViaBot(managerId, title, message, links, function (success) {
-      if (!success) BX24.callMethod('im.notify', { to: managerId, message: title + '\n' + message, type: 'SYSTEM', link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : '' }, function () {});
-    }, 'decision_' + item.id + '_no');
+    notifyUserViaBot(managerId, title, message, links, null, 'decision_' + item.id + '_no');
   }
 }
 
@@ -242,7 +219,6 @@ function notifyDataChangedOnApproval(econId, item) {
   notifyUserViaBot(econId, title, message, links, null, 'data_changed_' + item.id + '_' + Date.now());
 }
 
-// ✅ Счёт загружен → согласующему: Утвердить/Отклонить/Открыть
 function notifyInvoiceUploaded(econId, item) {
   econId = parseInt(econId);
   if (!econId || !item) return;
@@ -256,12 +232,10 @@ function notifyInvoiceUploaded(econId, item) {
   notifyUserViaBot(econId, title, message, links, null, 'inv_upload_' + item.id);
 }
 
-// ✅ События по счёту: approved→(Подтвердить оплату), paid→(Подтвердить получение), rejected→(Исправить)
 function notifyInvoiceEvent(item, kind) {
   if (!item) return;
   const mgrArr = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []);
   const mgrId = mgrArr.length ? parseInt(mgrArr[0]) : null;
-  const econId = resolveDeptHeadId(item, true);
   const headId = parseInt(item.createdBy) || null;
   const map = {
     approved: { kind: 'Счёт на оплату утверждён', to: [mgrId], links: [
@@ -309,7 +283,6 @@ function refreshUnavailableUsersForce(done) {
   runAbsenceCheck(done);
 }
 
-// ✅ Отсутствие из системного поля UF_ABSENCE (пары дат) + опционально кастомное поле
 function runAbsenceCheck(done) {
   done = done || function () {};
   const customField = (settings.absenceField || '').trim();
