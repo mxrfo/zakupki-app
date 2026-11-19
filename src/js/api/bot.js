@@ -70,17 +70,15 @@ let botInFlight = false;
 let botQueue = [];
 function drainBotQueue(id) { const q = botQueue.slice(); botQueue = []; q.forEach(function (cb) { cb(id); }); }
 
+// ✅ ИСПРАВЛЕНО: imbot.v2.Bot.register принимает параметры НАПРЯМУЮ, без обёртки fields
 function registerBotNew(cb) {
   const handler = getBotHandlerUrl();
   logAction('Регистрация бота (v2)... handler=' + handler, 'info');
   BX24.callMethod('imbot.v2.Bot.register', {
-    fields: {
-      code: BOT_CODE,
-      type: 'bot',
-      eventMode: 'fetch',
-      handler: handler,
-      properties: { name: BOT_NAME, workPosition: 'Система уведомлений по закупкам' }
-    }
+    CODE: BOT_CODE,
+    TYPE: 'bot',
+    EVENT_HANDLER: handler,
+    PROPERTIES: { NAME: BOT_NAME, WORK_POSITION: 'Система уведомлений по закупкам' }
   }, (res) => {
     if (res.error()) {
       const errStr = describeError(res);
@@ -120,7 +118,7 @@ function registerBotV1(cb) {
 }
 
 function findBotViaList(done) {
-  BX24.callMethod('imbot.v2.Bot.list', { fields: {} }, function (res) {
+  BX24.callMethod('imbot.v2.Bot.list', {}, function (res) {
     if (res.error()) { logAction('imbot.v2.Bot.list: ' + describeError(res), 'info'); return done(null); }
     const d = res.data();
     const arr = (d && (d.result || d)) || [];
@@ -172,24 +170,22 @@ let chatInFlight = false;
 let chatQueue = [];
 function drainChatQueue(id) { const q = chatQueue.slice(); chatQueue = []; q.forEach(function (cb) { cb(id); }); }
 
-// ✅ Чат создаётся СРАЗУ с получателем внутри (userIds:[seedUserId]).
-// Пустой чат портал сейчас отбивает UNKNOWN'ом. Если userIds не прокатил —
-// пробуем users:[seed], затем пустой чат.
+// ✅ ИСПРАВЛЕНО: imbot.v2.Chat.add принимает параметры НАПРЯМУЮ: botId, users, name
 function createGroupChat(botId, seedUserId, cb) {
   const uid = parseInt(seedUserId) || 0;
   const variants = [];
   if (uid) {
-    variants.push({ title: GROUP_CHAT_TITLE, userIds: [uid] });
-    variants.push({ title: GROUP_CHAT_TITLE, users: [uid] });
+    variants.push({ botId: botId, users: [uid], name: GROUP_CHAT_TITLE });
+    variants.push({ botId: botId, users: [uid], title: GROUP_CHAT_TITLE }); // на случай разных версий API
   }
-  variants.push({ title: GROUP_CHAT_TITLE, userIds: [] });
+  variants.push({ botId: botId, users: [], name: GROUP_CHAT_TITLE });
 
   let idx = 0;
   function tryVariant() {
     if (idx >= variants.length) { logAction('Все варианты создания чата не сработали', 'error'); return cb(null); }
     const payload = variants[idx++];
     logAction('Создание чата (' + JSON.stringify(payload) + ')...', 'info');
-    BX24.callMethod('imbot.v2.Chat.add', { botId: botId, fields: payload }, (res) => {
+    BX24.callMethod('imbot.v2.Chat.add', payload, (res) => {
       if (res.error()) {
         logAction('imbot.v2.Chat.add (' + describeError(res) + ') — пробуем следующий вариант', 'info');
         return tryVariant();
@@ -221,6 +217,7 @@ function getGroupChatId(botId, seedUserId, cb) {
   });
 }
 
+// ✅ ИСПРАВЛЕНО: imbot.v2.Chat.user.add принимает botId, dialogId, userIds
 function addUserToGroupChat(botId, chatId, userId, cb) {
   cb = cb || function () {};
   if (!chatId || !userId) return cb();
@@ -245,10 +242,13 @@ function buildKeyboard(links) {
   return btns.length ? [btns] : [];
 }
 
+// ✅ ИСПРАВЛЕНО: imbot.v2.Chat.Message.send принимает параметры НАПРЯМУЮ: botId, dialogId, message, keyboard
 function botSendToGroup(botId, chatId, title, message, links, cb) {
   BX24.callMethod('imbot.v2.Chat.Message.send', {
-    botId: botId, dialogId: chatId,
-    fields: { message: '[B]' + title + '[/B]\n' + message, keyboard: buildKeyboard(links) }
+    botId: botId,
+    dialogId: chatId,
+    message: '[B]' + title + '[/B]\n' + message,
+    keyboard: buildKeyboard(links)
   }, (res) => {
     if (res.error()) { logAction('Ошибка отправки в чат ' + chatId + ': ' + describeError(res), 'error'); if (cb) cb(false); return; }
     logAction('Сообщение отправлено в чат ' + chatId, 'success');
@@ -276,7 +276,6 @@ function resetAutoChat() {
 }
 
 // ✅ Основной поток: чат создаётся сразу с получателем → пользователь участник → send работает.
-// Если сохранённый chatId битый — один раз пересоздаём чат (с новым получателем) и повторяем.
 function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
   if (dedupePass(fullKey)) { if (cb) cb(true); return; }
