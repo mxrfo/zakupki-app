@@ -16,7 +16,7 @@ function setLoadingStep(step, total) {
 function showNoAuthError() {
   const container = document.getElementById('app-container');
   if (!container) return;
-  container.innerHTML = `<div class="error-box" style="text-align:center; padding:32px; max-width:560px; margin:0 auto;"><h3 style="margin-top:0;">Откройте приложение через портал Битрикс24</h3><p style="line-height:1.5;">Вы перешли по прямой ссылке на файл приложения (домен <code>cdn-*.bitrix24.ru</code>). В этом режиме нет авторизации портала.</p><p style="line-height:1.5;">Откройте приложение из левого меню портала, либо нажмите на уведомление бота.</p><button class="btn btn-primary" onclick="tryRedirectToPortal()" style="margin-top:8px;">Перейти в Битрикс24</button></div>`;
+  container.innerHTML = `<div class="error-box" style="text-align:center; padding:32px; max-width:560px; margin:0 auto;"><h3 style="margin-top:0;">Откройте приложение через портал Битрикс24</h3><p style="line-height:1.5;">Вы перешли по прямой ссылке на файл приложения (домен <code>cdn-*.bitrix24.ru</code>). В этом режиме нет авторизации портала.</p><button class="btn btn-primary" onclick="tryRedirectToPortal()" style="margin-top:8px;">Перейти в Битрикс24</button></div>`;
   logAction('BX24.init не выполнился — приложение открыто без авторизации портала', 'error');
 }
 
@@ -33,65 +33,73 @@ function getClientId() {
   return (settings.clientId || '').trim();
 }
 
-function getCurrentHandlerUrl() {
-  return window.location.href.split('?')[0].split('#')[0];
-}
+function getCurrentHandlerUrl() { return window.location.href.split('?')[0].split('#')[0]; }
 
 function ensureAppPlacement() {
   const current = getCurrentHandlerUrl();
   const saved = (settings.lastHandlerUrl || '').trim();
-  logAction('Текущий путь обработчика (из iframe): ' + current, 'info');
 
-  function doBind() {
-    BX24.callMethod('placement.bind', { PLACEMENT: 'REST_APP_URI', HANDLER: current, TITLE: 'Закупки' }, function (bindRes) {
-      if (bindRes.error()) {
-        const errStr = getApiErrorMessage(bindRes);
-        if (/already|binded/i.test(errStr)) logAction('placement.bind: handler уже привязан', 'info');
-        else if (/UNKNOWN/i.test(errStr)) logAction('placement.bind: UNKNOWN — право "placement" не активно в токене. Убедитесь, что вы открыли приложение ИМЕННО ИЗ ЛЕВОГО МЕНЮ ПОРТАЛА, а не по прямой ссылке. Если из меню — снимите и заново поставьте галку placement в Интеграциях и сохраните.', 'error');
-        else logAction('placement.bind: ' + errStr, 'error');
-      } else {
-        logAction('placement.bind: виджет REST_APP_URI успешно зарегистрирован на: ' + current, 'success');
-      }
-      settings.lastHandlerUrl = current;
-      saveSettingsToBoth();
-    });
+  if (saved === current && saved !== '') {
+    logAction('placement.bind: handler не изменился, пропускаем', 'info');
+    return;
   }
 
-  if (saved && saved !== current) {
-    logAction('Обнаружен старый handler: ' + saved + ' → удаляю привязку', 'info');
+  if (saved !== '') {
+    logAction('placement.unbind: удаляю старый handler ' + saved, 'info');
     BX24.callMethod('placement.unbind', { PLACEMENT: 'REST_APP_URI', HANDLER: saved }, function (unbindRes) {
       if (unbindRes.error() && !/not found|not binded|UNKNOWN/i.test(getApiErrorMessage(unbindRes))) {
         logAction('placement.unbind: ' + getApiErrorMessage(unbindRes), 'error');
       }
-      doBind();
+      bindNewPlacement(current);
     });
   } else {
-    logAction('Handler не изменился или первый запуск — привязываю: ' + current, 'info');
-    doBind();
+    bindNewPlacement(current);
   }
 }
 
-function autoMapFields() {
-  const fd = window.fieldDefs || {};
-  const mapping = settings.mapping || {};
-  let changed = false;
-  const searchTerms = {
-    comment: ['комментарий', 'comment'], detailPrice: ['цена за 1', 'цена за единицу', 'price'],
-    manager: ['менеджер отдела', 'исполнитель', 'manager'], deptHead: ['руководитель отдела', 'dept head', 'head'],
-    taskVyborSotr: ['задача по выбору', 'vybor', 'выбор сотрудника'], taskSbor: ['задача по сбору', 'sbor', 'сбор данных'],
-    taskZagruz: ['задача по загрузке', 'zagruz', 'загрузка счёта'], delegateHistory: ['делегирован', 'delegate', 'история делегирований']
-  };
-  for (const key in searchTerms) {
-    if (!mapping[key] || mapping[key] === '') {
-      for (const fieldCode in fd) {
-        const title = (fd[fieldCode].title || '').toLowerCase();
-        let hit = false;
-        for (const term of searchTerms[key]) { if (title.includes(term.toLowerCase())) { hit = true; break; } }
-        if (hit) { mapping[key] = fieldCode; changed = true; logAction(`Авто-маппинг: ${key} → ${fieldCode} (${fd[fieldCode].title})`, 'info'); break; }
+function bindNewPlacement(current) {
+  logAction('placement.bind: привязываю новый handler ' + current, 'info');
+  BX24.callMethod('placement.bind', {
+    PLACEMENT: 'REST_APP_URI',
+    HANDLER: current,
+    TITLE: 'Закупки'
+  }, function (bindRes) {
+    if (bindRes.error()) {
+      const errStr = getApiErrorMessage(bindRes);
+      if (/already|binded/i.test(errStr)) {
+        logAction('placement.bind: уже зарегистрирован', 'info');
+      } else if (/UNKNOWN/i.test(errStr)) {
+        logAction('placement.bind: UNKNOWN — проверьте право "placement" в Интеграциях и пересохраните приложение', 'error');
+      } else {
+        logAction('placement.bind: ' + errStr, 'error');
       }
+    } else {
+      logAction('placement.bind: успешно зарегистрирован', 'success');
     }
+    settings.lastHandlerUrl = current;
+    saveSettingsToBoth();
+  });
+}
+
+function syncClientIdAndBuild() {
+  const liveId = getClientId();
+  const savedId = (settings.clientId || '').trim();
+  if (liveId && liveId !== savedId) {
+    logAction('client_id обновлён: ' + (savedId || '—') + ' → ' + liveId, 'info');
+    settings.clientId = liveId;
+  } else if (!liveId) {
+    logAction('⚠ client_id недоступен. Впишите его вручную в ⚙ Настройки → "Client ID приложения".', 'error');
   }
-  if (changed) { settings.mapping = mapping; saveSettingsToBoth(); }
+
+  const savedBuild = (settings.lastBuildId || '').trim();
+  if ((savedBuild && savedBuild !== APP_BUILD_ID) || !savedBuild) {
+    logAction('Обнаружено обновление архива (' + (savedBuild || 'первый запуск') + ' → ' + APP_BUILD_ID + '). Сбрасываю кэш бота.', 'info');
+    try { if (typeof clearBotCache === 'function') clearBotCache(); } catch (e) {}
+    settings.lastBuildId = APP_BUILD_ID;
+    saveSettingsToBoth();
+  } else if (liveId && liveId !== savedId) {
+    saveSettingsToBoth();
+  }
 }
 
 function loadSettingsWithFallback() {
@@ -125,21 +133,6 @@ function saveSettingsToBoth() {
   });
 }
 
-function syncClientIdAndBuild() {
-  const liveId = getClientId();
-  const savedId = (settings.clientId || '').trim();
-  if (liveId && liveId !== savedId) { logAction('client_id обновлён: ' + (savedId || '—') + ' → ' + liveId, 'info'); settings.clientId = liveId; saveSettingsToBoth(); }
-  else if (!liveId) { logAction('⚠ client_id недоступен. Впишите его вручную: ⚙ Настройки → "Client ID приложения" → значение из карточки интеграции → Сохранить.', 'error'); }
-
-  const savedBuild = (settings.lastBuildId || '').trim();
-  if ((savedBuild && savedBuild !== APP_BUILD_ID) || !savedBuild) {
-    logAction('Обнаружено обновление архива (' + (savedBuild || 'первый запуск') + ' → ' + APP_BUILD_ID + '). Сбрасываю кэш бота.', 'info');
-    try { if (typeof clearBotCache === 'function') clearBotCache(); } catch (e) {}
-    settings.lastBuildId = APP_BUILD_ID;
-    saveSettingsToBoth();
-  }
-}
-
 function init() {
   logAction('Инициализация приложения... build=' + APP_BUILD_ID, 'info');
   setLoadingStep(0, 5);
@@ -151,7 +144,10 @@ function init() {
   }
 
   let inited = false;
-  const initTimeout = setTimeout(function () { if (inited) return; showNoAuthError(); }, 8000);
+  const initTimeout = setTimeout(function () {
+    if (inited) return;
+    showNoAuthError();
+  }, 8000);
 
   BX24.init(() => {
     inited = true;
@@ -185,7 +181,9 @@ function init() {
           if (settings.mapping.shortDesc === 'ufCrm17_1792761268') { settings.mapping.shortDesc = DEFAULT_MAPPING.shortDesc; mappingMigrated = true; }
           if (settings.mapping.postponeDate === 'ufCrm17_1793859756') { settings.mapping.postponeDate = DEFAULT_MAPPING.postponeDate; mappingMigrated = true; }
           if (settings.mapping.detailPrice === 'ufCrm17_price_ed') { settings.mapping.detailPrice = DEFAULT_MAPPING.detailPrice; mappingMigrated = true; }
-          ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory'].forEach(k => { if (!settings.mapping[k]) { settings.mapping[k] = DEFAULT_MAPPING[k]; mappingMigrated = true; } });
+          ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory'].forEach(k => {
+            if (!settings.mapping[k]) { settings.mapping[k] = DEFAULT_MAPPING[k]; mappingMigrated = true; }
+          });
         }
         if (mappingMigrated) { logAction('Миграция маппинга выполнена', 'info'); saveSettingsToBoth(); }
 
@@ -218,7 +216,12 @@ function init() {
           } catch (e) { console.warn('Ошибка чтения кэша', e); }
         }
 
-        if (useCache) { applyActualFieldsFromMapping(); autoMapFields(); checkUserRoles(); setLoadingStep(5, 5); loadAllData(); return; }
+        if (useCache) {
+          applyActualFieldsFromMapping();
+          checkUserRoles();
+          refreshUnavailableUsers(function() { setLoadingStep(5, 5); loadAllData(); });
+          return;
+        }
 
         logAction('Загрузка свежих полей и справочников...', 'info');
         setLoadingStep(3, 5);
@@ -232,7 +235,7 @@ function init() {
         }, (metaRes) => {
           setLoadingStep(4, 5);
           if (metaRes.uCurrent && !metaRes.uCurrent.error() && metaRes.uCurrent.data().length > 0) currentUser.UF_DEPARTMENT = metaRes.uCurrent.data()[0].UF_DEPARTMENT;
-          if (metaRes.fields && !metaRes.fields.error()) { fieldDefs = metaRes.fields.data().fields; applyActualFieldsFromMapping(); autoMapFields(); logAction('Поля успешно обновлены', 'success'); }
+          if (metaRes.fields && !metaRes.fields.error()) { fieldDefs = metaRes.fields.data().fields; applyActualFieldsFromMapping(); logAction('Поля успешно обновлены', 'success'); }
           if (metaRes.statuses && !metaRes.statuses.error()) {
             spStages = {}; spStagesSorted = [];
             const prefix = `DT${ENTITY_TYPE_ID}_${currentCategoryId}:`;
@@ -256,10 +259,10 @@ function init() {
             }
             logAction(`Загружено пользователей: ${allUsers.length} (все активные)`, 'info');
           }
+
           saveToCacheWithTimestamp();
           checkUserRoles();
-          setLoadingStep(5, 5);
-          loadAllData();
+          refreshUnavailableUsers(function() { setLoadingStep(5, 5); loadAllData(); });
         });
       });
     });

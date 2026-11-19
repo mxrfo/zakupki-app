@@ -10,6 +10,8 @@ function openAdminPanel() {
     document.getElementById('set-clientid').value = settings.clientId || '';
     document.getElementById('set-clientsecret').value = settings.clientSecret || '';
     document.getElementById('set-chatid').value = settings.chatId || '';
+    document.getElementById('set-absence-field').value = settings.absenceField || '';
+    document.getElementById('set-absence-values').value = settings.absenceValues || 'отпуск,больничный,командировка';
     document.getElementById('set-deadline-red').value = settings.deadlineRedDays;
     document.getElementById('set-deadline-yellow').value = settings.deadlineYellowDays;
     renderSettingsTable();
@@ -152,6 +154,8 @@ function saveSettings() {
   settings.clientId = document.getElementById('set-clientid').value.trim();
   settings.clientSecret = document.getElementById('set-clientsecret').value.trim();
   settings.chatId = document.getElementById('set-chatid').value.trim();
+  settings.absenceField = document.getElementById('set-absence-field').value.trim();
+  settings.absenceValues = document.getElementById('set-absence-values').value.trim();
   settings.deadlineRedDays = parseInt(document.getElementById('set-deadline-red').value) || 3;
   settings.deadlineYellowDays = parseInt(document.getElementById('set-deadline-yellow').value) || 7;
   settings.deptHeads = {}; settings.deptManagers = {}; settings.deptShortNames = {}; settings.visibleDepts = []; settings.econDepts = []; settings.listDependencies = {}; settings.mapping = {}; settings.unavailableUsers = [];

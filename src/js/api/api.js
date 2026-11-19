@@ -1,7 +1,6 @@
 // ============================================================
 // МОДУЛЬ: api.js — Обёртки над BX24 API
 // ============================================================
-
 let b24Ready = false;
 var deleteInProgress = {};
 var urlParamsProcessed = false;
@@ -11,41 +10,26 @@ function getPortalDomain() {
   try {
     if (typeof BX24 !== 'undefined' && typeof BX24.getDomain === 'function') {
       const d = BX24.getDomain();
-      if (d && d.indexOf('cdn') === -1 && d.indexOf('bitrix24') !== -1) {
-        window.__portalDomain = 'https://' + d;
-        return window.__portalDomain;
-      } else if (d) { logAction('getPortalDomain: BX24.getDomain() вернул CDN-домен: ' + d, 'error'); }
+      if (d && d.indexOf('cdn') === -1 && d.indexOf('bitrix24') !== -1) { window.__portalDomain = 'https://' + d; return window.__portalDomain; }
     }
   } catch (e) {}
-  try {
-    const m = window.location.search.match(/[?&]DOMAIN=([^&]+)/);
-    if (m) { const dom = decodeURIComponent(m[1]); if (dom && dom.indexOf('cdn') === -1) { window.__portalDomain = 'https://' + dom; return window.__portalDomain; } }
-  } catch (e) {}
-  try {
-    if (document.referrer) { const o = new URL(document.referrer).origin; if (o.indexOf('bitrix24') !== -1 && o.indexOf('cdn') === -1) { window.__portalDomain = o; return o; } }
-  } catch (e) {}
+  try { const m = window.location.search.match(/[?&]DOMAIN=([^&]+)/); if (m) { const dom = decodeURIComponent(m[1]); if (dom && dom.indexOf('cdn') === -1) { window.__portalDomain = 'https://' + dom; return window.__portalDomain; } } } catch (e) {}
+  try { if (document.referrer) { const o = new URL(document.referrer).origin; if (o.indexOf('bitrix24') !== -1 && o.indexOf('cdn') === -1) { window.__portalDomain = o; return o; } } } catch (e) {}
   const origin = window.location.origin;
   if (origin && origin.indexOf('cdn') === -1) { window.__portalDomain = origin; return origin; }
-  logAction('getPortalDomain: не удалось определить домен портала', 'error');
   return '';
 }
 
 function buildAppLink(action, itemId, tab) {
   const domain = getPortalDomain();
-  if (!domain || !itemId) { logAction('buildAppLink: domain=' + domain + ', itemId=' + itemId, 'error'); return ''; }
+  if (!domain || !itemId) return '';
   const clientId = (settings.clientId || '').trim();
   const tabSuffix = tab ? ('&params[tab]=' + encodeURIComponent(tab)) : '';
-  if (clientId) {
-    return domain + '/marketplace/view/' + encodeURIComponent(clientId) + '/?params[action]=' + encodeURIComponent(action) + '&params[id]=' + encodeURIComponent(itemId) + tabSuffix;
-  }
+  if (clientId) return domain + '/marketplace/view/' + encodeURIComponent(clientId) + '/?params[action]=' + encodeURIComponent(action) + '&params[id]=' + encodeURIComponent(itemId) + tabSuffix;
   return domain + '/crm/smartprocess/' + ENTITY_TYPE_ID + '/item/' + itemId + '/';
 }
 
-function formatCreatedDate(v) {
-  if (!v) return '—';
-  try { const d = new Date(v); if (!isNaN(d.getTime())) return d.toLocaleDateString('ru-RU'); } catch (e) {}
-  return '—';
-}
+function formatCreatedDate(v) { if (!v) return '—'; try { const d = new Date(v); if (!isNaN(d.getTime())) return d.toLocaleDateString('ru-RU'); } catch (e) {} return '—'; }
 
 function formatDeadline(v) {
   if (!v) return 'не указан';
@@ -56,7 +40,15 @@ function formatDeadline(v) {
   return s;
 }
 
-// ✅ Обращение — только упоминание, без «здравствуйте»
+function parseAmount(v) {
+  if (v === undefined || v === null) return '';
+  if (Array.isArray(v)) v = v[0];
+  if (typeof v === 'number') return v;
+  const cleaned = String(v).replace(/[^\d.,-]/g, '').replace(',', '.');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? '' : num;
+}
+
 function greetUser(userId) {
   const n = (typeof userNames !== 'undefined' && userNames[userId]) ? userNames[userId] : 'коллега';
   return '[USER=' + parseInt(userId) + ']' + n + '[/USER]';
@@ -70,8 +62,7 @@ function buildPurchaseMeta(item) {
   const deadlineStr = formatDeadline(item[actualFields.deadlineZakup]);
   const creatorRaw = item[actualFields.creator];
   const creatorId = Array.isArray(creatorRaw) ? creatorRaw[0] : creatorRaw;
-  const fallbackId = item.createdBy;
-  const realCreatorId = creatorId || fallbackId;
+  const realCreatorId = creatorId || item.createdBy;
   const creatorName = (realCreatorId && (userNames[realCreatorId] || realCreatorId)) || '—';
   const creatorDept = (realCreatorId && userDepts[realCreatorId]) || '—';
   return { no, dateStr, shortDesc, deadlineStr, creatorName, creatorDept, creatorId: realCreatorId };
@@ -94,72 +85,60 @@ function resolveDeptHeadId(item, respectTestMode) {
   return null;
 }
 
-function sendBotNotification(userId, title, message, links, cb) {
+function sendBotNotification(userId, title, message, links, cb, dedupeKey) {
   notifyUserViaBot(userId, title, message, links, function (success) {
     if (!success) {
-      logAction('Fallback: отправка через im.notify', 'info');
+      logAction('Fallback: im.notify', 'info');
       const firstLink = (links && links[0] && links[0].url) ? links[0].url : '';
       BX24.callMethod('im.notify', { to: userId, message: title + '\n' + message, type: 'SYSTEM', link: firstLink, button_text: firstLink ? 'Открыть' : '' }, function (r) {
         if (r.error()) logAction('im.notify (ID ' + userId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
       });
     }
     if (cb) cb(success);
-  });
+  }, dedupeKey);
 }
 
-// ✅ Уведомление руководителю — выбрать исполнителя (с кнопкой «Утвердить» прямо в чате)
 function notifySelectExecutor(userId, item, taskId) {
   userId = parseInt(userId);
   if (!userId || !item) return;
   const meta = buildPurchaseMeta(item);
   const title = 'Необходимо выбрать исполнителя для закупки №' + meta.no + ' от ' + meta.dateStr;
   const message = greetUser(userId) + '\n\n' + formatPurchaseBody(meta);
-
   const domain = getPortalDomain();
   const taskLink = taskId ? (domain ? domain + '/company/personal/user/' + userId + '/tasks/task/view/' + taskId + '/' : '') : '';
-
   const links = [
+    { text: '👤 Выбрать исполнителя', url: buildAppLink('select_executor', item.id, 'my_requests') },
     { text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'my_requests') },
     taskLink ? { text: '✅ Открыть задачу', url: taskLink } : null
   ].filter(function (l) { return l && l.url; });
-
-  sendBotNotification(userId, title, message, links);
+  sendBotNotification(userId, title, message, links, null, 'select_executor_' + item.id);
 }
 
-// ✅ Уведомление менеджеру — собрать данные
 function notifyCollectData(userId, item) {
   userId = parseInt(userId);
   if (!userId || !item) return;
   const meta = buildPurchaseMeta(item);
   const title = 'Необходимо собрать данные и рассчитать стоимость по закупке №' + meta.no + ' от ' + meta.dateStr;
   const message = greetUser(userId) + '\n\n' + formatPurchaseBody(meta);
-
-  const links = [
-    { text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }
-  ].filter(function (l) { return l && l.url; });
-
-  sendBotNotification(userId, title, message, links);
+  const links = [{ text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }].filter(l => l.url);
+  sendBotNotification(userId, title, message, links, null, 'collect_' + item.id);
 }
 
-// ✅ Карточка согласования — с разделом/направлением (fallback)
 function buildApprovalCard(item) {
   const meta = buildPurchaseMeta(item);
-  const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
+  const amount = parseAmount(item[actualFields.amountProduct]) ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
   const deadline = formatDeadline(item[actualFields.deadlineZakup]);
   const deptId = String(Array.isArray(item[actualFields.dept]) ? item[actualFields.dept][0] : (item[actualFields.dept] || ''));
   const deptName = settings.deptShortNames[deptId] || (departments.find(d => String(d.ID) === deptId)?.NAME || '—');
   const mgrId = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager][0] : (item[actualFields.manager] || '');
   const mgrName = mgrId ? (userNames[mgrId] || mgrId) : '—';
-
   let combinedDirText = item[actualFields.combinedDir] || '';
   if (!combinedDirText && item[actualFields.section]) {
     const secName = getDisplayValue(item, actualFields.section, 'enum');
     const dirName = getDisplayValue(item, actualFields.direction, 'enum');
     if (secName !== '—') combinedDirText = `${secName} / ${dirName}`;
   }
-
   const comment = item[actualFields.comment] ? cleanText(item[actualFields.comment]) : '';
-
   const lines = [
     '[B]Что нужно закупить (Кратко):[/B] ' + meta.shortDesc,
     '[B]Срок:[/B] ' + deadline,
@@ -169,15 +148,12 @@ function buildApprovalCard(item) {
   ];
   if (combinedDirText) lines.push('[B]Раздел/Направление:[/B] ' + combinedDirText);
   if (comment) lines.push('[B]Комментарий:[/B] ' + comment);
-
   const text = lines.join('\n');
-
   const links = [
     { text: '✅ Согласовать', url: buildAppLink('approve', item.id, 'inbox') },
     { text: '🔧 На доработку', url: buildAppLink('rework', item.id, 'inbox') },
     { text: '❌ Отклонить', url: buildAppLink('reject', item.id, 'inbox') }
   ].filter(l => l.url);
-
   return { text, links, deptName, no: meta.no, date: meta.dateStr };
 }
 
@@ -187,15 +163,13 @@ function notifyApprovalNeeded(headId, item) {
   const card = buildApprovalCard(item);
   const title = 'Согласование по закупке отделом ' + card.deptName + ' №' + card.no + ' от ' + card.date;
   const message = greetUser(headId) + '\n\n' + card.text;
-
   notifyUserViaBot(headId, title, message, card.links, function (success) {
     if (!success) {
-      logAction('Fallback: im.notify о согласовании', 'info');
       BX24.callMethod('im.notify', { to: headId, message: title + '\n' + message, type: 'SYSTEM', link: buildAppLink('approve', item.id, 'inbox'), button_text: 'Согласовать' }, function (r) {
         if (r.error()) logAction('im.notify (ID ' + headId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
       });
     }
-  });
+  }, 'approval_' + item.id);
 }
 
 function notifyReworkNeeded(managerId, item, reworkComment) {
@@ -203,70 +177,28 @@ function notifyReworkNeeded(managerId, item, reworkComment) {
   if (!managerId || !item) return;
   const meta = buildPurchaseMeta(item);
   const title = 'Закупка №' + meta.no + ' отправлена на доработку';
-  const message = greetUser(managerId) + '\n\n' +
-    'Закупка «' + meta.shortDesc + '» отправлена на доработку по результатам согласования.\n' +
+  const message = greetUser(managerId) + '\n\nЗакупка «' + meta.shortDesc + '» отправлена на доработку.\n' +
     (reworkComment ? '[B]Комментарий:[/B] ' + reworkComment + '\n' : '') +
     'Необходимо скорректировать данные и отправить на согласование повторно.';
-  const links = [
-    { text: '🔧 Исправить данные', url: buildAppLink('fill', item.id, 'inbox') }
-  ].filter(l => l.url);
+  const links = [{ text: '🔧 Исправить данные', url: buildAppLink('fill', item.id, 'inbox') }].filter(l => l.url);
   notifyUserViaBot(managerId, title, message, links, function (success) {
-    if (!success) {
-      BX24.callMethod('im.notify', { to: managerId, message: title + '\n' + message, type: 'SYSTEM', link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : '' }, function (r) {
-        if (r.error()) logAction('im.notify (ID ' + managerId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
-      });
-    }
-  });
+    if (!success) BX24.callMethod('im.notify', { to: managerId, message: title + '\n' + message, type: 'SYSTEM', link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : '' }, function () {});
+  }, 'rework_' + item.id);
 }
 
 function notifyAfterDecision(managerId, item, approved) {
   managerId = parseInt(managerId);
   if (!managerId || !item) return;
   const meta = buildPurchaseMeta(item);
-  const amount = item[actualFields.amountProduct] ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
+  const amount = parseAmount(item[actualFields.amountProduct]) ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
   const title = approved ? 'Условия согласованы' : 'Закупка отклонена';
   const message = greetUser(managerId) + '\n\n' + (approved
     ? 'Условия по закупке «' + meta.shortDesc + '» (сумма ' + amount + ') согласованы.\nНеобходимо загрузить входящий счёт.'
-    : 'Закупка «' + meta.shortDesc + '» отклонена на этапе согласования.\nТребуется корректировка.');
-  const links = [
-    { text: approved ? '📄 Загрузить счёт' : '📋 Открыть закупку', url: buildAppLink(approved ? 'upload' : 'view', item.id, 'inbox') }
-  ].filter(l => l.url);
-
+    : 'Закупка «' + meta.shortDesc + '» отклонена на этапе согласования.');
+  const links = [{ text: approved ? '📄 Загрузить счёт' : '📋 Открыть закупку', url: buildAppLink(approved ? 'upload' : 'view', item.id, 'inbox') }].filter(l => l.url);
   notifyUserViaBot(managerId, title, message, links, function (success) {
-    if (!success) {
-      BX24.callMethod('im.notify', { to: managerId, message: title + '\n' + message, type: 'SYSTEM', link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : '' }, function (r) {
-        if (r.error()) logAction('im.notify (ID ' + managerId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
-      });
-    }
-  });
-}
-
-function sendNotificationWithMessage(userId, title, message, itemUrl, taskUrl, linkText = 'Начать выполнение') {
-  userId = parseInt(userId);
-  if (!userId) return;
-  const domain = getPortalDomain();
-  let itemId = '';
-  if (itemUrl) { const m = String(itemUrl).match(/[?&]id=(\d+)/); if (m) itemId = m[1]; }
-  let fullItemUrl = '';
-  if (itemId) fullItemUrl = buildAppLink('view', itemId, 'inbox');
-  else if (itemUrl && domain) fullItemUrl = itemUrl.startsWith('http') ? itemUrl : domain + itemUrl;
-  let fullTaskUrl = '';
-  if (taskUrl) { if (taskUrl.startsWith('http')) fullTaskUrl = taskUrl; else if (domain) fullTaskUrl = domain + taskUrl; else fullTaskUrl = ''; }
-  const links = [
-    fullItemUrl ? { text: '📋 Открыть закупку', url: fullItemUrl } : null,
-    fullTaskUrl ? { text: '✅ ' + linkText, url: fullTaskUrl } : null
-  ].filter(function (l) { return l && l.url; });
-  notifyUserViaBot(userId, title, message, links, function (success) {
-    if (!success) {
-      logAction('Fallback: отправка через im.notify', 'info');
-      let notifyText = title + '\n' + message;
-      if (fullTaskUrl) notifyText += '\n[url=' + fullTaskUrl + ']' + linkText + '[/url]';
-      else if (fullItemUrl) notifyText += '\n[url=' + fullItemUrl + ']Открыть закупку[/url]';
-      BX24.callMethod('im.notify', { to: userId, message: notifyText, type: 'SYSTEM', link: fullTaskUrl || fullItemUrl || '', button_text: (fullTaskUrl || fullItemUrl) ? 'Открыть' : '' }, function (r) {
-        if (r.error()) logAction('im.notify (ID ' + userId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
-      });
-    }
-  });
+    if (!success) BX24.callMethod('im.notify', { to: managerId, message: title + '\n' + message, type: 'SYSTEM', link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : '' }, function () {});
+  }, 'decision_' + item.id + '_' + (approved ? 'ok' : 'no'));
 }
 
 function isUserUnavailable(userId) {
@@ -278,12 +210,38 @@ function isUserUnavailable(userId) {
   return false;
 }
 
+function refreshUnavailableUsers(done) {
+  done = done || function () {};
+  const today = new Date().toISOString().slice(0, 10);
+  if (localStorage.getItem('b24_absence_check_date') === today) { logAction('Отсутствия уже обновлены сегодня', 'info'); return done(); }
+  const field = (settings.absenceField || '').trim();
+  if (!field) { logAction('Поле статуса отсутствия не настроено — автопроверка пропущена', 'info'); return done(); }
+  const values = (settings.absenceValues || 'отпуск,больничный,командировка,не в офисе').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  logAction('Автопроверка отсутствий (поле: ' + field + ')...', 'info');
+  BX24.callMethod('user.get', { active: true, SELECT: ['ID', 'NAME', 'LAST_NAME', field] }, function (res) {
+    if (res.error()) { logAction('Ошибка проверки отсутствий: ' + getApiErrorMessage(res), 'error'); return done(); }
+    const list = res.data() || [];
+    const absents = [];
+    list.forEach(u => {
+      let v = u[field];
+      if (Array.isArray(v)) v = v[0];
+      const s = String(v || '').toLowerCase();
+      if (s && values.some(val => s.includes(val))) absents.push(String(u.ID));
+    });
+    settings.unavailableUsers = absents;
+    localStorage.setItem('b24_absence_check_date', today);
+    logAction('Автопроверка: недоступных ' + absents.length, 'success');
+    saveSettingsToBoth();
+    done();
+  });
+}
+
 function delegatePurchase(itemId, toUserId, note, cb) {
   itemId = parseInt(itemId); toUserId = parseInt(toUserId);
   if (!itemId || !toUserId) { logAction('delegatePurchase: invalid args', 'error'); if (cb) cb(false); return; }
   const item = items.find(i => i.id === itemId);
   if (!item) { logAction('delegatePurchase: закупка не найдена', 'error'); if (cb) cb(false); return; }
-  if (isUserUnavailable(toUserId)) { logAction('delegatePurchase: получатель недоступен', 'error'); showToast('Получатель отмечен как недоступный', 'error'); if (cb) cb(false); return; }
+  if (isUserUnavailable(toUserId)) { showToast('Получатель отмечен как недоступный', 'error'); if (cb) cb(false); return; }
   const mgrVal = item[actualFields.manager];
   const fromId = Array.isArray(mgrVal) ? mgrVal[0] : (mgrVal || '');
   const fromName = fromId ? (userNames[fromId] || fromId) : '—';
@@ -297,9 +255,8 @@ function delegatePurchase(itemId, toUserId, note, cb) {
   const updFields = {};
   updFields[actualFields.manager] = [String(toUserId)];
   if (histField && fieldDefs[histField]) updFields[histField] = newHist;
-  logAction(`Делегирование закупки ID ${itemId}: ${fromName} → ${toName}`, 'info');
   BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: itemId, fields: updFields }, function (res) {
-    if (res.error()) { logAction('Ошибка делегирования: ' + getApiErrorMessage(res), 'error'); showToast('Ошибка делегирования', 'error'); if (cb) cb(false); return; }
+    if (res.error()) { showToast('Ошибка делегирования', 'error'); if (cb) cb(false); return; }
     item[actualFields.manager] = [String(toUserId)];
     if (histField) item[histField] = newHist;
     delegateHistory[itemId] = newHist;
@@ -311,9 +268,8 @@ function delegatePurchase(itemId, toUserId, note, cb) {
         const title = 'Закупка делегирована вам: №' + meta.no + ' от ' + meta.dateStr;
         const message = greetUser(toUserId) + '\n\n' + formatPurchaseBody(meta) + '\n\nДелегировал: ' + (fromName || '—') + (note ? ('\nПричина: ' + note) : '');
         const links = [{ text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }].filter(l => l.url);
-        notifyUserViaBot(toUserId, title, message, links, function (ok) { if (!ok) sendBotNotification(toUserId, title, message, links); });
+        notifyUserViaBot(toUserId, title, message, links, function (ok) { if (!ok) sendBotNotification(toUserId, title, message, links); }, 'delegate_' + itemId + '_' + toUserId);
       } catch (e) { logAction('Ошибка уведомления о делегировании: ' + e.message, 'error'); }
-      logAction('Делегирование выполнено', 'success');
       showToast('Закупка делегирована: ' + toName, 'success');
       loadAllData();
       if (cb) cb(true);
@@ -321,85 +277,71 @@ function delegatePurchase(itemId, toUserId, note, cb) {
     if (taskSborId && String(taskSborId).match(/^\d+$/)) {
       BX24.callMethod('tasks.task.update', { taskId: parseInt(taskSborId), fieldsToSave: { RESPONSIBLE_ID: toUserId } }, function (tr) {
         if (tr.error()) logAction('Ошибка переназначения задачи сбора: ' + getApiErrorMessage(tr), 'error');
-        else logAction('Задача сбора переназначена на ' + toName, 'success');
         afterTask();
       });
-    } else { afterTask(); }
+    } else afterTask();
   });
 }
 
 function deletePurchaseWithCleanup(id, done) {
   id = parseInt(id);
-  if (!id) { logAction('[ОЧИСТКА] invalid id', 'error'); if (done) done(false); return; }
-  if (deleteInProgress[id]) { logAction('[ОЧИСТКА] закупка ID ' + id + ' уже удаляется', 'info'); return; }
+  if (!id) { if (done) done(false); return; }
+  if (deleteInProgress[id]) return;
   deleteInProgress[id] = true;
   const item = items.find(function (i) { return i.id === id; });
-  if (!item) { logAction('[ОЧИСТКА] закупка ID ' + id + ' не найдена', 'error'); deleteInProgress[id] = false; if (done) done(false); return; }
-  logAction('[ОЧИСТКА] начало: закупка ID ' + id, 'info');
+  if (!item) { deleteInProgress[id] = false; if (done) done(false); return; }
+  logAction('[ОЧИСТКА] закупка ID ' + id, 'info');
   var tasksToDelete = [];
-  if (actualFields.taskVyborSotr && item[actualFields.taskVyborSotr]) { var tvs = String(item[actualFields.taskVyborSotr]); if (/^\d+$/.test(tvs)) tasksToDelete.push(parseInt(tvs)); }
-  if (actualFields.taskSbor && item[actualFields.taskSbor]) { var tsb = String(item[actualFields.taskSbor]); if (/^\d+$/.test(tsb)) tasksToDelete.push(parseInt(tsb)); }
-  if (actualFields.taskZagruz && item[actualFields.taskZagruz]) { var tzg = String(item[actualFields.taskZagruz]); if (/^\d+$/.test(tzg)) tasksToDelete.push(parseInt(tzg)); }
-  logAction('[ОЧИСТКА] задач к удалению: ' + tasksToDelete.length, 'info');
-  var prepSteps = 0;
-  if (tasksToDelete.length > 0) prepSteps++;
-  if (INVOICE_ENTITY_ID) prepSteps++;
+  [actualFields.taskVyborSotr, actualFields.taskSbor, actualFields.taskZagruz].forEach(function (f) {
+    const v = item[f]; if (v && /^\d+$/.test(String(v))) tasksToDelete.push(parseInt(String(v)));
+  });
+  var prepSteps = (tasksToDelete.length > 0 ? 1 : 0) + (INVOICE_ENTITY_ID ? 1 : 0);
   var completed = 0;
   function finalizeDelete() {
-    logAction('[ОЧИСТКА] вызываю crm.item.delete для ID ' + id, 'info');
     BX24.callMethod('crm.item.delete', { entityTypeId: ENTITY_TYPE_ID, id: id }, function (res) {
       deleteInProgress[id] = false;
-      if (res.error()) { logAction('[ОЧИСТКА] crm.item.delete: ОШИБКА — ' + getApiErrorMessage(res), 'error'); if (done) done(false); }
-      else { logAction('[ОЧИСТКА] crm.item.delete: успех', 'success'); items = items.filter(function (i) { return i.id !== id; }); render(); if (done) done(true); }
+      if (res.error()) { logAction('[ОЧИСТКА] ошибка: ' + getApiErrorMessage(res), 'error'); if (done) done(false); }
+      else { items = items.filter(function (i) { return i.id !== id; }); render(); if (done) done(true); }
     });
   }
-  function stepDone(ok, msg) { completed++; logAction('[ОЧИСТКА] шаг ' + completed + '/' + prepSteps + ' (' + (ok ? 'ok' : 'err') + '): ' + msg, ok ? 'info' : 'error'); if (completed >= prepSteps) finalizeDelete(); }
+  function stepDone(ok, msg) { completed++; logAction('[ОЧИСТКА] шаг ' + completed + '/' + prepSteps + ': ' + msg, ok ? 'info' : 'error'); if (completed >= prepSteps) finalizeDelete(); }
   if (prepSteps === 0) { finalizeDelete(); return; }
   if (tasksToDelete.length > 0) {
     var taskBatch = {};
     tasksToDelete.forEach(function (tid, idx) { taskBatch['t' + idx] = ['tasks.task.delete', { taskId: tid }]; });
     BX24.callBatch(taskBatch, function (res) {
-      var allOk = true;
-      tasksToDelete.forEach(function (tid, idx) {
-        var r = res['t' + idx];
-        if (r && r.error && r.error()) { var errStr = getApiErrorMessage(r); if (/UNKNOWN/i.test(errStr)) logAction('[ОЧИСТКА] задача ' + tid + ' уже удалена', 'info'); else { logAction('[ОЧИСТКА] ошибка удаления задачи ' + tid + ': ' + errStr, 'error'); allOk = false; } }
-        else logAction('[ОЧИСТКА] задача ' + tid + ' удалена', 'success');
-      });
-      stepDone(allOk, 'Задачи: ' + tasksToDelete.join(', '));
+      tasksToDelete.forEach(function (tid, idx) { var r = res['t' + idx]; if (r && r.error && r.error() && !/UNKNOWN/i.test(getApiErrorMessage(r))) logAction('[ОЧИСТКА] задача ' + tid + ': ' + getApiErrorMessage(r), 'error'); });
+      stepDone(true, 'Задачи удалены');
     });
   }
   if (INVOICE_ENTITY_ID) {
     BX24.callMethod('crm.item.list', { entityTypeId: INVOICE_ENTITY_ID, filter: { title: '%№' + id + '%' }, select: ['id', 'title'] }, function (res) {
       if (res.error()) { stepDone(false, 'Ошибка поиска счетов'); return; }
       var invItems = res.data().items || [];
-      if (invItems.length === 0) { stepDone(true, 'Нет счетов'); return; }
+      if (!invItems.length) { stepDone(true, 'Счетов нет'); return; }
       var invBatch = {};
       invItems.forEach(function (inv, idx) { invBatch['i' + idx] = ['crm.item.delete', { entityTypeId: INVOICE_ENTITY_ID, id: inv.id }]; });
-      BX24.callBatch(invBatch, function (invRes) {
-        var allOk = true;
-        invItems.forEach(function (inv, idx) { var r = invRes['i' + idx]; if (r && r.error && r.error()) { var errStr = getApiErrorMessage(r); if (/UNKNOWN/i.test(errStr)) logAction('[ОЧИСТКА] счет ' + inv.id + ' уже удалён', 'info'); else { allOk = false; } } });
-        stepDone(allOk, 'Счета удалены: ' + invItems.length);
-      });
+      BX24.callBatch(invBatch, function () { stepDone(true, 'Счета удалены: ' + invItems.length); });
     });
   }
 }
 
 function loadAllData() {
-  if (!b24Ready) { logAction('loadAllData вызван до инициализации BX24', 'info'); return; }
+  if (!b24Ready) return;
   if (loadAllDataInProgress) { logAction('Загрузка уже идёт', 'info'); return; }
   loadAllDataInProgress = true;
   logAction('Загрузка списка закупок...', 'info');
   if (items.length === 0) document.getElementById('app-container').innerHTML = '<div class="loading" style="grid-column: 1/-1;">Загрузка данных...</div>';
   BX24.callMethod('crm.item.list', { entityTypeId: ENTITY_TYPE_ID, select: ['*', 'UF_*'] }, function (res) {
     loadAllDataInProgress = false;
-    if (res.error()) { logAction('Ошибка загрузки: ' + getApiErrorMessage(res), 'error'); document.getElementById('app-container').innerHTML = '<div class="error-box">Ошибка: ' + getApiErrorMessage(res) + '</div>'; return; }
+    if (res.error()) { document.getElementById('app-container').innerHTML = '<div class="error-box">Ошибка: ' + getApiErrorMessage(res) + '</div>'; return; }
     items = res.data().items || [];
     logAction('Данные загружены. Всего: ' + items.length, 'success');
     syncManagersFromTasks(function () { render(); handleUrlParams(); });
   });
 }
 
-function changeScenario(val) { currentScenario = val; localStorage.setItem('purchase_scenario', val); logAction('Сценарий: ' + val, 'info'); showToast('Сценарий: ' + val); }
+function changeScenario(val) { currentScenario = val; localStorage.setItem('purchase_scenario', val); showToast('Сценарий: ' + val); }
 
 function runScenarioAfterCreate(itemId) {
   if (!isTestMode || currentScenario === 'none') return;
@@ -407,7 +349,6 @@ function runScenarioAfterCreate(itemId) {
   scenarioRunning[itemId] = true;
   var item = items.find(function (i) { return i.id === itemId; });
   if (!item) return;
-  logAction('Сценарий "' + currentScenario + '" для ID ' + itemId, 'info');
   var secDef = fieldDefs[actualFields.section];
   var dirDef = fieldDefs[actualFields.direction];
   var firstSec = secDef && secDef.items && secDef.items.length > 0 ? secDef.items[0].ID : null;
@@ -415,10 +356,7 @@ function runScenarioAfterCreate(itemId) {
   var secText = firstSec && secDef ? (secDef.items.find(function (i) { return String(i.ID) === String(firstSec); }) || {}).VALUE : '';
   var dirText = firstDir && dirDef ? (dirDef.items.find(function (i) { return String(i.ID) === String(firstDir); }) || {}).VALUE : '';
   var combinedText = (secText && dirText) ? (secText + ' / ' + dirText) : secText;
-  var targetStageName = '';
-  if (currentScenario === 'upload') targetStageName = 'загрузка';
-  else if (currentScenario === 'approval') targetStageName = 'согласование';
-  else if (currentScenario === 'full') targetStageName = 'сбор данных';
+  var targetStageName = currentScenario === 'upload' ? 'загрузка' : currentScenario === 'approval' ? 'согласование' : 'сбор данных';
   var targetStageId = getStageIdByName(targetStageName);
   if (!targetStageId) { logAction('Стадия "' + targetStageName + '" не найдена', 'error'); return; }
   var fields = { stageId: targetStageId };
@@ -432,7 +370,7 @@ function runScenarioAfterCreate(itemId) {
   }
   BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: parseInt(itemId), fields: fields }, function (res) {
     if (res.error()) logAction('Ошибка сценария: ' + getApiErrorMessage(res), 'error');
-    else { logAction('Сценарий выполнен', 'success'); showToast('Сценарий: ' + targetStageName); loadAllData(); }
+    else { showToast('Сценарий: ' + targetStageName); loadAllData(); }
   });
 }
 
@@ -447,11 +385,9 @@ function syncManagersFromTasks(done) {
   });
   if (need.length === 0) { done(); return; }
   need.forEach(function (i) { syncManagersInProgress[i.id] = true; });
-  logAction('Проверяем соисполнителей для ' + need.length + ' закупки(ок)', 'info');
   var batch = {};
   need.forEach(function (i) { batch['t' + i.id] = ['tasks.task.get', { taskId: parseInt(i[actualFields.taskVyborSotr]) }]; });
   BX24.callBatch(batch, function (res) {
-    logAction('Batch получен: ' + Object.keys(res).length + ' ключей', 'info');
     var found = [];
     need.forEach(function (i, idx) {
       var r = (res['t' + i.id]) || (Array.isArray(res) ? res[idx] : null);
@@ -459,11 +395,9 @@ function syncManagersFromTasks(done) {
       if (r.error && r.error()) { syncManagersInProgress[i.id] = false; return; }
       var task = (r.data() && r.data().task) || r.data() || {};
       var accomplices = task.accomplices || [];
-      var status = task.status;
-      var responsibleId = task.responsibleId;
-      var isCompleted = String(status) === '5';
+      var isCompleted = String(task.status) === '5';
       if (accomplices.length > 0) found.push({ item: i, mgrId: String(accomplices[0]) });
-      else if (isCompleted && responsibleId) found.push({ item: i, mgrId: String(responsibleId) });
+      else if (isCompleted && task.responsibleId) found.push({ item: i, mgrId: String(task.responsibleId) });
       else syncManagersInProgress[i.id] = false;
     });
     if (found.length === 0) { done(); return; }
@@ -472,6 +406,8 @@ function syncManagersFromTasks(done) {
     found.forEach(function (f) {
       if (isUserUnavailable(f.mgrId)) {
         logAction('Исполнитель недоступен: ' + (userNames[f.mgrId] || f.mgrId), 'error');
+        const headId = resolveDeptHeadId(f.item, true);
+        if (headId) sendBotNotification(headId, 'Исполнитель недоступен', greetUser(headId) + '\n\nИсполнитель ' + (userNames[f.mgrId] || f.mgrId) + ' недоступен. Делегируйте закупку №' + f.item.id + '.', [{ text: '📋 Открыть закупку', url: buildAppLink('view', f.item.id, 'my_requests') }].filter(l => l.url), null, 'unavail_' + f.item.id);
         finish(f.item.id);
         return;
       }
@@ -499,15 +435,15 @@ function syncManagersFromTasks(done) {
           BX24.callMethod('tasks.task.add', { fields: taskPayload }, function (tr) {
             if (!tr.error()) {
               var newTaskId = tr.data().task.id;
-              logAction('Задача создана (ID: ' + newTaskId + ')', 'success');
+              logAction('Задача сбора создана (ID: ' + newTaskId + ')', 'success');
               try { notifyCollectData(parseInt(f.mgrId), f.item); } catch (e) { logAction('Ошибка уведомления: ' + e.message, 'error'); }
               BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: parseInt(f.item.id), fields: { [actualFields.taskSbor]: String(newTaskId) } }, function () {
                 f.item[actualFields.taskSbor] = String(newTaskId);
                 finish(f.item.id);
               });
-            } else { finish(f.item.id); }
+            } else { logAction('Ошибка создания задачи сбора: ' + getApiErrorMessage(tr), 'error'); finish(f.item.id); }
           });
-        } else { finish(f.item.id); }
+        } else finish(f.item.id);
       });
     });
   }, function () { need.forEach(function (i) { syncManagersInProgress[i.id] = false; }); done(); });
@@ -522,10 +458,9 @@ function handleUrlParams() {
   if (itemId) {
     urlParamsProcessed = true;
     var attempts = 0;
-    var maxAttempts = 20;
     var checkItemsInterval = setInterval(function () {
       attempts++;
-      if (items.length > 0 || attempts >= maxAttempts) {
+      if (items.length > 0 || attempts >= 20) {
         clearInterval(checkItemsInterval);
         if (items.length > 0) {
           var id = parseInt(itemId);
@@ -535,8 +470,9 @@ function handleUrlParams() {
           else if (action === 'approve') openActionModal(id, 'approve_terms');
           else if (action === 'reject') openActionModal(id, 'reject_terms');
           else if (action === 'rework') openActionModal(id, 'send_to_rework');
+          else if (action === 'select_executor') openExecutorModal(id);
           else openViewModal(id);
-          try { var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname; window.history.replaceState({ path: newUrl }, '', newUrl); } catch (e) {}
+          try { window.history.replaceState({}, '', window.location.protocol + "//" + window.location.host + window.location.pathname); } catch (e) {}
         } else showToast('Не удалось загрузить данные', 'error');
       }
     }, 500);
@@ -568,7 +504,14 @@ function getNextStageId(currentStageId) {
 (function setupAutoRefreshOnFocus() {
   var lastSyncTime = 0;
   var MIN_INTERVAL = 15000;
-  var tryReload = function () { if (!b24Ready) return; var now = Date.now(); if (now - lastSyncTime < MIN_INTERVAL) return; lastSyncTime = now; logAction('Возврат во вкладку — автообновление', 'info'); loadAllData(); };
+  var tryReload = function () {
+    if (!b24Ready) return;
+    var now = Date.now();
+    if (now - lastSyncTime < MIN_INTERVAL) return;
+    lastSyncTime = now;
+    logAction('Возврат во вкладку — автообновление', 'info');
+    loadAllData();
+  };
   window.addEventListener('focus', tryReload);
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') tryReload(); });
 })();
