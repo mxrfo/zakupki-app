@@ -1,5 +1,26 @@
 // js/forms.js — Обработка форм
 
+function syncSupplierColumns() {
+  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
+  ['detail-table', 'data-detail-table'].forEach(function (tid) {
+    const table = document.getElementById(tid);
+    if (!table) return;
+    const thead = table.querySelector('thead tr');
+    if (!thead) return;
+    const existing = thead.querySelector('.th-supplier');
+    if (hasSupplier && !existing) {
+      const th = document.createElement('th');
+      th.className = 'th-supplier';
+      th.style.width = '14%';
+      th.innerText = 'Поставщик';
+      const priceTh = thead.children[2];
+      thead.insertBefore(th, priceTh);
+    } else if (!hasSupplier && existing) {
+      existing.remove();
+    }
+  });
+}
+
 function openCreateModal() {
   const deptSelect = document.getElementById('create-dept');
   deptSelect.innerHTML = '<option value="">-- Выберите отдел --</option>';
@@ -17,19 +38,22 @@ function openCreateModal() {
   document.getElementById('btn-save-create').disabled = false;
   document.getElementById('btn-save-create').innerText = 'Сохранить';
   document.getElementById('create-modal-content').style.borderTop = 'none';
+  syncSupplierColumns();
   addDetailRow();
   document.getElementById('modal-create').style.display = 'flex';
 }
 
 function addDetailRow() {
+  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   const tr = document.createElement('tr');
-  tr.innerHTML = `<td><input type="text" class="det-name" oninput="calculateAllTotals()"></td><td><input type="text" class="det-purpose"></td><td><input type="number" class="det-price" step="0.01" oninput="calculateRowTotal(this)"></td><td><input type="number" class="det-qty" step="1" oninput="calculateRowTotal(this)"></td><td><input type="text" class="det-total" readonly></td><td><input type="url" class="det-link"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove(); calculateAllTotals();">&times;</button></td>`;
+  tr.innerHTML = `<td><input type="text" class="det-name" oninput="calculateAllTotals()"></td><td><input type="text" class="det-purpose"></td>${hasSupplier ? `<td><input type="text" class="det-supplier"></td>` : ''}<td><input type="number" class="det-price" step="0.01" oninput="calculateRowTotal(this)"></td><td><input type="number" class="det-qty" step="1" oninput="calculateRowTotal(this)"></td><td><input type="text" class="det-total" readonly></td><td><input type="url" class="det-link"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove(); calculateAllTotals();">&times;</button></td>`;
   document.getElementById('detail-tbody').appendChild(tr);
 }
 
 function addDataDetailRow() {
+  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   const tr = document.createElement('tr');
-  tr.innerHTML = `<td><input type="text" class="data-det-name"></td><td><input type="text" class="data-det-purpose"></td><td><input type="number" class="data-det-price" step="0.01" oninput="calculateDataRowTotal(this)"></td><td><input type="number" class="data-det-qty" step="1" oninput="calculateDataRowTotal(this)"></td><td><input type="text" class="data-det-total" readonly></td><td><input type="url" class="data-det-link"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
+  tr.innerHTML = `<td><input type="text" class="data-det-name"></td><td><input type="text" class="data-det-purpose"></td>${hasSupplier ? `<td><input type="text" class="data-det-supplier"></td>` : ''}<td><input type="number" class="data-det-price" step="0.01" oninput="calculateDataRowTotal(this)"></td><td><input type="number" class="data-det-qty" step="1" oninput="calculateDataRowTotal(this)"></td><td><input type="text" class="data-det-total" readonly></td><td><input type="url" class="data-det-link"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
   document.getElementById('data-detail-tbody').appendChild(tr);
 }
 
@@ -62,6 +86,18 @@ function calculateDataRowTotal(input) {
   const price = parseFloat(tr.querySelector('.data-det-price').value) || 0;
   const qty = parseFloat(tr.querySelector('.data-det-qty').value) || 0;
   tr.querySelector('.data-det-total').value = (price * qty) > 0 ? (price * qty).toFixed(2) : '';
+}
+
+function updateFileName(input) {
+  const display = document.getElementById('file-name-display');
+  if (!display) return;
+  if (input.files && input.files.length) {
+    display.innerText = '✅ Выбран: ' + input.files[0].name;
+    display.style.color = '#10b981';
+  } else {
+    display.innerText = 'Нажмите, чтобы выбрать файл';
+    display.style.color = '#0f172a';
+  }
 }
 
 function updateDirections(selectedDirId = null) {
@@ -105,8 +141,9 @@ function submitCreateRequest(e) {
   const deptId = document.getElementById('create-dept').value;
   const shortDesc = document.getElementById('create-short-desc').value;
   const amountProduct = document.getElementById('create-amount-product').value;
+  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   const rows = document.querySelectorAll('#detail-tbody tr');
-  const arrNames = [], arrPurposes = [], arrPrices = [], arrQtys = [], arrLinks = [];
+  const arrNames = [], arrPurposes = [], arrPrices = [], arrQtys = [], arrLinks = [], arrSuppliers = [];
   let hasDetails = false;
   rows.forEach(tr => {
     const n = tr.querySelector('.det-name').value.trim();
@@ -114,13 +151,14 @@ function submitCreateRequest(e) {
     const pr = tr.querySelector('.det-price').value.trim();
     const q = tr.querySelector('.det-qty').value.trim();
     const l = tr.querySelector('.det-link').value.trim();
-    if (n || p || q || l || pr) { arrNames.push(n); arrPurposes.push(p); arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); arrQtys.push(q); arrLinks.push(l); hasDetails = true; }
+    const s = hasSupplier ? (tr.querySelector('.det-supplier').value.trim()) : '';
+    if (n || p || q || l || pr || s) { arrNames.push(n); arrPurposes.push(p); arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); arrQtys.push(q); arrLinks.push(l); if (hasSupplier) arrSuppliers.push(s); hasDetails = true; }
   });
   const shortDept = settings.deptShortNames[deptId] || (departments.find(d => d.ID == deptId)?.NAME || 'Отдел');
   const dateStr = new Date().toLocaleDateString('ru-RU');
   const fields = { categoryId: currentCategoryId, [actualFields.shortDesc]: shortDesc, [actualFields.deadlineZakup]: deadline, [actualFields.dept]: deptId, [actualFields.creator]: currentUser.ID, [actualFields.amountProduct]: amountProduct ? parseFloat(amountProduct) : 0 };
-  if (hasDetails) { fields[actualFields.detailName] = arrNames; fields[actualFields.detailPurpose] = arrPurposes; fields[actualFields.detailPrice] = arrPrices; fields[actualFields.detailQty] = arrQtys; fields[actualFields.detailLink] = arrLinks; }
-  else { fields[actualFields.detailName] = []; fields[actualFields.detailPurpose] = []; fields[actualFields.detailPrice] = []; fields[actualFields.detailQty] = []; fields[actualFields.detailLink] = []; }
+  if (hasDetails) { fields[actualFields.detailName] = arrNames; fields[actualFields.detailPurpose] = arrPurposes; fields[actualFields.detailPrice] = arrPrices; fields[actualFields.detailQty] = arrQtys; fields[actualFields.detailLink] = arrLinks; if (hasSupplier) fields[actualFields.detailSupplier] = arrSuppliers; }
+  else { fields[actualFields.detailName] = []; fields[actualFields.detailPurpose] = []; fields[actualFields.detailPrice] = []; fields[actualFields.detailQty] = []; fields[actualFields.detailLink] = []; if (hasSupplier) fields[actualFields.detailSupplier] = []; }
 
   if (editId) {
     const oldItem = items.find(i => i.id == editId);
@@ -151,7 +189,6 @@ function submitCreateRequest(e) {
   }
 }
 
-// ✅ submitData: суммы парсятся напрямую через parseFloat, не через cleanMoney
 function submitData(e) {
   e.preventDefault();
   const id = document.getElementById('data-id').value;
@@ -167,8 +204,9 @@ function submitData(e) {
   if (secText && dirText) combinedText = `${secText} / ${dirText}`;
   else if (secText) combinedText = secText;
 
+  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   const rows = document.querySelectorAll('#data-detail-tbody tr');
-  const arrNames = [], arrPurposes = [], arrPrices = [], arrQtys = [], arrLinks = [];
+  const arrNames = [], arrPurposes = [], arrPrices = [], arrQtys = [], arrLinks = [], arrSuppliers = [];
   let hasDetails = false;
   rows.forEach(tr => {
     const n = tr.querySelector('.data-det-name').value.trim();
@@ -176,15 +214,16 @@ function submitData(e) {
     const pr = tr.querySelector('.data-det-price').value.trim();
     const q = tr.querySelector('.data-det-qty').value.trim();
     const l = tr.querySelector('.data-det-link').value.trim();
-    if (n || p || q || l || pr) { arrNames.push(n); arrPurposes.push(p); arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); arrQtys.push(q); arrLinks.push(l); hasDetails = true; }
+    const s = hasSupplier ? (tr.querySelector('.data-det-supplier').value.trim()) : '';
+    if (n || p || q || l || pr || s) { arrNames.push(n); arrPurposes.push(p); arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); arrQtys.push(q); arrLinks.push(l); if (hasSupplier) arrSuppliers.push(s); hasDetails = true; }
   });
 
   const targetStageId = getStageIdByName('согласование');
   const fields = { [actualFields.section]: section, [actualFields.direction]: direction, [actualFields.amountProduct]: amountProduct ? parseFloat(amountProduct) : 0 };
   if (amountDelivery) fields[actualFields.amountDelivery] = parseFloat(amountDelivery);
   if (actualFields.combinedDir && combinedText) fields[actualFields.combinedDir] = combinedText;
-  if (hasDetails) { fields[actualFields.detailName] = arrNames; fields[actualFields.detailPurpose] = arrPurposes; fields[actualFields.detailPrice] = arrPrices; fields[actualFields.detailQty] = arrQtys; fields[actualFields.detailLink] = arrLinks; }
-  else { fields[actualFields.detailName] = []; fields[actualFields.detailPurpose] = []; fields[actualFields.detailPrice] = []; fields[actualFields.detailQty] = []; fields[actualFields.detailLink] = []; }
+  if (hasDetails) { fields[actualFields.detailName] = arrNames; fields[actualFields.detailPurpose] = arrPurposes; fields[actualFields.detailPrice] = arrPrices; fields[actualFields.detailQty] = arrQtys; fields[actualFields.detailLink] = arrLinks; if (hasSupplier) fields[actualFields.detailSupplier] = arrSuppliers; }
+  else { fields[actualFields.detailName] = []; fields[actualFields.detailPurpose] = []; fields[actualFields.detailPrice] = []; fields[actualFields.detailQty] = []; fields[actualFields.detailLink] = []; if (hasSupplier) fields[actualFields.detailSupplier] = []; }
   if (targetStageId) fields.stageId = targetStageId;
 
   logAction('Сохранение данных расчета...', 'info');
@@ -202,6 +241,11 @@ function submitData(e) {
       }
       try {
         if (item) {
+          item[actualFields.section] = section; item[actualFields.direction] = direction;
+          item[actualFields.amountProduct] = amountProduct ? parseFloat(amountProduct) : 0;
+          if (amountDelivery) item[actualFields.amountDelivery] = parseFloat(amountDelivery);
+          if (combinedText) item[actualFields.combinedDir] = combinedText;
+          if (targetStageId) item.stageId = targetStageId;
           const headId = resolveDeptHeadId(item, true);
           if (headId) { logAction(`Уведомление о согласовании → ID ${headId}`, 'info'); notifyApprovalNeeded(headId, item); }
           else logAction('Не удалось определить руководителя', 'error');
@@ -231,31 +275,54 @@ function submitUpload(e) {
   const id = document.getElementById('upload-id').value;
   const fileInput = document.getElementById('upload-file');
   const deadline = document.getElementById('upload-deadline').value;
-  if (!fileInput.files.length) return showToast('Выберите файл', 'error');
-  const file = fileInput.files[0];
-  logAction('Чтение файла...', 'info');
-  const reader = new FileReader();
-  reader.onload = function (evt) {
-    const base64 = evt.target.result.split(',')[1];
+  const item = items.find(i => i.id == id);
+  const existingFile = item ? getFileInfo(item, actualFields.fileInvoice) : null;
+  const hasNewFile = fileInput.files.length > 0;
+  if (!hasNewFile && !existingFile) return showToast('Выберите файл счёта', 'error');
+
+  const doUpdate = (filePayload) => {
     const targetStageId = getStageIdByName('обработка');
-    const fields = { [actualFields.deadlinePay]: deadline, [actualFields.fileInvoice]: [[file.name, base64]] };
+    const fields = { [actualFields.deadlinePay]: deadline };
+    if (filePayload) fields[actualFields.fileInvoice] = filePayload;
     if (targetStageId) fields.stageId = targetStageId;
+    logAction('Сохранение счёта...', 'info');
     BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: id, fields: fields }, (res) => {
-      if (res.error()) { logAction('Ошибка загрузки счёта: ' + getApiErrorMessage(res), 'error'); showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); }
-      else {
-        logAction('Счёт загружен', 'success');
-        const currentItem = items.find(i => i.id == id);
-        if (currentItem) {
-          const invFields = { title: `Счет по закупке ${currentItem.title}`, [INVOICE_MAPPING.invoiceTitle]: currentItem.title, [INVOICE_MAPPING.invoiceSum]: currentItem[actualFields.amountProduct] || 0, [INVOICE_MAPPING.invoicePayFor]: currentItem[actualFields.shortDesc] || currentItem.title, [INVOICE_MAPPING.invoiceFile]: [[file.name, base64]], [INVOICE_MAPPING.invoiceDeadline]: deadline };
-          BX24.callMethod('crm.item.add', { entityTypeId: INVOICE_ENTITY_ID, fields: invFields }, (invRes) => {
-            if (invRes.error()) logAction('Ошибка создания счёта: ' + getApiErrorMessage(invRes), 'error');
-            else logAction('Счёт создан (ID: ' + invRes.data().item.id + ')', 'success');
-          });
-        }
-        closeModal('modal-upload');
-        loadAllData();
+      if (res.error()) { logAction('Ошибка загрузки счёта: ' + getApiErrorMessage(res), 'error'); showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); return; }
+      logAction('Счёт загружен', 'success');
+      if (hasNewFile && filePayload) {
+        createInvoiceRecord(item, filePayload[0]);
       }
+      closeModal('modal-upload');
+      loadAllData();
     });
   };
-  reader.readAsDataURL(file);
+
+  const createInvoiceRecord = (currentItem, fileArr) => {
+    if (!currentItem || !INVOICE_ENTITY_ID) return;
+    getInvoiceFieldCodes(function (codes) {
+      const invFields = { title: `Счет по закупке ${currentItem.title}` };
+      if (codes.invoiceSum) invFields[codes.invoiceSum] = currentItem[actualFields.amountProduct] || 0;
+      if (codes.invoicePayFor) invFields[codes.invoicePayFor] = currentItem[actualFields.shortDesc] || currentItem.title;
+      if (codes.invoiceFile && fileArr) invFields[codes.invoiceFile] = [fileArr];
+      if (codes.invoiceDeadline) invFields[codes.invoiceDeadline] = document.getElementById('upload-deadline').value;
+      logAction('Создание входящего счёта (поля: ' + JSON.stringify(codes) + ')...', 'info');
+      BX24.callMethod('crm.item.add', { entityTypeId: INVOICE_ENTITY_ID, fields: invFields }, (invRes) => {
+        if (invRes.error()) logAction('Ошибка создания счёта: ' + getApiErrorMessage(invRes), 'error');
+        else logAction('Входящий счёт создан (ID: ' + invRes.data().item.id + ')', 'success');
+      });
+    });
+  };
+
+  if (hasNewFile) {
+    const file = fileInput.files[0];
+    logAction('Чтение файла...', 'info');
+    const reader = new FileReader();
+    reader.onload = function (evt) {
+      const base64 = evt.target.result.split(',')[1];
+      doUpdate([[file.name, base64]]);
+    };
+    reader.readAsDataURL(file);
+  } else {
+    doUpdate(null);
+  }
 }

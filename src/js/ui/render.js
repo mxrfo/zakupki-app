@@ -16,7 +16,8 @@ function getUserDeptIds() {
     Object.keys(settings.deptHeads || {}).forEach(k => { if (String(settings.deptHeads[k]) === String(currentUser.ID)) ids.push(String(k)); });
     Object.keys(settings.deptManagers || {}).forEach(k => { if (String(settings.deptManagers[k]) === String(currentUser.ID)) ids.push(String(k)); });
   }
-  if (ids.length === 0 && settings.visibleDepts && settings.visibleDepts.length) ids = settings.visibleDepts.map(String);
+  // ✅ visibleDepts как fallback — только для admin/econ; для employee/head/manager — строго свои отделы
+  if (ids.length === 0 && (currentRole === 'admin' || currentRole === 'econ') && settings.visibleDepts && settings.visibleDepts.length) ids = settings.visibleDepts.map(String);
   return ids;
 }
 
@@ -133,6 +134,13 @@ function hasBeenSentToWork(item, stName) {
   return !!(hasTask || hasManager);
 }
 
+// ✅ Иконки согласования в один ряд (маленькие, с title)
+function approvalButtonsIcon(item) {
+  return `<button class="action-icon-btn approve" title="Согласовать" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_terms')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>` +
+    `<button class="action-icon-btn" style="background:#fef3c7;color:#b45309;" title="На доработку" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_rework')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6a3 3 0 0 0-4.2 4.2L4 16.7V20h3.3l6.5-6.5a3 3 0 0 0 0-4.2z"/><path d="M18 8l2-2"/></svg></button>` +
+    `<button class="action-icon-btn reject" title="Отклонить" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_terms')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
+}
+
 function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
   const isHeadUI = isAdminUI || currentRole === 'head';
   const fragment = document.createDocumentFragment();
@@ -148,11 +156,12 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       const savedAmount = approvedAmounts[item.id];
       const isAmountChanged = savedAmount !== undefined && savedAmount !== currentTotalAmount;
       const dataSent = isDataAlreadySent(item, stName);
+      const canDelegate = (isAdminUI || isDeptHeadForItem(item)) && !isAdminUI; // для head — в ДЕЙСТВИЯ
       let buttonsHtml = '';
       if (isCreator && stName.includes('создание') && !hasBeenSentToWork(item, stName)) {
         buttonsHtml += `<button class="btn btn-primary" style="flex:1;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_work')" title="Отправить в работу">В работу</button>`;
-        buttonsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openEditModal(${item.id})" title="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
-        buttonsHtml += `<button class="action-icon-btn delete" onclick="event.stopPropagation(); deleteItem(${item.id}, event)" title="Удалить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
+        buttonsHtml += `<button class="action-icon-btn" title="Редактировать" onclick="event.stopPropagation(); openEditModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
+        buttonsHtml += `<button class="action-icon-btn delete" title="Удалить" onclick="event.stopPropagation(); deleteItem(${item.id}, event)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
       } else if (isCreator && stName.includes('создание') && hasBeenSentToWork(item, stName)) {
         buttonsHtml += `<button class="btn" disabled style="flex:1; background:#e2e8f0; color:#64748b; border-color:#cbd5e1; cursor:not-allowed; opacity:.9;" title="Запрос отправлен в работу"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><polyline points="20 6 9 17 4 12"/></svg>Отправлено в работу</button>`;
       }
@@ -161,42 +170,39 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       }
       if (activeTab === 'inbox') {
         if (isMgrUI && stName.includes('сбор данных') && !dataSent) {
-          buttonsHtml += `<button class="btn btn-dark" style="flex:1; background:#1e293b; color:#fff; border:none;" onclick="event.stopPropagation(); openDataModal(${item.id})">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Заполнить</button>`;
+          buttonsHtml += `<button class="btn" style="flex:1; background:#1e293b; color:#fff; border:none;" onclick="event.stopPropagation(); openDataModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Заполнить</button>`;
         }
         if ((isMgrUI || isHeadUI) && stName.includes('корректировк') && !dataSent) {
-          buttonsHtml += `<button class="btn" style="flex:1; background:#1e293b; color:#fff; border:none;" onclick="event.stopPropagation(); openDataModal(${item.id})">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Исправить данные</button>`;
+          buttonsHtml += `<button class="btn" style="flex:1; background:#1e293b; color:#fff; border:none;" onclick="event.stopPropagation(); openDataModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Исправить данные</button>`;
         }
         if (isMgrUI && stName.includes('загрузка')) {
-          buttonsHtml += `<button class="btn btn-dark" style="flex:1; background:#1e293b; color:#fff; border:none;" onclick="event.stopPropagation(); openUploadModal(${item.id})">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Загрузить счет</button>`;
+          buttonsHtml += `<button class="btn" style="flex:1; background:#1e293b; color:#fff; border:none;" onclick="event.stopPropagation(); openUploadModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Загрузить счет</button>`;
         }
         if (currentRole === 'manager' && stName.includes('согласование')) {
           buttonsHtml += `<button class="btn btn-primary" style="flex:1;" onclick="event.stopPropagation(); openEditAmountModal(${item.id})">Изменить сумму</button>`;
         }
         if ((isEconUI || isHeadUI) && stName.includes('согласование условий')) {
-          buttonsHtml += `<button class="action-icon-btn approve" style="width:auto; padding:0 16px;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_terms')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Согласовать</button>`;
-          buttonsHtml += `<button class="action-icon-btn" style="width:auto; padding:0 16px; background:#fef3c7; color:#b45309; border:1px solid #fcd34d;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_rework')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6a3 3 0 0 0-4.2 4.2L4 16.7V20h3.3l6.5-6.5a3 3 0 0 0 0-4.2z"/><path d="M18 8l2-2"/></svg> На доработку</button>`;
-          buttonsHtml += `<button class="action-icon-btn reject" style="width:auto; padding:0 16px;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_terms')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Отклонить</button>`;
+          buttonsHtml += approvalButtonsIcon(item);
         }
         if (isEconUI && stName.includes('обработка входящего счета')) {
-          if (!approvedInvoices[item.id]) buttonsHtml += `<button class="action-icon-btn approve" style="width:auto; padding:0 16px;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_invoice')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Утвердить</button>`;
-          else buttonsHtml += `<button class="action-icon-btn approve" style="width:auto; padding:0 16px; background:#e0f2fe; color:#0369a1;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'confirm_payment')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg> Оплачено</button>`;
-          buttonsHtml += `<button class="action-icon-btn reject" style="width:auto; padding:0 16px;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_invoice')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Отклонить</button>`;
+          if (!approvedInvoices[item.id]) buttonsHtml += `<button class="action-icon-btn approve" title="Утвердить счет" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_invoice')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>`;
+          else buttonsHtml += `<button class="action-icon-btn approve" style="background:#e0f2fe;color:#0369a1;" title="Подтвердить оплату" onclick="event.stopPropagation(); openActionModal(${item.id}, 'confirm_payment')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></button>`;
+          buttonsHtml += `<button class="action-icon-btn reject" title="Отклонить счет" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_invoice')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
         }
+      }
+      // ✅ Делегирование для руководителя — в ДЕЙСТВИЯ (не в Админ)
+      const mgrVal2 = item[actualFields.manager];
+      const hasMgr = Array.isArray(mgrVal2) ? mgrVal2.length > 0 : !!mgrVal2;
+      if (canDelegate && hasMgr && !isTerminalStage(stName)) {
+        buttonsHtml += `<button class="action-icon-btn" title="Делегировать" onclick="event.stopPropagation(); openDelegateModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>`;
       }
       let adminActionsHtml = '';
       if (isAdminUI) {
-        adminActionsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openEditModal(${item.id})" title="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
-        if (isPostponed) adminActionsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openActionModal(${item.id}, 'remove_postpone')" title="Снять отложку"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/><line x1="4" y1="4" x2="20" y2="20"/></svg></button>`;
-        if (!stName.includes('создание')) adminActionsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); rollbackItem(${item.id})" title="Откатить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button>`;
-        adminActionsHtml += `<button class="action-icon-btn delete" onclick="deleteItem(${item.id}, event)" title="Удалить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
-      }
-      const mgrVal2 = item[actualFields.manager];
-      const hasMgr = Array.isArray(mgrVal2) ? mgrVal2.length > 0 : !!mgrVal2;
-      if ((isAdminUI || isDeptHeadForItem(item)) && hasMgr && !isTerminalStage(stName)) {
-        adminActionsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openDelegateModal(${item.id})" title="Делегировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>`;
+        adminActionsHtml += `<button class="action-icon-btn" title="Редактировать" onclick="event.stopPropagation(); openEditModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
+        if (isPostponed) adminActionsHtml += `<button class="action-icon-btn" title="Снять отложку" onclick="event.stopPropagation(); openActionModal(${item.id}, 'remove_postpone')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/><line x1="4" y1="4" x2="20" y2="20"/></svg></button>`;
+        if (!stName.includes('создание')) adminActionsHtml += `<button class="action-icon-btn" title="Откатить" onclick="event.stopPropagation(); rollbackItem(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button>`;
+        if (hasMgr && !isTerminalStage(stName)) adminActionsHtml += `<button class="action-icon-btn" title="Делегировать" onclick="event.stopPropagation(); openDelegateModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>`;
+        adminActionsHtml += `<button class="action-icon-btn delete" title="Удалить" onclick="deleteItem(${item.id}, event)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
       }
       const deptName = getDisplayValue(item, actualFields.dept, 'dept');
       const deadlineDisplay = getDeadlineDisplay(item[actualFields.deadlineZakup]);
@@ -206,9 +212,9 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       const fileInfo = getFileInfo(item, actualFields.fileInvoice);
       const econComment = cleanText(item[actualFields.comment]);
       const isInvoiceStageOrLater = stName.includes('загрузка') || stName.includes('обработка') || stName.includes('ожидание') || stName.includes('получение') || stName.includes('исполнено') || stName.includes('успех');
-      const showInvoice = fileInfo && fileInfo.url && isInvoiceStageOrLater;
-      let combinedDirText = item[actualFields.combinedDir] || '—';
-      if (combinedDirText === '—' && item[actualFields.section]) { const secName = getDisplayValue(item, actualFields.section, 'enum'); const dirName = getDisplayValue(item, actualFields.direction, 'enum'); if (secName !== '—') combinedDirText = `${secName} / ${dirName}`; }
+      const canSeeInvoice = !(activeTab === 'all' && currentRole !== 'admin' && currentRole !== 'econ');
+      const showInvoice = fileInfo && fileInfo.url && isInvoiceStageOrLater && canSeeInvoice;
+      const combinedDirText = resolveCombinedDir(item) || '—';
       let mgrUnavailableBadge = '';
       const mgrIds2 = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []);
       if (mgrIds2.length && isUserUnavailable(mgrIds2[0])) mgrUnavailableBadge = `<span style="color:#ef4444; font-size:11px; font-weight:600; margin-left:6px;">⚠ недоступен</span>`;
@@ -228,7 +234,7 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
           ${!isCompactView ? `
             <div class="note-info-item"><span class="note-info-label">Сумма</span><span class="note-info-value amount-highlight">${amount}</span></div>
             <div class="note-info-item"><span class="note-info-label">Раздел/Напр</span><span class="note-info-value">${combinedDirText}</span></div>
-            ${isInvoiceStageOrLater ? `<div class="note-info-item"><span class="note-info-label">Счет</span><span class="note-info-value">${showInvoice ? `<a href="${fileInfo.url}" target="_blank" onclick="event.stopPropagation()" style="color: var(--brand-blue); text-decoration: underline; font-weight: 600;">${fileInfo.name.length > 15 ? fileInfo.name.substring(0, 12) + '...' : fileInfo.name}</a>` : '—'}</span></div>` : ''}
+            ${isInvoiceStageOrLater && canSeeInvoice ? `<div class="note-info-item"><span class="note-info-label">Счет</span><span class="note-info-value">${showInvoice ? `<a href="${fileInfo.url}" target="_blank" onclick="event.stopPropagation()" style="color: var(--brand-blue); text-decoration: underline; font-weight: 600;">${fileInfo.name.length > 15 ? fileInfo.name.substring(0, 12) + '...' : fileInfo.name}</a>` : '—'}</span></div>` : ''}
           ` : `<div class="note-info-item"><span class="note-info-label">Сумма (примерно)</span><span class="note-info-value amount-highlight">${amount}</span></div>`}
         </div>
         ${!isCompactView && econComment ? `<div class="note-comment-box"><b>Комментарий:</b> ${econComment}</div>` : ''}
@@ -269,13 +275,14 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
     const creatorDept = userDepts[item.createdBy] || '—';
     const econComment = cleanText(item[actualFields.comment]);
     const dataSent = isDataAlreadySent(item, stName);
-    let combinedDirText = item[actualFields.combinedDir] || '—';
-    if (combinedDirText === '—' && item[actualFields.section]) { const secName = getDisplayValue(item, actualFields.section, 'enum'); const dirName = getDisplayValue(item, actualFields.direction, 'enum'); if (secName !== '—') combinedDirText = `${secName} / ${dirName}`; }
+    const canSeeInvoice = !(activeTab === 'all' && currentRole !== 'admin' && currentRole !== 'econ');
+    const combinedDirText = resolveCombinedDir(item) || '—';
+    const canDelegate = (isAdminUI || isDeptHeadForItem(item)) && !isAdminUI;
     let buttonsHtml = '';
     if (isCreator && stName.includes('создание') && !hasBeenSentToWork(item, stName)) {
       buttonsHtml += `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_work')">В работу</button>`;
-      buttonsHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openEditModal(${item.id})" title="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
-      buttonsHtml += `<button class="action-icon-btn delete" onclick="event.stopPropagation(); deleteItem(${item.id}, event)" title="Удалить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
+      buttonsHtml += `<button class="action-icon-btn" title="Редактировать" onclick="event.stopPropagation(); openEditModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
+      buttonsHtml += `<button class="action-icon-btn delete" title="Удалить" onclick="event.stopPropagation(); deleteItem(${item.id}, event)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
     } else if (isCreator && stName.includes('создание') && hasBeenSentToWork(item, stName)) {
       buttonsHtml += `<button class="btn btn-sm" disabled style="background:#e2e8f0; color:#64748b; cursor:not-allowed; opacity:.9;">✓ Отправлено</button>`;
     }
@@ -296,26 +303,25 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
         buttonsHtml += `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openEditAmountModal(${item.id})">Изменить сумму</button>`;
       }
       if ((isEconUI || isHeadUI) && stName.includes('согласование условий')) {
-        buttonsHtml += `<button class="action-icon-btn approve btn-sm" style="width:auto;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_terms')">Согласовать</button>`;
-        buttonsHtml += `<button class="action-icon-btn btn-sm" style="width:auto; background:#fef3c7; color:#b45309; border:1px solid #fcd34d;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_rework')">На доработку</button>`;
-        buttonsHtml += `<button class="action-icon-btn reject btn-sm" style="width:auto;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_terms')">Отклонить</button>`;
+        buttonsHtml += approvalButtonsIcon(item);
       }
       if (isEconUI && stName.includes('обработка входящего счета')) {
-        if (!approvedInvoices[item.id]) buttonsHtml += `<button class="action-icon-btn approve btn-sm" style="width:auto;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_invoice')">Утвердить</button>`;
-        else buttonsHtml += `<button class="action-icon-btn approve btn-sm" style="width:auto; background:#e0f2fe; color:#0369a1;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'confirm_payment')">Оплачено</button>`;
-        buttonsHtml += `<button class="action-icon-btn reject btn-sm" style="width:auto;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_invoice')">Отклонить</button>`;
+        if (!approvedInvoices[item.id]) buttonsHtml += `<button class="action-icon-btn approve" title="Утвердить счет" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_invoice')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>`;
+        else buttonsHtml += `<button class="action-icon-btn approve" style="background:#e0f2fe;color:#0369a1;" title="Подтвердить оплату" onclick="event.stopPropagation(); openActionModal(${item.id}, 'confirm_payment')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></button>`;
+        buttonsHtml += `<button class="action-icon-btn reject" title="Отклонить счет" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_invoice')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
       }
-    }
-    let adminHtml = '';
-    if (isAdminUI) {
-      adminHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openEditModal(${item.id})" title="Редактировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
-      if (!stName.includes('создание')) adminHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); rollbackItem(${item.id})" title="Откатить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button>`;
-      adminHtml += `<button class="action-icon-btn delete" onclick="deleteItem(${item.id}, event)" title="Удалить"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
     }
     const mgrValT = item[actualFields.manager];
     const hasMgrT = Array.isArray(mgrValT) ? mgrValT.length > 0 : !!mgrValT;
-    if ((isAdminUI || isDeptHeadForItem(item)) && hasMgrT && !isTerminalStage(stName)) {
-      adminHtml += `<button class="action-icon-btn" onclick="event.stopPropagation(); openDelegateModal(${item.id})" title="Делегировать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>`;
+    if (canDelegate && hasMgrT && !isTerminalStage(stName)) {
+      buttonsHtml += `<button class="action-icon-btn" title="Делегировать" onclick="event.stopPropagation(); openDelegateModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>`;
+    }
+    let adminHtml = '';
+    if (isAdminUI) {
+      adminHtml += `<button class="action-icon-btn" title="Редактировать" onclick="event.stopPropagation(); openEditModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>`;
+      if (!stName.includes('создание')) adminHtml += `<button class="action-icon-btn" title="Откатить" onclick="event.stopPropagation(); rollbackItem(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></button>`;
+      if (hasMgrT && !isTerminalStage(stName)) adminHtml += `<button class="action-icon-btn" title="Делегировать" onclick="event.stopPropagation(); openDelegateModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>`;
+      adminHtml += `<button class="action-icon-btn delete" title="Удалить" onclick="deleteItem(${item.id}, event)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
     }
     const commentIcon = econComment ? `<span class="comment-icon" title="${econComment.replace(/"/g, '&quot;')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>` : '';
     html += `<tr>

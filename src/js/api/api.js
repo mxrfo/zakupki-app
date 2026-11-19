@@ -4,6 +4,7 @@
 let b24Ready = false;
 var deleteInProgress = {};
 var urlParamsProcessed = false;
+var invoiceFieldCodesCache = null;
 
 function getPortalDomain() {
   if (window.__portalDomain) return window.__portalDomain;
@@ -68,10 +69,12 @@ function buildPurchaseMeta(item) {
   return { no, dateStr, shortDesc, deadlineStr, creatorName, creatorDept, creatorId: realCreatorId };
 }
 
-function formatPurchaseBody(meta) {
-  return '[B]Что нужно закупить (Кратко):[/B] ' + meta.shortDesc + '\n' +
-         '[B]Крайний срок закупки:[/B] ' + meta.deadlineStr + '\n' +
-         '[B]Кто создал запрос:[/B] ' + meta.creatorName;
+function formatPurchaseBody(meta, extraComment) {
+  let body = '[B]Что нужно закупить (Кратко):[/B] ' + meta.shortDesc + '\n' +
+             '[B]Крайний срок закупки:[/B] ' + meta.deadlineStr + '\n' +
+             '[B]Кто создал запрос:[/B] ' + meta.creatorName;
+  if (extraComment) body += '\n[B]Комментарий:[/B] ' + extraComment;
+  return body;
 }
 
 function resolveDeptHeadId(item, respectTestMode) {
@@ -85,7 +88,7 @@ function resolveDeptHeadId(item, respectTestMode) {
   return null;
 }
 
-function sendBotNotification(userId, title, message, links, cb, dedupeKey) {
+function sendBotNotification(userId, title, message, links, cb, dedupeBase) {
   notifyUserViaBot(userId, title, message, links, function (success) {
     if (!success) {
       logAction('Fallback: im.notify', 'info');
@@ -95,15 +98,15 @@ function sendBotNotification(userId, title, message, links, cb, dedupeKey) {
       });
     }
     if (cb) cb(success);
-  }, dedupeKey);
+  }, dedupeBase);
 }
 
-function notifySelectExecutor(userId, item, taskId) {
+function notifySelectExecutor(userId, item, taskId, comment) {
   userId = parseInt(userId);
   if (!userId || !item) return;
   const meta = buildPurchaseMeta(item);
   const title = 'Необходимо выбрать исполнителя для закупки №' + meta.no + ' от ' + meta.dateStr;
-  const message = greetUser(userId) + '\n\n' + formatPurchaseBody(meta);
+  const message = greetUser(userId) + '\n\n' + formatPurchaseBody(meta, comment);
   const domain = getPortalDomain();
   const taskLink = taskId ? (domain ? domain + '/company/personal/user/' + userId + '/tasks/task/view/' + taskId + '/' : '') : '';
   const links = [
@@ -124,27 +127,38 @@ function notifyCollectData(userId, item) {
   sendBotNotification(userId, title, message, links, null, 'collect_' + item.id);
 }
 
+function resolveCombinedDir(item) {
+  let text = item[actualFields.combinedDir] || '';
+  if (!text || text === '—') {
+    const secName = getDisplayValue(item, actualFields.section, 'enum');
+    const dirName = getDisplayValue(item, actualFields.direction, 'enum');
+    const sec = (secName && secName !== '—') ? secName : '';
+    const dir = (dirName && dirName !== '—') ? dirName : '';
+    if (sec && dir) text = `${sec} / ${dir}`;
+    else if (sec) text = sec;
+    else text = '';
+  }
+  return text;
+}
+
 function buildApprovalCard(item) {
   const meta = buildPurchaseMeta(item);
-  const amount = parseAmount(item[actualFields.amountProduct]) ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
+  const productAmount = parseAmount(item[actualFields.amountProduct]) || 0;
+  const deliveryAmount = parseAmount(item[actualFields.amountDelivery]) || 0;
+  const total = productAmount + deliveryAmount;
   const deadline = formatDeadline(item[actualFields.deadlineZakup]);
   const deptId = String(Array.isArray(item[actualFields.dept]) ? item[actualFields.dept][0] : (item[actualFields.dept] || ''));
   const deptName = settings.deptShortNames[deptId] || (departments.find(d => String(d.ID) === deptId)?.NAME || '—');
   const mgrId = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager][0] : (item[actualFields.manager] || '');
   const mgrName = mgrId ? (userNames[mgrId] || mgrId) : '—';
-  let combinedDirText = item[actualFields.combinedDir] || '';
-  if (!combinedDirText && item[actualFields.section]) {
-    const secName = getDisplayValue(item, actualFields.section, 'enum');
-    const dirName = getDisplayValue(item, actualFields.direction, 'enum');
-    if (secName !== '—') combinedDirText = `${secName} / ${dirName}`;
-  }
+  const combinedDirText = resolveCombinedDir(item);
   const comment = item[actualFields.comment] ? cleanText(item[actualFields.comment]) : '';
   const lines = [
     '[B]Что нужно закупить (Кратко):[/B] ' + meta.shortDesc,
     '[B]Срок:[/B] ' + deadline,
     '[B]Заказчик:[/B] ' + meta.creatorName + ' (' + meta.creatorDept + ')',
     '[B]Менеджер:[/B] ' + mgrName,
-    '[B]Сумма:[/B] ' + amount
+    '[B]Сумма:[/B] ' + (total ? total.toLocaleString('ru-RU') + ' ₽' : 'не указана')
   ];
   if (combinedDirText) lines.push('[B]Раздел/Направление:[/B] ' + combinedDirText);
   if (comment) lines.push('[B]Комментарий:[/B] ' + comment);
@@ -190,15 +204,39 @@ function notifyAfterDecision(managerId, item, approved) {
   managerId = parseInt(managerId);
   if (!managerId || !item) return;
   const meta = buildPurchaseMeta(item);
-  const amount = parseAmount(item[actualFields.amountProduct]) ? parseFloat(item[actualFields.amountProduct]).toLocaleString('ru-RU') + ' ₽' : 'не указана';
+  const productAmount = parseAmount(item[actualFields.amountProduct]) || 0;
+  const deliveryAmount = parseAmount(item[actualFields.amountDelivery]) || 0;
+  const total = productAmount + deliveryAmount;
   const title = approved ? 'Условия согласованы' : 'Закупка отклонена';
   const message = greetUser(managerId) + '\n\n' + (approved
-    ? 'Условия по закупке «' + meta.shortDesc + '» (сумма ' + amount + ') согласованы.\nНеобходимо загрузить входящий счёт.'
+    ? 'Условия по закупке «' + meta.shortDesc + '» согласованы.\n[B]Сумма товаров:[/B] ' + productAmount.toLocaleString('ru-RU') + ' ₽\n[B]Сумма доставки:[/B] ' + deliveryAmount.toLocaleString('ru-RU') + ' ₽\n[B]ИТОГО:[/B] ' + total.toLocaleString('ru-RU') + ' ₽\nНеобходимо загрузить входящий счёт.'
     : 'Закупка «' + meta.shortDesc + '» отклонена на этапе согласования.');
   const links = [{ text: approved ? '📄 Загрузить счёт' : '📋 Открыть закупку', url: buildAppLink(approved ? 'upload' : 'view', item.id, 'inbox') }].filter(l => l.url);
   notifyUserViaBot(managerId, title, message, links, function (success) {
     if (!success) BX24.callMethod('im.notify', { to: managerId, message: title + '\n' + message, type: 'SYSTEM', link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : '' }, function () {});
   }, 'decision_' + item.id + '_' + (approved ? 'ok' : 'no'));
+}
+
+function notifyInvoiceEvent(item, kind) {
+  if (!item) return;
+  const meta = buildPurchaseMeta(item);
+  const mgrArr = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []);
+  const recipients = [];
+  if (mgrArr.length) recipients.push(parseInt(mgrArr[0]));
+  const headId = resolveDeptHeadId(item, true);
+  if (headId) recipients.push(headId);
+  const uniq = [...new Set(recipients.filter(Boolean))];
+  const map = {
+    approved: { title: 'Входящий счёт утверждён', msg: 'Входящий счёт по закупке №' + meta.no + ' «' + meta.shortDesc + '» утверждён экономистом. Ожидайте оплату.' },
+    paid: { title: 'Входящий счёт оплачен', msg: 'Входящий счёт по закупке №' + meta.no + ' «' + meta.shortDesc + '» оплачен. Товары в пути — подтвердите получение.' },
+    rejected: { title: 'Входящий счёт отклонён', msg: 'Входящий счёт по закупке №' + meta.no + ' «' + meta.shortDesc + '» отклонён. Требуется корректировка.' }
+  };
+  const info = map[kind];
+  if (!info) return;
+  const links = [{ text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'inbox') }].filter(l => l.url);
+  uniq.forEach(function (uid) {
+    notifyUserViaBot(uid, info.title, greetUser(uid) + '\n\n' + info.msg, links, null, 'invoice_' + kind + '_' + item.id);
+  });
 }
 
 function isUserUnavailable(userId) {
@@ -214,12 +252,23 @@ function refreshUnavailableUsers(done) {
   done = done || function () {};
   const today = new Date().toISOString().slice(0, 10);
   if (localStorage.getItem('b24_absence_check_date') === today) { logAction('Отсутствия уже обновлены сегодня', 'info'); return done(); }
+  runAbsenceCheck(done);
+}
+
+function refreshUnavailableUsersForce(done) {
+  done = done || function () {};
+  localStorage.removeItem('b24_absence_check_date');
+  runAbsenceCheck(done);
+}
+
+function runAbsenceCheck(done) {
+  done = done || function () {};
   const field = (settings.absenceField || '').trim();
-  if (!field) { logAction('Поле статуса отсутствия не настроено — автопроверка пропущена', 'info'); return done(); }
+  if (!field) { logAction('Поле статуса отсутствия не настроено — автопроверка пропущена', 'info'); if (done) done(); return; }
   const values = (settings.absenceValues || 'отпуск,больничный,командировка,не в офисе').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  logAction('Автопроверка отсутствий (поле: ' + field + ')...', 'info');
+  logAction('Проверка отсутствий (поле: ' + field + ')...', 'info');
   BX24.callMethod('user.get', { active: true, SELECT: ['ID', 'NAME', 'LAST_NAME', field] }, function (res) {
-    if (res.error()) { logAction('Ошибка проверки отсутствий: ' + getApiErrorMessage(res), 'error'); return done(); }
+    if (res.error()) { logAction('Ошибка проверки отсутствий: ' + getApiErrorMessage(res) + ' — проверьте код поля', 'error'); if (done) done(); return; }
     const list = res.data() || [];
     const absents = [];
     list.forEach(u => {
@@ -229,10 +278,31 @@ function refreshUnavailableUsers(done) {
       if (s && values.some(val => s.includes(val))) absents.push(String(u.ID));
     });
     settings.unavailableUsers = absents;
-    localStorage.setItem('b24_absence_check_date', today);
-    logAction('Автопроверка: недоступных ' + absents.length, 'success');
+    localStorage.setItem('b24_absence_check_date', new Date().toISOString().slice(0, 10));
+    logAction('Проверка выполнена: недоступных ' + absents.length, 'success');
     saveSettingsToBoth();
-    done();
+    if (done) done();
+  });
+}
+
+function getInvoiceFieldCodes(cb) {
+  if (invoiceFieldCodesCache) return cb(invoiceFieldCodesCache);
+  BX24.callMethod('crm.item.fields', { entityTypeId: INVOICE_ENTITY_ID }, function (res) {
+    if (res.error()) { logAction('Ошибка полей входящих счетов: ' + getApiErrorMessage(res), 'error'); return cb({}); }
+    const fd = res.data().fields || {};
+    const codes = {};
+    for (const hintKey in INVOICE_FIELD_HINTS) {
+      const needles = INVOICE_FIELD_HINTS[hintKey];
+      const found = Object.keys(fd).find(code => {
+        if (['id', 'title', 'xmlId', 'createdTime', 'updatedTime', 'createdBy', 'updatedBy', 'categoryId', 'stageId', 'assignedById', 'opened', 'movedTime', 'movedBy', 'lastActivityTime', 'lastActivityBy'].includes(code)) return false;
+        const t = (fd[code].title || '').toLowerCase().replace(/ё/g, 'е');
+        return needles.some(n => t.includes(n));
+      });
+      if (found) codes[hintKey] = found;
+    }
+    invoiceFieldCodesCache = codes;
+    logAction('Поля входящих счетов: ' + JSON.stringify(codes), 'info');
+    cb(codes);
   });
 }
 

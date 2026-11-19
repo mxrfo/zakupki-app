@@ -1,5 +1,5 @@
 // ============================================================
-// МОДУЛЬ: bot.js — Чат-бот уведомлений (imbot.v2, режим fetch)
+// МОДУЛЬ: bot.js — Чат-бот уведомлений (imbot.v2)
 // ============================================================
 const BOT_CODE = 'purchase_app_bot';
 const BOT_NAME = 'Альтернатива · Закупки';
@@ -17,15 +17,20 @@ function describeError(res) {
   } catch (_) { return 'Код ошибки: UNKNOWN'; }
 }
 
+// ✅ Хеш строки — для дедупа по содержимому (изменились данные → новый ключ → уведомление пройдёт)
+function hashStr(s) {
+  let h = 0;
+  const str = String(s || '');
+  for (let i = 0; i < str.length; i++) { h = (Math.imul(h, 31) + str.charCodeAt(i)) | 0; }
+  return 'h' + (h >>> 0);
+}
+
 function dedupePass(key) {
   if (!key) return false;
   const k = 'b24_dk_' + key;
   const prev = parseInt(localStorage.getItem(k) || '0');
   const now = Date.now();
-  if (now - prev < 15 * 60 * 1000) {
-    logAction('Уведомление ' + key + ' отправлено недавно — дубль пропущен', 'info');
-    return true;
-  }
+  if (now - prev < 10 * 60 * 1000) { logAction('Дубль уведомления ' + key + ' пропущен', 'info'); return true; }
   localStorage.setItem(k, String(now));
   return false;
 }
@@ -141,8 +146,10 @@ function sendToPersonalChat(botId, userId, title, message, links, cb) {
   });
 }
 
-function notifyUserViaBot(userId, title, message, links, cb, dedupeKey) {
-  if (dedupePass(dedupeKey)) { if (cb) cb(true); return; }
+// ✅ dedupeKey теперь = base + хеш тела: изменились данные → уведомление проходит
+function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
+  const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
+  if (dedupePass(fullKey)) { if (cb) cb(true); return; }
   getBotId(function (botId) {
     if (!botId) { logAction('Не удалось получить ID бота', 'error'); if (cb) cb(false); return; }
     getGroupChatId(botId, function (chatId) {
@@ -155,4 +162,11 @@ function notifyUserViaBot(userId, title, message, links, cb, dedupeKey) {
       });
     });
   });
+}
+
+function clearBotCache() {
+  localStorage.removeItem('b24_bot_id');
+  localStorage.removeItem('b24_group_chat_id');
+  Object.keys(localStorage).filter(function (k) { return k.indexOf('b24_bot_chat_') === 0 || k.indexOf('b24_dk_') === 0; }).forEach(function (k) { localStorage.removeItem(k); });
+  logAction('Кэш бота и дедупа сброшен', 'info');
 }

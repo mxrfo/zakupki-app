@@ -330,9 +330,13 @@ body {
   pointer-events: none;
 }
 
-.note-footer { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 10px; }
-.note-actions { display: flex; gap: 8px; justify-content: center; width: 100%; flex-wrap: wrap; }
-.note-admin-actions { display: flex; gap: 6px; justify-content: center; border-top: 1px dashed var(--border-color); padding-top: 10px; width: 100%; }
+/* ✅ ФИКС: кнопки в один ряд, уменьшенные, чтобы влезли */
+.note-footer { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px; }
+.note-actions { display: flex; gap: 6px; justify-content: center; width: 100%; flex-wrap: nowrap; align-items: center; }
+.note-actions .btn { padding: 7px 10px; font-size: 12px; }
+.note-actions .action-icon-btn { width: 32px; height: 32px; }
+.note-admin-actions { display: flex; gap: 4px; justify-content: center; border-top: 1px dashed var(--border-color); padding-top: 8px; width: 100%; flex-wrap: wrap; }
+.note-admin-actions .action-icon-btn { width: 30px; height: 30px; }
 
 /* === Табличный вид === */
 .table-view {
@@ -613,7 +617,7 @@ body {
   font-size: 14px;
   opacity: 0;
   transition: opacity 0.3s;
-  z-index: 10001; /* ✅ Исправлено: выше панели логов */
+  z-index: 10001;
   transform: translateY(10px);
   box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
 }
@@ -632,7 +636,7 @@ body {
   color: #e2e8f0;
   display: flex;
   flex-direction: column;
-  z-index: 10000; /* ✅ Исправлено: теперь выше fab-btn (9999) */
+  z-index: 10000;
   transform: translateY(100%);
   transition: transform 0.3s;
   box-shadow: 0 -4px 10px rgba(0,0,0,0.2);
@@ -700,7 +704,7 @@ body {
   position: fixed;
   bottom: 24px;
   left: 284px;
-  z-index: 10001; /* ✅ Исправлено: выше fab-btn */
+  z-index: 10001;
   background: #1e293b;
   color: #fff;
   border: none;
@@ -743,38 +747,38 @@ body {
    (остаточный :focus/:active glow). Сбрасываем анимацию и тень
    после клика, оставляя только мягкий hover.
    ============================================================ */
-   .btn-primary,
-   .btn-primary:focus,
-   .btn-primary:active,
-   .btn-primary:focus-visible,
-   .btn-primary:focus-within {
-     animation: none !important;
-     box-shadow: 0 1px 2px rgba(3, 70, 148, 0.15) !important;
-     outline: none !important;
-     filter: none !important;
-   }
-   
-   .btn-primary:hover {
-     box-shadow: 0 2px 6px rgba(3, 70, 148, 0.25) !important;
-     animation: none !important;
-   }
-   
-   .btn-primary:disabled,
-   .btn-primary[disabled] {
-     opacity: 0.6;
-     cursor: not-allowed;
-     box-shadow: none !important;
-     animation: none !important;
-   }
-   
-   /* Убираем залипание transform у всех кнопок */
-   .btn:active,
-   .btn:focus,
-   .btn-primary:active {
-     transform: none !important;
-   }
-   
-   /* Отключаем любые keyframe-анимации пульсации на кнопках */
-   .btn-primary {
-     transition: background-color 0.2s ease, box-shadow 0.2s ease !important;
-   }
+.btn-primary,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary:focus-visible,
+.btn-primary:focus-within {
+  animation: none !important;
+  box-shadow: 0 1px 2px rgba(3, 70, 148, 0.15) !important;
+  outline: none !important;
+  filter: none !important;
+}
+
+.btn-primary:hover {
+  box-shadow: 0 2px 6px rgba(3, 70, 148, 0.25) !important;
+  animation: none !important;
+}
+
+.btn-primary:disabled,
+.btn-primary[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+/* Убираем залипание transform у всех кнопок */
+.btn:active,
+.btn:focus,
+.btn-primary:active {
+  transform: none !important;
+}
+
+/* Отключаем любые keyframe-анимации пульсации на кнопках */
+.btn-primary {
+  transition: background-color 0.2s ease, box-shadow 0.2s ease !important;
+}

@@ -1,11 +1,7 @@
 // js/config.js — Константы, ID сущностей, маппинги полей
 
-// ✅ Идентификатор сборки. В исходниках — заглушка 'AUTO'.
-// build.js при каждой сборке подставляет сюда timestamp, равный имени архива,
-// чтобы приложение детектировало новый архив и само пересоздавало бота.
 let APP_BUILD_ID = 'AUTO';
 
-// ID сущностей Битрикс24
 let ENTITY_TYPE_ID = 1072;
 let INVOICE_ENTITY_ID = 1068;
 let currentCategoryId = 65;
@@ -30,6 +26,7 @@ const DEFAULT_MAPPING = {
   detailPrice: 'UF_CRM_17_PRICE_ED',
   detailQty: 'ufCrm17_1792998488',
   detailLink: 'ufCrm17_1792761300',
+  detailSupplier: 'ufCrm17_TECH_SUPPLIER',
   postponeDate: 'ufCrm17_1794583117',
   manager: 'ufCrm17_OTDEL_ISPOL_SOTR',
   deptHead: 'ufCrm17_OTDEL_ISPOL_RUK',
@@ -40,12 +37,13 @@ const DEFAULT_MAPPING = {
   delegateHistory: 'ufCrm17_TECH_DELEG'
 };
 
-const INVOICE_MAPPING = {
-  invoiceTitle: 'ufCrm15_1792415120',
-  invoiceSum: 'ufCrm15_1792415602934',
-  invoicePayFor: 'ufCrm15_1792417801123',
-  invoiceFile: 'ufCrm15_1792415233',
-  invoiceDeadline: 'ufCrm15_KRAY'
+// ✅ Кодексы полей входящих счетов определяются на лету (см. getInvoiceFieldCodes)
+const INVOICE_FIELD_HINTS = {
+  invoiceTitle: ['название', 'title', 'номер'],
+  invoiceSum: ['сумма', 'итого', 'sum', 'total'],
+  invoicePayFor: ['за что', 'основание', 'назначение', 'pay for'],
+  invoiceFile: ['файл', 'скан', 'копия', 'file', 'документ'],
+  invoiceDeadline: ['срок', 'крайний', 'deadline', 'оплат']
 };
 
 const CACHE_KEY = 'purchase_app_meta_cache_1088';
@@ -57,6 +55,9 @@ let settings = {
   systemUserId: 175,
   clientId: '',
   clientSecret: '',
+  chatId: '',
+  absenceField: '',
+  absenceValues: 'отпуск,больничный,командировка',
   deptHeads: {},
   deptManagers: {},
   deptShortNames: {},

@@ -48,12 +48,14 @@ function openExecutorModal(id) {
   if (!taskId || !String(taskId).match(/^\d+$/)) { showToast('Задача на выбор исполнителя не найдена', 'error'); return; }
   if (item[actualFields.manager] && (Array.isArray(item[actualFields.manager]) ? item[actualFields.manager].length : true)) {
     showToast('Исполнитель уже выбран. Откройте карточку закупки.', 'info');
+    openViewModal(id);
     return;
   }
   document.getElementById('executor-id').value = id;
   document.getElementById('executor-task-id').value = taskId;
   document.getElementById('executor-title').innerText = 'Выбор исполнителя — закупка №' + id;
-  document.getElementById('executor-desc').innerText = cleanText(item[actualFields.shortDesc]) || item.title || '';
+  const descVal = (cleanText(item[actualFields.shortDesc]) || item.title || '—');
+  document.getElementById('executor-desc').value = descVal;
   let deptId = '';
   const deptVal = item[actualFields.dept];
   if (deptVal) deptId = String(Array.isArray(deptVal) ? deptVal[0] : deptVal);
@@ -62,15 +64,15 @@ function openExecutorModal(id) {
   let added = 0;
   allUsers.forEach(u => {
     if (String(u.ACTIVE) === 'N') return;
-    if (String(u.ID) === String(currentUser.ID)) return;
     const depts = Array.isArray(u.UF_DEPARTMENT) ? u.UF_DEPARTMENT : (u.UF_DEPARTMENT ? [u.UF_DEPARTMENT] : []);
     const inDept = deptId ? depts.some(d => String(d) === deptId) : false;
-    if (inDept) { sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${isUserUnavailable(u.ID) ? ' (недоступен)' : ''}</option>`; added++; }
+    if (inDept) { const self = String(u.ID) === String(currentUser.ID) ? ' (я)' : ''; sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${self}${isUserUnavailable(u.ID) ? ' (недоступен)' : ''}</option>`; added++; }
   });
   if (added === 0) {
     allUsers.forEach(u => {
-      if (String(u.ACTIVE) === 'N' || String(u.ID) === String(currentUser.ID)) return;
-      sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${isUserUnavailable(u.ID) ? ' (недоступен)' : ''}</option>`;
+      if (String(u.ACTIVE) === 'N') return;
+      const self = String(u.ID) === String(currentUser.ID) ? ' (я)' : '';
+      sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${self}${isUserUnavailable(u.ID) ? ' (недоступен)' : ''}</option>`;
     });
   }
   document.getElementById('modal-executor').style.display = 'flex';
@@ -147,8 +149,10 @@ function openViewModal(id) {
   const totalAmount = calculateTotalAmount(item);
   const productAmount = parseAmount(item[actualFields.amountProduct]) || 0;
   const deliveryAmount = parseAmount(item[actualFields.amountDelivery]) || 0;
-  let combinedDirText = item[actualFields.combinedDir] || '—';
-  if (combinedDirText === '—' && item[actualFields.section]) { const secName = getDisplayValue(item, actualFields.section, 'enum'); const dirName = getDisplayValue(item, actualFields.direction, 'enum'); if (secName !== '—') combinedDirText = `${secName} / ${dirName}`; }
+  const combinedDirText = resolveCombinedDir(item) || '—';
+  const canSeeInvoice = !(activeTab === 'all' && currentRole !== 'admin' && currentRole !== 'econ');
+  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
+
   let html = `${isPostponed ? `<div class="note-badge postponed" style="margin-bottom:15px;">Отложено до: ${new Date(postponeDate).toLocaleDateString('ru-RU')}</div>` : ''}
     <div class="view-meta-block">
       <div class="view-dates-row" style="background:#fff; padding:12px; border-radius:8px; border:1px solid var(--border-color); margin-bottom:12px;">
@@ -169,35 +173,41 @@ function openViewModal(id) {
         <div><span class="view-details-label">Сумма доставки:</span> <b>${formatMoney(deliveryAmount)}</b></div>
         <div style="color:var(--brand-blue); font-size:16px; font-weight:800;"><span class="view-details-label" style="color:var(--brand-blue);">ИТОГО:</span> ${formatMoney(totalAmount)}</div>
       </div>`;
+
   const names = item[actualFields.detailName] || [];
   const purposes = item[actualFields.detailPurpose] || [];
   const prices = item[actualFields.detailPrice] || [];
   const qtys = item[actualFields.detailQty] || [];
   const links = item[actualFields.detailLink] || [];
+  const suppliers = item[actualFields.detailSupplier] || [];
   const hasDetails = names.some(n => n && n.trim() !== '');
+
   if (hasDetails) {
-    html += `<div class="view-details-divider"><div class="view-details-label">Детализация:</div><div class="detail-table-wrapper"><table class="detail-table"><thead><tr><th style="width: 25%;">Наименование</th><th style="width: 20%;">Цель</th><th style="width: 15%;">Цена за 1 шт.</th><th style="width: 10%;">Кол-во</th><th style="width: 15%;">Всего</th><th style="width: 15%;">Ссылка</th></tr></thead><tbody>`;
+    html += `<div class="view-details-divider"><div class="view-details-label">Детализация:</div><div class="detail-table-wrapper"><table class="detail-table"><thead><tr><th style="width: 22%;">Наименование</th><th style="width: 16%;">Цель</th>${hasSupplier ? '<th style="width: 14%;">Поставщик</th>' : ''}<th style="width: 13%;">Цена за 1 шт.</th><th style="width: 8%;">Кол-во</th><th style="width: 13%;">Всего</th><th style="width: 14%;">Ссылка</th></tr></thead><tbody>`;
     const arrN = Array.isArray(names) ? names : [names];
     const arrP = Array.isArray(purposes) ? purposes : [purposes];
     const arrPr = Array.isArray(prices) ? prices : [prices];
     const arrQ = Array.isArray(qtys) ? qtys : [qtys];
     const arrL = Array.isArray(links) ? links : [links];
+    const arrS = Array.isArray(suppliers) ? suppliers : [suppliers];
     const maxLen = Math.max(arrN.length, arrP.length, arrQ.length, arrL.length, arrPr.length);
     for (let i = 0; i < maxLen; i++) {
       const rowPrice = parseAmount(arrPr[i]) || 0;
       const rowQty = parseAmount(arrQ[i]) || 0;
       const rowTotal = rowPrice * rowQty;
-      html += `<tr><td>${arrN[i] || ''}</td><td>${arrP[i] || ''}</td><td>${rowPrice > 0 ? rowPrice.toFixed(2) : ''}</td><td>${arrQ[i] || ''}</td><td>${rowTotal > 0 ? rowTotal.toFixed(2) : ''}</td><td>${arrL[i] ? `<a href="${arrL[i]}" target="_blank">Ссылка</a>` : ''}</td></tr>`;
+      html += `<tr><td>${arrN[i] || ''}</td><td>${arrP[i] || ''}</td>${hasSupplier ? `<td>${arrS[i] || ''}</td>` : ''}<td>${rowPrice > 0 ? rowPrice.toFixed(2) : ''}</td><td>${arrQ[i] || ''}</td><td>${rowTotal > 0 ? rowTotal.toFixed(2) : ''}</td><td>${arrL[i] ? `<a href="${arrL[i]}" target="_blank">Ссылка</a>` : ''}</td></tr>`;
     }
     html += `</tbody></table></div></div>`;
   } else html += `<div class="view-details-divider"><p style="color:#64748b; font-style: italic;">Детализация не заполнена.</p></div>`;
   html += `</div>`;
+
   const fileInfo = getFileInfo(item, actualFields.fileInvoice);
-  if (fileInfo && fileInfo.url) html += `<h3 style="font-size:14px; margin-top:20px;">Файлы:</h3><a href="${fileInfo.url}" target="_blank">${fileInfo.name}</a>`;
+  if (fileInfo && fileInfo.url && canSeeInvoice) html += `<h3 style="font-size:14px; margin-top:20px;">Файлы:</h3><a href="${fileInfo.url}" target="_blank">${fileInfo.name}</a>`;
   if (econComment) html += `<div class="note-comment-box" style="margin-top:20px;"><b>Комментарий (${commentAuthorName}):</b> ${econComment}</div>`;
   const histField = actualFields.delegateHistory;
   const hist = (histField && item[histField]) ? String(item[histField]) : '';
   if (hist) html += `<div class="note-comment-box" style="margin-top:20px; background:#fffbeb;"><b>История делегирований:</b><div style="white-space:pre-wrap; font-size:12px;">${escapeHtml(hist)}</div></div>`;
+
   document.getElementById('view-body').innerHTML = html;
   const stage = spStages[item.stageId];
   const stageColor = stage ? stage.color : '#64748b';
@@ -223,21 +233,25 @@ function openEditModal(id) {
   const prices = item[actualFields.detailPrice] || [];
   const qtys = item[actualFields.detailQty] || [];
   const links = item[actualFields.detailLink] || [];
+  const suppliers = item[actualFields.detailSupplier] || [];
   const arrN = Array.isArray(names) ? names : (names ? [names] : []);
   const arrP = Array.isArray(purposes) ? purposes : (purposes ? [purposes] : []);
   const arrPr = Array.isArray(prices) ? prices : (prices ? [prices] : []);
   const arrQ = Array.isArray(qtys) ? qtys : (qtys ? [qtys] : []);
   const arrL = Array.isArray(links) ? links : (links ? [links] : []);
+  const arrS = Array.isArray(suppliers) ? suppliers : (suppliers ? [suppliers] : []);
   const maxLen = Math.max(arrN.length, 1);
+  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   for (let i = 0; i < maxLen; i++) {
     const tr = document.createElement('tr');
     const priceVal = parseAmount(arrPr[i]);
     const qtyVal = parseAmount(arrQ[i]);
     const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || '';
-    tr.innerHTML = `<td><input type="text" class="det-name" value="${arrN[i] || ''}" oninput="calculateAllTotals()"></td><td><input type="text" class="det-purpose" value="${arrP[i] || ''}"></td><td><input type="number" class="det-price" step="0.01" value="${priceVal}" oninput="calculateRowTotal(this)"></td><td><input type="number" class="det-qty" step="1" value="${qtyVal}" oninput="calculateRowTotal(this)"></td><td><input type="text" class="det-total" value="${totalVal ? totalVal.toFixed(2) : ''}" readonly></td><td><input type="url" class="det-link" value="${arrL[i] || ''}"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove(); calculateAllTotals();">&times;</button></td>`;
+    tr.innerHTML = `<td><input type="text" class="det-name" value="${arrN[i] || ''}" oninput="calculateAllTotals()"></td><td><input type="text" class="det-purpose" value="${arrP[i] || ''}"></td>${hasSupplier ? `<td><input type="text" class="det-supplier" value="${arrS[i] || ''}"></td>` : ''}<td><input type="number" class="det-price" step="0.01" value="${priceVal}" oninput="calculateRowTotal(this)"></td><td><input type="number" class="det-qty" step="1" value="${qtyVal}" oninput="calculateRowTotal(this)"></td><td><input type="text" class="det-total" value="${totalVal ? totalVal.toFixed(2) : ''}" readonly></td><td><input type="url" class="det-link" value="${arrL[i] || ''}"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove(); calculateAllTotals();">&times;</button></td>`;
     tbody.appendChild(tr);
   }
   calculateAllTotals();
+  syncSupplierColumns();
   const stage = spStages[item.stageId];
   document.getElementById('create-modal-content').style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
   document.getElementById('modal-create').style.display = 'flex';
@@ -274,18 +288,21 @@ function openDataModal(id) {
   const prices = item[actualFields.detailPrice] || [];
   const qtys = item[actualFields.detailQty] || [];
   const links = item[actualFields.detailLink] || [];
+  const suppliers = item[actualFields.detailSupplier] || [];
   const arrN = Array.isArray(names) ? names : (names ? [names] : []);
   const arrP = Array.isArray(purposes) ? purposes : (purposes ? [purposes] : []);
   const arrPr = Array.isArray(prices) ? prices : (prices ? [prices] : []);
   const arrQ = Array.isArray(qtys) ? qtys : (qtys ? [qtys] : []);
   const arrL = Array.isArray(links) ? links : (links ? [links] : []);
+  const arrS = Array.isArray(suppliers) ? suppliers : (suppliers ? [suppliers] : []);
   const maxLen = Math.max(arrN.length, 1);
+  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   for (let i = 0; i < maxLen; i++) {
     const tr = document.createElement('tr');
     const priceVal = parseAmount(arrPr[i]);
     const qtyVal = parseAmount(arrQ[i]);
     const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || '';
-    tr.innerHTML = `<td><input type="text" class="data-det-name" value="${arrN[i] || ''}"></td><td><input type="text" class="data-det-purpose" value="${arrP[i] || ''}"></td><td><input type="number" class="data-det-price" step="0.01" value="${priceVal}" oninput="calculateDataRowTotal(this)"></td><td><input type="number" class="data-det-qty" step="1" value="${qtyVal}" oninput="calculateDataRowTotal(this)"></td><td><input type="text" class="data-det-total" value="${totalVal ? totalVal.toFixed(2) : ''}" readonly></td><td><input type="url" class="data-det-link" value="${arrL[i] || ''}"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
+    tr.innerHTML = `<td><input type="text" class="data-det-name" value="${arrN[i] || ''}"></td><td><input type="text" class="data-det-purpose" value="${arrP[i] || ''}"></td>${hasSupplier ? `<td><input type="text" class="data-det-supplier" value="${arrS[i] || ''}"></td>` : ''}<td><input type="number" class="data-det-price" step="0.01" value="${priceVal}" oninput="calculateDataRowTotal(this)"></td><td><input type="number" class="data-det-qty" step="1" value="${qtyVal}" oninput="calculateDataRowTotal(this)"></td><td><input type="text" class="data-det-total" value="${totalVal ? totalVal.toFixed(2) : ''}" readonly></td><td><input type="url" class="data-det-link" value="${arrL[i] || ''}"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
     tbody.appendChild(tr);
   }
 
@@ -304,6 +321,7 @@ function openDataModal(id) {
 
   const modal = document.querySelector('#modal-data .modal');
   if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
+  syncSupplierColumns();
   document.getElementById('modal-data').style.display = 'flex';
 }
 
@@ -319,12 +337,23 @@ function openUploadModal(id) {
   const item = items.find(i => i.id === id);
   document.getElementById('form-upload').reset();
   document.getElementById('upload-id').value = id;
-  document.getElementById('file-name-display').innerText = 'Нажмите, чтобы выбрать файл';
-  document.getElementById('file-name-display').style.color = '#0f172a';
+  const nameDisplay = document.getElementById('file-name-display');
+  const fileInput = document.getElementById('upload-file');
+  const fileInfo = item ? getFileInfo(item, actualFields.fileInvoice) : null;
+  if (fileInfo && fileInfo.url) {
+    nameDisplay.innerText = 'Уже загружен: ' + fileInfo.name + ' (можно заменить)';
+    nameDisplay.style.color = '#10b981';
+    fileInput.required = false;
+  } else {
+    nameDisplay.innerText = 'Нажмите, чтобы выбрать файл';
+    nameDisplay.style.color = '#0f172a';
+    fileInput.required = true;
+  }
   if (item) {
     const stage = spStages[item.stageId];
     const modal = document.querySelector('#modal-upload .modal');
     if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
+    if (item[actualFields.deadlinePay]) document.getElementById('upload-deadline').value = String(item[actualFields.deadlinePay]).split('T')[0];
   }
   document.getElementById('modal-upload').style.display = 'flex';
 }
@@ -350,7 +379,7 @@ function openActionModal(id, type) {
       document.getElementById('modal-action').style.display = 'flex';
       return;
     }
-    title.innerText = 'Отправить в работу'; label.innerText = 'Комментарий';
+    title.innerText = 'Отправить в работу'; label.innerText = 'Комментарий (покажется в чате руководителю)';
     btnHtml += `<button type="submit" class="btn btn-primary">Отправить</button>`;
   } else if (type === 'approve_terms') {
     title.innerText = 'Согласовать условия'; label.innerText = 'Комментарий (увидят менеджеры)';
