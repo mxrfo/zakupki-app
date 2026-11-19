@@ -175,14 +175,12 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
         if ((isMgrUI || isHeadUI) && stName.includes('корректировк') && !dataSent) {
           buttonsHtml += `<button class="btn" style="flex:1; background:#1e293b; color:#fff; border:none;" onclick="event.stopPropagation(); openDataModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Исправить данные</button>`;
         }
-        // ✅ Менеджер на согласовании — полное редактирование данных
         if (isMgrUI && stName.includes('согласование') && !stName.includes('обработка')) {
           buttonsHtml += `<button class="btn btn-primary" style="flex:1;" onclick="event.stopPropagation(); openDataModal(${item.id})">Изменить данные</button>`;
         }
         if (isMgrUI && stName.includes('загрузка')) {
           buttonsHtml += `<button class="btn" style="flex:1; background:#1e293b; color:#fff; border:none;" onclick="event.stopPropagation(); openUploadModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Загрузить счет</button>`;
         }
-        // ✅ Кнопки согласования — только экономист/админ (руководитель их не видит)
         if (isEconUI && stName.includes('согласование условий')) {
           buttonsHtml += approvalButtonsIcon(item);
         }
@@ -209,7 +207,7 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       const deadlineDisplay = getDeadlineDisplay(item[actualFields.deadlineZakup]);
       const amount = formatMoney(currentTotalAmount);
       const mainTitle = cleanText(item.title) || 'Без названия';
-      const shortDesc = cleanText(item[actualFields.shortDesc]) || '—';
+      const shortDesc = getShortDesc(item);
       const fileInfo = getFileInfo(item, actualFields.fileInvoice);
       const econComment = cleanText(item[actualFields.comment]);
       const isInvoiceStageOrLater = stName.includes('загрузка') || stName.includes('обработка') || stName.includes('ожидание') || stName.includes('получение') || stName.includes('исполнено') || stName.includes('успех');
@@ -276,7 +274,6 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
     const creatorDept = userDepts[item.createdBy] || '—';
     const econComment = cleanText(item[actualFields.comment]);
     const dataSent = isDataAlreadySent(item, stName);
-    const canSeeInvoice = !(activeTab === 'all' && currentRole !== 'admin' && currentRole !== 'econ');
     const combinedDirText = resolveCombinedDir(item) || '—';
     const canDelegate = (isAdminUI || isDeptHeadForItem(item)) && !isAdminUI;
     const postponeDate = item[actualFields.postponeDate];
@@ -305,7 +302,6 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       if (isMgrUI && stName.includes('загрузка')) {
         buttonsHtml += `<button class="btn btn-sm" style="background:#1e293b;color:#fff;border:none;" onclick="event.stopPropagation(); openUploadModal(${item.id})">Загрузить счет</button>`;
       }
-      // ✅ согласование — только econ/admin
       if (isEconUI && stName.includes('согласование условий')) {
         buttonsHtml += approvalButtonsIcon(item);
       }
@@ -330,7 +326,7 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
     const commentIcon = econComment ? `<span class="comment-icon" title="${econComment.replace(/"/g, '&quot;')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>` : '';
     const clockIcon = isPostponed ? CLOCK_ICON : '';
     html += `<tr>
-      <td><div style="font-weight:700; color:var(--brand-blue); cursor:pointer; display:flex; align-items:center;" onclick="openViewModal(${item.id})">${mainTitle} ${commentIcon} ${clockIcon}</div><div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${cleanText(item[actualFields.shortDesc]) || '—'}</div></td>
+      <td><div style="font-weight:700; color:var(--brand-blue); cursor:pointer; display:flex; align-items:center;" onclick="openViewModal(${item.id})">${mainTitle} ${commentIcon} ${clockIcon}</div><div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${getShortDesc(item)}</div></td>
       <td><span class="note-badge" style="background:${stageColor}">${stage.name}</span></td>
       <td><div style="font-weight:600;">${creatorName}</div><div style="font-size:11px; color:var(--text-muted);">${creatorDept}</div></td>
       ${currentRole !== 'manager' ? `<td>${deptName}</td>` : ''}

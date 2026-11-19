@@ -21,6 +21,31 @@ function syncSupplierColumns() {
   });
 }
 
+// ✅ Заполнение разделов/направлений в модалке СОЗДАНИЯ
+function populateCreateSection() {
+  const secSelect = document.getElementById('create-section');
+  const dirSelect = document.getElementById('create-direction');
+  secSelect.innerHTML = '<option value="">-- Выберите раздел --</option>';
+  dirSelect.innerHTML = '<option value="">-- Сначала выберите раздел --</option>';
+  const secDef = fieldDefs[actualFields.section];
+  if (secDef && secDef.items) secDef.items.forEach(i => { secSelect.innerHTML += `<option value="${i.ID}">${i.VALUE}</option>`; });
+}
+
+function updateDirectionsCreate(selectedDirId = null) {
+  const secSelect = document.getElementById('create-section');
+  const secId = secSelect.value;
+  const dirSelect = document.getElementById('create-direction');
+  dirSelect.innerHTML = '<option value="">-- Выберите направление --</option>';
+  if (!secId) { dirSelect.innerHTML = '<option value="">-- Сначала выберите раздел --</option>'; return; }
+  const dirDef = fieldDefs[actualFields.direction];
+  if (!dirDef || !dirDef.items) return;
+  const allowedDirs = settings.listDependencies[secId] || [];
+  dirDef.items.forEach(item => {
+    if (allowedDirs.length > 0 && allowedDirs.includes(String(item.ID))) { const isSel = String(selectedDirId) === String(item.ID) ? 'selected' : ''; dirSelect.innerHTML += `<option value="${item.ID}" ${isSel}>${item.VALUE}</option>`; }
+    else if (allowedDirs.length === 0) { const isSel = String(selectedDirId) === String(item.ID) ? 'selected' : ''; dirSelect.innerHTML += `<option value="${item.ID}" ${isSel}>${item.VALUE}</option>`; }
+  });
+}
+
 function openCreateModal() {
   const deptSelect = document.getElementById('create-dept');
   deptSelect.innerHTML = '<option value="">-- Выберите отдел --</option>';
@@ -38,6 +63,7 @@ function openCreateModal() {
   document.getElementById('btn-save-create').disabled = false;
   document.getElementById('btn-save-create').innerText = 'Сохранить';
   document.getElementById('create-modal-content').style.borderTop = 'none';
+  populateCreateSection();
   syncSupplierColumns();
   addDetailRow();
   document.getElementById('modal-create').style.display = 'flex';
@@ -100,21 +126,6 @@ function updateFileName(input) {
   }
 }
 
-function updateDirections(selectedDirId = null) {
-  const secSelect = document.getElementById('data-section');
-  const secId = secSelect.value;
-  const dirSelect = document.getElementById('data-direction');
-  dirSelect.innerHTML = '<option value="">-- Выберите направление --</option>';
-  if (!secId) return;
-  const dirDef = fieldDefs[actualFields.direction];
-  if (!dirDef || !dirDef.items) return;
-  const allowedDirs = settings.listDependencies[secId] || [];
-  dirDef.items.forEach(item => {
-    if (allowedDirs.length > 0 && allowedDirs.includes(String(item.ID))) { const isSel = String(selectedDirId) === String(item.ID) ? 'selected' : ''; dirSelect.innerHTML += `<option value="${item.ID}" ${isSel}>${item.VALUE}</option>`; }
-    else if (allowedDirs.length === 0) { const isSel = String(selectedDirId) === String(item.ID) ? 'selected' : ''; dirSelect.innerHTML += `<option value="${item.ID}" ${isSel}>${item.VALUE}</option>`; }
-  });
-}
-
 function submitDelegate(e) {
   e.preventDefault();
   const id = document.getElementById('delegate-id').value;
@@ -141,6 +152,14 @@ function submitCreateRequest(e) {
   const deptId = document.getElementById('create-dept').value;
   const shortDesc = document.getElementById('create-short-desc').value;
   const amountProduct = document.getElementById('create-amount-product').value;
+  const section = document.getElementById('create-section').value;
+  const direction = document.getElementById('create-direction').value;
+  const secText = document.getElementById('create-section').options[document.getElementById('create-section').selectedIndex]?.text || '';
+  const dirText = document.getElementById('create-direction').options[document.getElementById('create-direction').selectedIndex]?.text || '';
+  let combinedText = '';
+  if (secText && dirText) combinedText = `${secText} / ${dirText}`;
+  else if (secText) combinedText = secText;
+
   const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   const rows = document.querySelectorAll('#detail-tbody tr');
   const arrNames = [], arrPurposes = [], arrPrices = [], arrQtys = [], arrLinks = [], arrSuppliers = [];
@@ -157,6 +176,9 @@ function submitCreateRequest(e) {
   const shortDept = settings.deptShortNames[deptId] || (departments.find(d => d.ID == deptId)?.NAME || 'Отдел');
   const dateStr = new Date().toLocaleDateString('ru-RU');
   const fields = { categoryId: currentCategoryId, [actualFields.shortDesc]: shortDesc, [actualFields.deadlineZakup]: deadline, [actualFields.dept]: deptId, [actualFields.creator]: currentUser.ID, [actualFields.amountProduct]: amountProduct ? parseFloat(amountProduct) : 0 };
+  if (section) fields[actualFields.section] = section;
+  if (direction) fields[actualFields.direction] = direction;
+  if (actualFields.combinedDir && combinedText) fields[actualFields.combinedDir] = combinedText;
   if (hasDetails) { fields[actualFields.detailName] = arrNames; fields[actualFields.detailPurpose] = arrPurposes; fields[actualFields.detailPrice] = arrPrices; fields[actualFields.detailQty] = arrQtys; fields[actualFields.detailLink] = arrLinks; if (hasSupplier) fields[actualFields.detailSupplier] = arrSuppliers; }
   else { fields[actualFields.detailName] = []; fields[actualFields.detailPurpose] = []; fields[actualFields.detailPrice] = []; fields[actualFields.detailQty] = []; fields[actualFields.detailLink] = []; if (hasSupplier) fields[actualFields.detailSupplier] = []; }
 
@@ -189,20 +211,12 @@ function submitCreateRequest(e) {
   }
 }
 
+// ✅ submitData: БЕЗ раздела/направления (они на этапе создания)
 function submitData(e) {
   e.preventDefault();
   const id = document.getElementById('data-id').value;
-  const secSelect = document.getElementById('data-section');
-  const dirSelect = document.getElementById('data-direction');
-  const section = secSelect.value;
-  const direction = dirSelect.value;
   const amountProduct = document.getElementById('data-amount-product').value;
   const amountDelivery = document.getElementById('data-amount-delivery').value;
-  const secText = secSelect.options[secSelect.selectedIndex]?.text || '';
-  const dirText = dirSelect.options[dirSelect.selectedIndex]?.text || '';
-  let combinedText = '';
-  if (secText && dirText) combinedText = `${secText} / ${dirText}`;
-  else if (secText) combinedText = secText;
 
   const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   const rows = document.querySelectorAll('#data-detail-tbody tr');
@@ -219,13 +233,11 @@ function submitData(e) {
   });
 
   const targetStageId = getStageIdByName('согласование');
-  const fields = { [actualFields.section]: section, [actualFields.direction]: direction, [actualFields.amountProduct]: amountProduct ? parseFloat(amountProduct) : 0 };
+  const fields = { [actualFields.amountProduct]: amountProduct ? parseFloat(amountProduct) : 0 };
   if (amountDelivery) fields[actualFields.amountDelivery] = parseFloat(amountDelivery);
-  if (actualFields.combinedDir && combinedText) fields[actualFields.combinedDir] = combinedText;
   if (hasDetails) { fields[actualFields.detailName] = arrNames; fields[actualFields.detailPurpose] = arrPurposes; fields[actualFields.detailPrice] = arrPrices; fields[actualFields.detailQty] = arrQtys; fields[actualFields.detailLink] = arrLinks; if (hasSupplier) fields[actualFields.detailSupplier] = arrSuppliers; }
   else { fields[actualFields.detailName] = []; fields[actualFields.detailPurpose] = []; fields[actualFields.detailPrice] = []; fields[actualFields.detailQty] = []; fields[actualFields.detailLink] = []; if (hasSupplier) fields[actualFields.detailSupplier] = []; }
 
-  // ✅ Определяем текущую стадию: если уже согласование — не двигаем стадию и не закрываем задачу сбора
   const curItem = items.find(i => i.id == id);
   const curStage = curItem ? spStages[curItem.stageId] : null;
   const curName = curStage ? curStage.name.toLowerCase().replace(/ё/g, 'е') : '';
@@ -249,10 +261,8 @@ function submitData(e) {
       }
       try {
         if (item) {
-          item[actualFields.section] = section; item[actualFields.direction] = direction;
           item[actualFields.amountProduct] = amountProduct ? parseFloat(amountProduct) : 0;
           if (amountDelivery) item[actualFields.amountDelivery] = parseFloat(amountDelivery);
-          if (combinedText) item[actualFields.combinedDir] = combinedText;
           if (!onApproval && targetStageId) item.stageId = targetStageId;
           const headId = resolveDeptHeadId(item, true);
           if (headId) {
@@ -280,6 +290,7 @@ function submitEditAmount(e) {
   });
 }
 
+// ✅ submitUpload: БЕЗ входящих счетов, всё в закупке; уведомляем согласующего
 function submitUpload(e) {
   e.preventDefault();
   const id = document.getElementById('upload-id').value;
@@ -299,29 +310,14 @@ function submitUpload(e) {
     BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: id, fields: fields }, (res) => {
       if (res.error()) { logAction('Ошибка загрузки счёта: ' + getApiErrorMessage(res), 'error'); showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); return; }
       logAction('Счёт загружен', 'success');
-      if (hasNewFile && filePayload) {
-        createInvoiceRecord(item, filePayload[0]);
+      if (item) {
+        if (filePayload) item[actualFields.fileInvoice] = filePayload;
+        item[actualFields.deadlinePay] = deadline;
+        if (targetStageId) item.stageId = targetStageId;
       }
-      // ✅ Уведомляем согласующего о загруженном счёте с кнопками утвердить/отклонить
       try { const econId = resolveDeptHeadId(item, true); if (econId) notifyInvoiceUploaded(econId, item); } catch (e) { logAction('Ошибка уведомления по счёту: ' + e.message, 'error'); }
       closeModal('modal-upload');
       loadAllData();
-    });
-  };
-
-  const createInvoiceRecord = (currentItem, fileArr) => {
-    if (!currentItem || !INVOICE_ENTITY_ID) return;
-    getInvoiceFieldCodes(function (codes) {
-      const invFields = { title: `Счет по закупке ${currentItem.title}` };
-      if (codes.invoiceSum) invFields[codes.invoiceSum] = currentItem[actualFields.amountProduct] || 0;
-      if (codes.invoicePayFor) invFields[codes.invoicePayFor] = currentItem[actualFields.shortDesc] || currentItem.title;
-      if (codes.invoiceFile && fileArr) invFields[codes.invoiceFile] = [fileArr];
-      if (codes.invoiceDeadline) invFields[codes.invoiceDeadline] = document.getElementById('upload-deadline').value;
-      logAction('Создание входящего счёта (поля: ' + JSON.stringify(codes) + ')...', 'info');
-      BX24.callMethod('crm.item.add', { entityTypeId: INVOICE_ENTITY_ID, fields: invFields }, (invRes) => {
-        if (invRes.error()) logAction('Ошибка создания счёта: ' + getApiErrorMessage(invRes), 'error');
-        else logAction('Входящий счёт создан (ID: ' + invRes.data().item.id + ')', 'success');
-      });
     });
   };
 

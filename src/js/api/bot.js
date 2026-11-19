@@ -17,7 +17,6 @@ function describeError(res) {
   } catch (_) { return 'Код ошибки: UNKNOWN'; }
 }
 
-// ✅ Хеш строки — для дедупа по содержимому (изменились данные → новый ключ → уведомление пройдёт)
 function hashStr(s) {
   let h = 0;
   const str = String(s || '');
@@ -113,11 +112,16 @@ function addUserToGroupChat(botId, chatId, userId, cb) {
   });
 }
 
-function botSendToGroup(botId, chatId, title, message, links, cb) {
-  const keyboard = (links || []).filter(function (l) { return l && l.url; }).map(function (l) {
+// ✅ Кнопки в ОДИН ряд: keyboard = [[btn1, btn2, ...]]
+function buildKeyboard(links) {
+  const btns = (links || []).filter(function (l) { return l && l.url; }).map(function (l) {
     return { TEXT: l.text, LINK: l.url, BG_COLOR_TOKEN: 'primary' };
   });
-  BX24.callMethod('imbot.v2.Chat.Message.send', { botId: botId, dialogId: chatId, fields: { message: '[B]' + title + '[/B]\n' + message, keyboard: keyboard } }, (res) => {
+  return btns.length ? [btns] : [];
+}
+
+function botSendToGroup(botId, chatId, title, message, links, cb) {
+  BX24.callMethod('imbot.v2.Chat.Message.send', { botId: botId, dialogId: chatId, fields: { message: '[B]' + title + '[/B]\n' + message, keyboard: buildKeyboard(links) } }, (res) => {
     if (res.error()) { logAction('Ошибка отправки в групповой чат: ' + describeError(res), 'error'); if (cb) cb(false); return; }
     logAction('Сообщение отправлено в групповой чат ' + chatId, 'success');
     if (cb) cb(true);
@@ -128,10 +132,7 @@ function sendToPersonalChat(botId, userId, title, message, links, cb) {
   const key = 'b24_bot_chat_' + userId;
   let dialogId = localStorage.getItem(key);
   function sendMsg(dId) {
-    const keyboard = (links || []).filter(function (l) { return l && l.url; }).map(function (l) {
-      return { TEXT: l.text, LINK: l.url, BG_COLOR_TOKEN: 'primary' };
-    });
-    BX24.callMethod('imbot.v2.Chat.Message.send', { botId: botId, dialogId: dId, fields: { message: '[B]' + title + '[/B]\n' + message, keyboard: keyboard } }, (res) => {
+    BX24.callMethod('imbot.v2.Chat.Message.send', { botId: botId, dialogId: dId, fields: { message: '[B]' + title + '[/B]\n' + message, keyboard: buildKeyboard(links) } }, (res) => {
       if (res.error()) { logAction('Ошибка отправки в личный чат: ' + describeError(res), 'error'); if (cb) cb(false); }
       else { logAction('Сообщение отправлено в личный чат ' + dId, 'success'); if (cb) cb(true); }
     });
@@ -146,7 +147,6 @@ function sendToPersonalChat(botId, userId, title, message, links, cb) {
   });
 }
 
-// ✅ dedupeKey теперь = base + хеш тела: изменились данные → уведомление проходит
 function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
   if (dedupePass(fullKey)) { if (cb) cb(true); return; }

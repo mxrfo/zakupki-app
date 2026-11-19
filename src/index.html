@@ -106,6 +106,10 @@
 <div class="form-group"><label>Крайний срок закупки *</label><input type="date" id="create-deadline" required></div>
 <div class="form-group"><label>Что нужно закупить (Кратко) *</label><input type="text" id="create-short-desc" required></div>
 <div class="form-row" style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
+<div class="form-group" style="flex:1; min-width:200px;"><label>Раздел направления расхода д/с *</label><select id="create-section" required onchange="updateDirectionsCreate()"></select></div>
+<div class="form-group" style="flex:1; min-width:200px;"><label>Направление расхода д/с *</label><select id="create-direction" required></select></div>
+</div>
+<div class="form-row" style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
 <div class="form-group" style="flex:1; min-width:200px;"><label>Сумма позиций (без доставки)</label><input type="number" id="create-amount-product" step="0.01" placeholder="0.00"></div>
 </div>
 <div class="form-section" style="background:#f8fafc; padding:16px; border-radius:8px; border:1px solid var(--border-color); margin-top:16px;">
@@ -138,8 +142,6 @@
 </div>
 <div style="background: #fff; border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; margin-bottom: 24px;">
 <h4 style="margin-top:0; margin-bottom:16px; font-size:15px; color:#334155;">Основные данные расчета</h4>
-<div class="form-group"><label>Раздел направления расхода д/с *</label><select id="data-section" required onchange="updateDirections()"></select></div>
-<div class="form-group"><label>Направление расхода д/с *</label><select id="data-direction" required></select></div>
 <div class="form-row" style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:0;">
 <div class="form-group" style="flex:1; min-width:200px; margin-bottom:0;"><label>Сумма товаров (без доставки) *</label><input type="number" id="data-amount-product" required step="0.01" placeholder="0.00"></div>
 <div class="form-group" style="flex:1; min-width:200px; margin-bottom:0;"><label>Сумма доставки</label><input type="number" id="data-amount-delivery" step="0.01" placeholder="0.00"></div>
@@ -229,7 +231,6 @@
 </form>
 </div>
 </div>
-<!-- ✅ Модалка выбора исполнителя (для руководителя из чата) -->
 <div id="modal-executor" class="modal-overlay">
   <div class="modal" style="max-width: 500px;">
     <div class="modal-header">
@@ -268,7 +269,6 @@
 <div class="section-content">
 <div style="display:flex; gap:16px; margin-bottom: 16px;">
 <div class="form-group" style="flex:1;"><label>ID Смарт-процесса (Закупки)</label><input type="number" id="set-entityid" value="1072"></div>
-<div class="form-group" style="flex:1;"><label>ID Смарт-процесса (Входящие счета)</label><input type="number" id="set-invoiceentityid" value="1068"></div>
 <div class="form-group" style="flex:1;"><label>ID Воронки (Category ID)</label><input type="number" id="set-categoryid" value="65"></div>
 </div>
 <div style="display:flex; gap:16px;">
@@ -278,8 +278,8 @@
 </div>
 <div style="margin-top:16px; border-top:1px solid var(--border-color); padding-top:16px;">
   <div class="form-group"><label>ID группового чата бота (не обяз.)</label><input type="text" id="set-chatid" placeholder="chat60875"><div style="font-size:11px; color:#64748b; margin-top:4px;">Если задан — бот использует этот чат. Иначе создаёт новый автоматически.</div></div>
-  <div class="form-group"><label>Код поля статуса отсутствия в профиле сотрудника</label><input type="text" id="set-absence-field" placeholder="UF_DEPARTMENT или кастомное поле"><div style="font-size:11px; color:#64748b; margin-top:4px;">Например: UF_ABSENCE_STATUS. Оставьте пустым, если автопроверка не нужна.</div></div>
-  <div class="form-group"><label>Значения поля, означающие отсутствие (через запятую)</label><input type="text" id="set-absence-values" placeholder="отпуск,больничный,командировка"><div style="font-size:11px; color:#64748b; margin-top:4px;">Проверка запускается 1 раз в день при загрузке приложения.</div></div>
+  <div class="form-group"><label>Код доп. поля статуса отсутствия (не обяз.)</label><input type="text" id="set-absence-field" placeholder="оставьте пустым для авто-детекта UF_ABSENCE"><div style="font-size:11px; color:#64748b; margin-top:4px;">По умолчанию отсутствие определяется из системного поля профиля UF_ABSENCE (пары дат). Доп. поле — опционально.</div></div>
+  <div class="form-group"><label>Значения доп. поля, означающие отсутствие</label><input type="text" id="set-absence-values" placeholder="отпуск,больничный,командировка"><div style="font-size:11px; color:#64748b; margin-top:4px;">Используется только если задано доп. поле выше.</div></div>
 </div>
 </div>
 </details>
@@ -309,7 +309,7 @@
 <details class="admin-section" open>
 <summary>Недоступные сотрудники</summary>
 <div class="section-content">
-<p style="font-size:12px; color:#64748b; margin-bottom:10px;">Отметьте сотрудников в отпуске/на больничном.</p>
+<p style="font-size:12px; color:#64748b; margin-bottom:10px;">Отметьте сотрудников в отпуске/на больничном (авто-детект по UF_ABSENCE).</p>
 <div id="unavailable-users-container" style="max-height:260px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; padding:8px;"></div>
 </div>
 </details>

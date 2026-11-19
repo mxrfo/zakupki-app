@@ -5,7 +5,6 @@ let b24Ready = false;
 var deleteInProgress = {};
 var urlParamsProcessed = false;
 var lastHandledItemId = '';
-var invoiceFieldCodesCache = null;
 
 function getPortalDomain() {
   if (window.__portalDomain) return window.__portalDomain;
@@ -56,26 +55,76 @@ function greetUser(userId) {
   return '[USER=' + parseInt(userId) + ']' + n + '[/USER]';
 }
 
-function buildPurchaseMeta(item) {
-  const no = item.id;
-  const dateStr = formatCreatedDate(item.createdTime);
-  let shortDesc = '';
-  try { shortDesc = (typeof cleanText === 'function' ? cleanText(item[actualFields.shortDesc]) : (item[actualFields.shortDesc] || '')) || item.title || '—'; } catch (e) { shortDesc = item.title || '—'; }
-  const deadlineStr = formatDeadline(item[actualFields.deadlineZakup]);
-  const creatorRaw = item[actualFields.creator];
-  const creatorId = Array.isArray(creatorRaw) ? creatorRaw[0] : creatorRaw;
-  const realCreatorId = creatorId || item.createdBy;
-  const creatorName = (realCreatorId && (userNames[realCreatorId] || realCreatorId)) || '—';
-  const creatorDept = (realCreatorId && userDepts[realCreatorId]) || '—';
-  return { no, dateStr, shortDesc, deadlineStr, creatorName, creatorDept, creatorId: realCreatorId };
+function getDeptShort(item) {
+  const deptId = String(Array.isArray(item[actualFields.dept]) ? item[actualFields.dept][0] : (item[actualFields.dept] || ''));
+  const sn = settings.deptShortNames[deptId];
+  if (sn) return sn;
+  const d = departments.find(x => String(x.ID) === deptId);
+  return d ? d.NAME : '—';
 }
 
-function formatPurchaseBody(meta, extraComment) {
-  let body = '[B]Что нужно закупить (Кратко):[/B] ' + meta.shortDesc + '\n' +
-             '[B]Крайний срок закупки:[/B] ' + meta.deadlineStr + '\n' +
-             '[B]Кто создал запрос:[/B] ' + meta.creatorName;
-  if (extraComment) body += '\n[B]Комментарий:[/B] ' + extraComment;
-  return body;
+function resolveCombinedDir(item) {
+  let text = item[actualFields.combinedDir] || '';
+  if (!text || text === '—') {
+    const secName = getDisplayValue(item, actualFields.section, 'enum');
+    const dirName = getDisplayValue(item, actualFields.direction, 'enum');
+    const sec = (secName && secName !== '—') ? secName : '';
+    const dir = (dirName && dirName !== '—') ? dirName : '';
+    if (sec && dir) text = `${sec} / ${dir}`;
+    else if (sec) text = sec;
+    else text = '';
+  }
+  return text;
+}
+
+function getMgrInfo(item) {
+  const mgrId = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager][0] : (item[actualFields.manager] || '');
+  const name = mgrId ? (userNames[mgrId] || mgrId) : '—';
+  const dept = mgrId ? (userDepts[mgrId] || '—') : '—';
+  return { id: mgrId, name, dept };
+}
+
+function getCreatorInfo(item) {
+  const creatorRaw = item[actualFields.creator];
+  const creatorId = Array.isArray(creatorRaw) ? creatorRaw[0] : creatorRaw;
+  const realId = creatorId || item.createdBy;
+  return { id: realId, name: (realId && (userNames[realId] || realId)) || '—', dept: (realId && userDepts[realId]) || '—' };
+}
+
+function getShortDesc(item) {
+  try { return (typeof cleanText === 'function' ? cleanText(item[actualFields.shortDesc]) : (item[actualFields.shortDesc] || '')) || item.title || '—'; } catch (e) { return item.title || '—'; }
+}
+
+// ✅ Единый заголовок: "{kind} (Закупка отделом {deptShort} №{id} от {date})"
+function buildTitle(kind, item) {
+  return kind + ' (Закупка отделом ' + getDeptShort(item) + ' №' + item.id + ' от ' + formatCreatedDate(item.createdTime) + ')';
+}
+
+// ✅ Единый порядок тела: Срок, Раздел/Направление, Что закупить, [Менеджер], Кто создал, Сумма, Комментарий, Файл
+function buildBody(item, opts) {
+  opts = opts || {};
+  const lines = [];
+  lines.push('[B]Срок:[/B] ' + formatDeadline(item[actualFields.deadlineZakup]));
+  const dir = resolveCombinedDir(item);
+  if (dir) lines.push('[B]Раздел/Направление:[/B] ' + dir);
+  lines.push('[B]Что нужно закупить (Кратко):[/B] ' + getShortDesc(item));
+  if (opts.manager) { const m = getMgrInfo(item); if (m.id) lines.push('[B]Менеджер:[/B] ' + m.name + ' (' + m.dept + ')'); }
+  if (opts.creator) { const c = getCreatorInfo(item); lines.push('[B]Кто создал запрос:[/B] ' + c.name + ' (' + c.dept + ')'); }
+  if (opts.sum) {
+    const product = parseAmount(item[actualFields.amountProduct]) || 0;
+    const delivery = parseAmount(item[actualFields.amountDelivery]) || 0;
+    const total = product + delivery;
+    if (opts.sumSplit) {
+      lines.push('[B]Сумма за товар:[/B] ' + product.toLocaleString('ru-RU') + ' ₽');
+      lines.push('[B]Сумма за доставку:[/B] ' + delivery.toLocaleString('ru-RU') + ' ₽');
+      lines.push('[B]ИТОГО:[/B] ' + total.toLocaleString('ru-RU') + ' ₽');
+    } else if (total) {
+      lines.push('[B]Сумма:[/B] ' + total.toLocaleString('ru-RU') + ' ₽');
+    }
+  }
+  if (opts.comment) { const c = item[actualFields.comment] ? cleanText(item[actualFields.comment]) : ''; if (c) lines.push('[B]Комментарий:[/B] ' + c); }
+  if (opts.file) { const f = getFileInfo(item, actualFields.fileInvoice); if (f && f.url) lines.push('[B]Файл для скачки:[/B] [URL=' + f.url + ']' + f.name + '[/URL]'); }
+  return lines.join('\n');
 }
 
 function resolveDeptHeadId(item, respectTestMode) {
@@ -102,18 +151,18 @@ function sendBotNotification(userId, title, message, links, cb, dedupeBase) {
   }, dedupeBase);
 }
 
-function notifySelectExecutor(userId, item, taskId, comment) {
+// ✅ Выбор исполнителя: кнопки Выбрать исполнителя, Открыть задачу, Открыть закупку №id
+function notifySelectExecutor(userId, item, taskId) {
   userId = parseInt(userId);
   if (!userId || !item) return;
-  const meta = buildPurchaseMeta(item);
-  const title = 'Необходимо выбрать исполнителя для закупки №' + meta.no + ' от ' + meta.dateStr;
-  const message = greetUser(userId) + '\n\n' + formatPurchaseBody(meta, comment);
+  const title = buildTitle('Необходимо выбрать исполнителя', item);
+  const message = greetUser(userId) + '\n\n' + buildBody(item, { creator: true, sum: true, comment: true });
   const domain = getPortalDomain();
   const taskLink = taskId ? (domain ? domain + '/company/personal/user/' + userId + '/tasks/task/view/' + taskId + '/' : '') : '';
   const links = [
     { text: '👤 Выбрать исполнителя', url: buildAppLink('select_executor', item.id, 'my_requests') },
-    { text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'my_requests') },
-    taskLink ? { text: '✅ Открыть задачу', url: taskLink } : null
+    taskLink ? { text: '✅ Открыть задачу', url: taskLink } : null,
+    { text: '📋 Открыть закупку №' + item.id, url: buildAppLink('view', item.id, 'my_requests') }
   ].filter(function (l) { return l && l.url; });
   sendBotNotification(userId, title, message, links, null, 'select_executor_' + item.id);
 }
@@ -121,64 +170,24 @@ function notifySelectExecutor(userId, item, taskId, comment) {
 function notifyCollectData(userId, item) {
   userId = parseInt(userId);
   if (!userId || !item) return;
-  const meta = buildPurchaseMeta(item);
-  const title = 'Необходимо собрать данные и рассчитать стоимость по закупке №' + meta.no + ' от ' + meta.dateStr;
-  const message = greetUser(userId) + '\n\n' + formatPurchaseBody(meta);
+  const title = buildTitle('Необходимо собрать данные и рассчитать стоимость', item);
+  const message = greetUser(userId) + '\n\n' + buildBody(item, { creator: true, sum: true, comment: true });
   const links = [{ text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }].filter(l => l.url);
   sendBotNotification(userId, title, message, links, null, 'collect_' + item.id);
-}
-
-function resolveCombinedDir(item) {
-  let text = item[actualFields.combinedDir] || '';
-  if (!text || text === '—') {
-    const secName = getDisplayValue(item, actualFields.section, 'enum');
-    const dirName = getDisplayValue(item, actualFields.direction, 'enum');
-    const sec = (secName && secName !== '—') ? secName : '';
-    const dir = (dirName && dirName !== '—') ? dirName : '';
-    if (sec && dir) text = `${sec} / ${dir}`;
-    else if (sec) text = sec;
-    else text = '';
-  }
-  return text;
-}
-
-function buildApprovalCard(item) {
-  const meta = buildPurchaseMeta(item);
-  const productAmount = parseAmount(item[actualFields.amountProduct]) || 0;
-  const deliveryAmount = parseAmount(item[actualFields.amountDelivery]) || 0;
-  const total = productAmount + deliveryAmount;
-  const deadline = formatDeadline(item[actualFields.deadlineZakup]);
-  const deptId = String(Array.isArray(item[actualFields.dept]) ? item[actualFields.dept][0] : (item[actualFields.dept] || ''));
-  const deptName = settings.deptShortNames[deptId] || (departments.find(d => String(d.ID) === deptId)?.NAME || '—');
-  const mgrId = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager][0] : (item[actualFields.manager] || '');
-  const mgrName = mgrId ? (userNames[mgrId] || mgrId) : '—';
-  const combinedDirText = resolveCombinedDir(item);
-  const comment = item[actualFields.comment] ? cleanText(item[actualFields.comment]) : '';
-  const lines = [
-    '[B]Что нужно закупить (Кратко):[/B] ' + meta.shortDesc,
-    '[B]Срок:[/B] ' + deadline,
-    '[B]Заказчик:[/B] ' + meta.creatorName + ' (' + meta.creatorDept + ')',
-    '[B]Менеджер:[/B] ' + mgrName,
-    '[B]Сумма:[/B] ' + (total ? total.toLocaleString('ru-RU') + ' ₽' : 'не указана')
-  ];
-  if (combinedDirText) lines.push('[B]Раздел/Направление:[/B] ' + combinedDirText);
-  if (comment) lines.push('[B]Комментарий:[/B] ' + comment);
-  const text = lines.join('\n');
-  const links = [
-    { text: '✅ Согласовать', url: buildAppLink('approve', item.id, 'inbox') },
-    { text: '🔧 На доработку', url: buildAppLink('rework', item.id, 'inbox') },
-    { text: '❌ Отклонить', url: buildAppLink('reject', item.id, 'inbox') }
-  ].filter(l => l.url);
-  return { text, links, deptName, no: meta.no, date: meta.dateStr };
 }
 
 function notifyApprovalNeeded(headId, item) {
   headId = parseInt(headId);
   if (!headId || !item) { logAction('notifyApprovalNeeded: headId не определён', 'error'); return; }
-  const card = buildApprovalCard(item);
-  const title = 'Согласование по закупке отделом ' + card.deptName + ' №' + card.no + ' от ' + card.date;
-  const message = greetUser(headId) + '\n\n' + card.text;
-  notifyUserViaBot(headId, title, message, card.links, function (success) {
+  const title = buildTitle('Согласование условий', item);
+  const message = greetUser(headId) + '\n\n' + buildBody(item, { manager: true, creator: true, sum: true, sumSplit: true, comment: true });
+  const links = [
+    { text: '✅ Согласовать', url: buildAppLink('approve', item.id, 'inbox') },
+    { text: '🔧 На доработку', url: buildAppLink('rework', item.id, 'inbox') },
+    { text: '❌ Отклонить', url: buildAppLink('reject', item.id, 'inbox') },
+    { text: '📋 Открыть закупку №' + item.id, url: buildAppLink('view', item.id, 'inbox') }
+  ].filter(l => l.url);
+  notifyUserViaBot(headId, title, message, links, function (success) {
     if (!success) {
       BX24.callMethod('im.notify', { to: headId, message: title + '\n' + message, type: 'SYSTEM', link: buildAppLink('approve', item.id, 'inbox'), button_text: 'Согласовать' }, function (r) {
         if (r.error()) logAction('im.notify (ID ' + headId + ') не прошёл: ' + getApiErrorMessage(r), 'error');
@@ -190,11 +199,9 @@ function notifyApprovalNeeded(headId, item) {
 function notifyReworkNeeded(managerId, item, reworkComment) {
   managerId = parseInt(managerId);
   if (!managerId || !item) return;
-  const meta = buildPurchaseMeta(item);
-  const title = 'Закупка №' + meta.no + ' отправлена на доработку';
-  const message = greetUser(managerId) + '\n\nЗакупка «' + meta.shortDesc + '» отправлена на доработку.\n' +
-    (reworkComment ? '[B]Комментарий:[/B] ' + reworkComment + '\n' : '') +
-    'Необходимо скорректировать данные и отправить на согласование повторно.';
+  const title = buildTitle('Необходимо корректировать данные', item);
+  const body = buildBody(item, {});
+  const message = greetUser(managerId) + '\n\n' + body + (reworkComment ? '\n[B]Комментарий:[/B] ' + reworkComment : '');
   const links = [{ text: '🔧 Исправить данные', url: buildAppLink('fill', item.id, 'inbox') }].filter(l => l.url);
   notifyUserViaBot(managerId, title, message, links, function (success) {
     if (!success) BX24.callMethod('im.notify', { to: managerId, message: title + '\n' + message, type: 'SYSTEM', link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : '' }, function () {});
@@ -204,72 +211,79 @@ function notifyReworkNeeded(managerId, item, reworkComment) {
 function notifyAfterDecision(managerId, item, approved) {
   managerId = parseInt(managerId);
   if (!managerId || !item) return;
-  const meta = buildPurchaseMeta(item);
-  const productAmount = parseAmount(item[actualFields.amountProduct]) || 0;
-  const deliveryAmount = parseAmount(item[actualFields.amountDelivery]) || 0;
-  const total = productAmount + deliveryAmount;
-  const title = approved ? 'Условия согласованы' : 'Закупка отклонена';
-  const message = greetUser(managerId) + '\n\n' + (approved
-    ? 'Условия по закупке «' + meta.shortDesc + '» согласованы.\n[B]Сумма товаров:[/B] ' + productAmount.toLocaleString('ru-RU') + ' ₽\n[B]Сумма доставки:[/B] ' + deliveryAmount.toLocaleString('ru-RU') + ' ₽\n[B]ИТОГО:[/B] ' + total.toLocaleString('ru-RU') + ' ₽\nНеобходимо загрузить входящий счёт.'
-    : 'Закупка «' + meta.shortDesc + '» отклонена на этапе согласования.');
-  const links = [{ text: approved ? '📄 Загрузить счёт' : '📋 Открыть закупку', url: buildAppLink(approved ? 'upload' : 'view', item.id, 'inbox') }].filter(l => l.url);
-  notifyUserViaBot(managerId, title, message, links, function (success) {
-    if (!success) BX24.callMethod('im.notify', { to: managerId, message: title + '\n' + message, type: 'SYSTEM', link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : '' }, function () {});
-  }, 'decision_' + item.id + '_' + (approved ? 'ok' : 'no'));
+  if (approved) {
+    const title = buildTitle('Условия согласованы', item);
+    const message = greetUser(managerId) + '\n\n' + buildBody(item, { sum: true, sumSplit: true });
+    const links = [{ text: '📄 Загрузить счёт', url: buildAppLink('upload', item.id, 'inbox') }].filter(l => l.url);
+    notifyUserViaBot(managerId, title, message, links, function (success) {
+      if (!success) BX24.callMethod('im.notify', { to: managerId, message: title + '\n' + message, type: 'SYSTEM', link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : '' }, function () {});
+    }, 'decision_' + item.id + '_ok');
+  } else {
+    const title = buildTitle('Закупка отклонена', item);
+    const message = greetUser(managerId) + '\n\n' + buildBody(item, { comment: true });
+    const links = [{ text: '📋 Открыть закупку №' + item.id, url: buildAppLink('view', item.id, 'inbox') }].filter(l => l.url);
+    notifyUserViaBot(managerId, title, message, links, function (success) {
+      if (!success) BX24.callMethod('im.notify', { to: managerId, message: title + '\n' + message, type: 'SYSTEM', link: links[0] ? links[0].url : '', button_text: links[0] ? links[0].text : '' }, function () {});
+    }, 'decision_' + item.id + '_no');
+  }
 }
 
-// ✅ Менеджер изменил данные на этапе согласования — повторно уведомляем согласующего
 function notifyDataChangedOnApproval(econId, item) {
   econId = parseInt(econId);
   if (!econId || !item) return;
-  const card = buildApprovalCard(item);
-  const title = 'Изменены данные по закупке №' + card.no + ' на этапе согласования';
-  const message = greetUser(econId) + '\n\nМенеджер внёс изменения. Проверьте обновлённые условия:\n' + card.text;
+  const title = buildTitle('Изменены данные на этапе согласования', item);
+  const message = greetUser(econId) + '\n\n' + buildBody(item, { manager: true, creator: true, sum: true, sumSplit: true, comment: true });
   const links = [
     { text: '✅ Согласовать', url: buildAppLink('approve', item.id, 'inbox') },
     { text: '🔧 На доработку', url: buildAppLink('rework', item.id, 'inbox') },
-    { text: '❌ Отклонить', url: buildAppLink('reject', item.id, 'inbox') }
+    { text: '❌ Отклонить', url: buildAppLink('reject', item.id, 'inbox') },
+    { text: '📋 Открыть закупку №' + item.id, url: buildAppLink('view', item.id, 'inbox') }
   ].filter(l => l.url);
   notifyUserViaBot(econId, title, message, links, null, 'data_changed_' + item.id + '_' + Date.now());
 }
 
-// ✅ Счёт загружен — уведомляем согласующего с кнопками утвердить/отклонить
+// ✅ Счёт загружен → согласующему: Утвердить/Отклонить/Открыть
 function notifyInvoiceUploaded(econId, item) {
   econId = parseInt(econId);
   if (!econId || !item) return;
-  const meta = buildPurchaseMeta(item);
-  const title = 'Загружен входящий счёт по закупке №' + meta.no;
-  const message = greetUser(econId) + '\n\n' + formatPurchaseBody(meta) + '\nНеобходимо утвердить счёт и подтвердить оплату.';
+  const title = buildTitle('Загружен счёт на оплату', item);
+  const message = greetUser(econId) + '\n\n' + buildBody(item, { sum: true, sumSplit: true, file: true });
   const links = [
     { text: '✅ Утвердить счёт', url: buildAppLink('approve_invoice', item.id, 'inbox') },
-    { text: '❌ Отклонить счёт', url: buildAppLink('reject_invoice', item.id, 'inbox') }
+    { text: '❌ Отклонить счёт', url: buildAppLink('reject_invoice', item.id, 'inbox') },
+    { text: '📋 Открыть закупку №' + item.id, url: buildAppLink('view', item.id, 'inbox') }
   ].filter(l => l.url);
   notifyUserViaBot(econId, title, message, links, null, 'inv_upload_' + item.id);
 }
 
-// ✅ Уведомления по счёту с кнопками действия
+// ✅ События по счёту: approved→(Подтвердить оплату), paid→(Подтвердить получение), rejected→(Исправить)
 function notifyInvoiceEvent(item, kind) {
   if (!item) return;
-  const meta = buildPurchaseMeta(item);
   const mgrArr = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []);
   const mgrId = mgrArr.length ? parseInt(mgrArr[0]) : null;
   const econId = resolveDeptHeadId(item, true);
-  const links = {
-    approved: econId ? [{ text: '💳 Подтвердить оплату', url: buildAppLink('confirm_payment', item.id, 'inbox') }] : [],
-    paid: [{ text: '📦 Подтвердить получение', url: buildAppLink('confirm_receipt', item.id, 'inbox') }],
-    rejected: [{ text: '🔧 Исправить данные', url: buildAppLink('fill', item.id, 'inbox') }]
-  };
+  const headId = parseInt(item.createdBy) || null;
   const map = {
-    approved: { title: 'Входящий счёт утверждён', msg: 'Входящий счёт по закупке №' + meta.no + ' «' + meta.shortDesc + '» утверждён экономистом. Ожидайте оплату.', to: [mgrId], econ: econId },
-    paid: { title: 'Входящий счёт оплачен', msg: 'Входящий счёт по закупке №' + meta.no + ' «' + meta.shortDesc + '» оплачен. Товары в пути — подтвердите получение.', to: [mgrId, parseInt(item.createdBy)], econ: null },
-    rejected: { title: 'Входящий счёт отклонён', msg: 'Входящий счёт по закупке №' + meta.no + ' «' + meta.shortDesc + '» отклонён. Требуется корректировка.', to: [mgrId], econ: null }
+    approved: { kind: 'Счёт на оплату утверждён', to: [mgrId], links: [
+      { text: '💳 Подтвердить оплату', url: buildAppLink('confirm_payment', item.id, 'inbox') },
+      { text: '📋 Открыть закупку №' + item.id, url: buildAppLink('view', item.id, 'inbox') }
+    ], body: { sum: true, sumSplit: true, file: true } },
+    paid: { kind: 'Счёт на оплату оплачен', to: [mgrId, headId], links: [
+      { text: '📦 Подтвердить получение', url: buildAppLink('confirm_receipt', item.id, 'inbox') },
+      { text: '📋 Открыть закупку №' + item.id, url: buildAppLink('view', item.id, 'inbox') }
+    ], body: { sum: true, sumSplit: true, file: true } },
+    rejected: { kind: 'Счёт на оплату отклонён', to: [mgrId], links: [
+      { text: '🔧 Исправить данные', url: buildAppLink('fill', item.id, 'inbox') },
+      { text: '📋 Открыть закупку №' + item.id, url: buildAppLink('view', item.id, 'inbox') }
+    ], body: { comment: true } }
   };
   const info = map[kind];
   if (!info) return;
+  const title = buildTitle(info.kind, item);
+  const message = buildBody(item, info.body);
   const recipients = [...new Set((info.to || []).filter(Boolean))];
-  const actionLinks = links[kind] || [];
   recipients.forEach(function (uid) {
-    notifyUserViaBot(uid, info.title, greetUser(uid) + '\n\n' + info.msg, actionLinks, null, 'invoice_' + kind + '_' + item.id);
+    notifyUserViaBot(uid, title, greetUser(uid) + '\n\n' + message, info.links, null, 'invoice_' + kind + '_' + item.id);
   });
 }
 
@@ -295,48 +309,44 @@ function refreshUnavailableUsersForce(done) {
   runAbsenceCheck(done);
 }
 
+// ✅ Отсутствие из системного поля UF_ABSENCE (пары дат) + опционально кастомное поле
 function runAbsenceCheck(done) {
   done = done || function () {};
-  const field = (settings.absenceField || '').trim();
-  if (!field) { logAction('Поле статуса отсутствия не настроено — автопроверка пропущена', 'info'); if (done) done(); return; }
+  const customField = (settings.absenceField || '').trim();
   const values = (settings.absenceValues || 'отпуск,больничный,командировка,не в офисе').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  logAction('Проверка отсутствий (поле: ' + field + ')...', 'info');
-  BX24.callMethod('user.get', { active: true, SELECT: ['ID', 'NAME', 'LAST_NAME', field] }, function (res) {
+  const select = ['ID', 'NAME', 'LAST_NAME', 'UF_ABSENCE', 'UF_ABSENCE_COMMENT'];
+  if (customField) select.push(customField);
+  logAction('Проверка отсутствий (UF_ABSENCE' + (customField ? ' + ' + customField : '') + ')...', 'info');
+  BX24.callMethod('user.get', { active: true, SELECT: select }, function (res) {
     if (res.error()) { logAction('Ошибка проверки отсутствий: ' + getApiErrorMessage(res), 'error'); if (done) done(); return; }
     const list = res.data() || [];
     const absents = [];
+    const now = new Date();
     list.forEach(u => {
-      let v = u[field];
-      if (Array.isArray(v)) v = v[0];
-      const s = String(v || '').toLowerCase();
-      if (s && values.some(val => s.includes(val))) absents.push(String(u.ID));
+      let absent = false;
+      const ab = u.UF_ABSENCE;
+      if (Array.isArray(ab) && ab.length >= 2) {
+        for (let i = 0; i + 1 < ab.length; i += 2) {
+          const f = new Date(ab[i]); const t = new Date(ab[i + 1]);
+          if (!isNaN(f.getTime()) && !isNaN(t.getTime())) {
+            const tEnd = new Date(t.getTime() + 24 * 60 * 60 * 1000);
+            if (now >= f && now <= tEnd) { absent = true; break; }
+          }
+        }
+      }
+      if (!absent && customField) {
+        let v = u[customField];
+        if (Array.isArray(v)) v = v[0];
+        const s = String(v || '').toLowerCase();
+        if (s && values.some(val => s.includes(val))) absent = true;
+      }
+      if (absent) absents.push(String(u.ID));
     });
     settings.unavailableUsers = absents;
     localStorage.setItem('b24_absence_check_date', new Date().toISOString().slice(0, 10));
     logAction('Проверка выполнена: недоступных ' + absents.length, 'success');
     saveSettingsToBoth();
     if (done) done();
-  });
-}
-
-function getInvoiceFieldCodes(cb) {
-  if (invoiceFieldCodesCache) return cb(invoiceFieldCodesCache);
-  BX24.callMethod('crm.item.fields', { entityTypeId: INVOICE_ENTITY_ID }, function (res) {
-    if (res.error()) { logAction('Ошибка полей входящих счетов: ' + getApiErrorMessage(res), 'error'); return cb({}); }
-    const fd = res.data().fields || {};
-    const codes = {};
-    for (const hintKey in INVOICE_FIELD_HINTS) {
-      const needles = INVOICE_FIELD_HINTS[hintKey];
-      const found = Object.keys(fd).find(code => {
-        if (['id','title','xmlId','createdTime','updatedTime','createdBy','updatedBy','categoryId','stageId','assignedById','opened','movedTime','movedBy','lastActivityTime','lastActivityBy'].includes(code)) return false;
-        const t = (fd[code].title || '').toLowerCase().replace(/ё/g, 'е');
-        return needles.some(n => t.includes(n));
-      });
-      if (found) codes[hintKey] = found;
-    }
-    invoiceFieldCodesCache = codes;
-    logAction('Поля входящих счетов: ' + JSON.stringify(codes), 'info');
-    cb(codes);
   });
 }
 
@@ -368,9 +378,8 @@ function delegatePurchase(itemId, toUserId, note, cb) {
     const taskSborId = item[actualFields.taskSbor];
     const afterTask = function () {
       try {
-        const meta = buildPurchaseMeta(item);
-        const title = 'Закупка делегирована вам: №' + meta.no + ' от ' + meta.dateStr;
-        const message = greetUser(toUserId) + '\n\n' + formatPurchaseBody(meta) + '\n\nДелегировал: ' + (fromName || '—') + (note ? ('\nПричина: ' + note) : '');
+        const title = buildTitle('Закупка делегирована вам', item);
+        const message = greetUser(toUserId) + '\n\n' + buildBody(item, { creator: true, sum: true, comment: true }) + '\n\nДелегировал: ' + (fromName || '—') + (note ? ('\nПричина: ' + note) : '');
         const links = [{ text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }].filter(l => l.url);
         notifyUserViaBot(toUserId, title, message, links, function (ok) { if (!ok) sendBotNotification(toUserId, title, message, links); }, 'delegate_' + itemId + '_' + toUserId);
       } catch (e) { logAction('Ошибка уведомления о делегировании: ' + e.message, 'error'); }
@@ -399,8 +408,6 @@ function deletePurchaseWithCleanup(id, done) {
   [actualFields.taskVyborSotr, actualFields.taskSbor, actualFields.taskZagruz].forEach(function (f) {
     const v = item[f]; if (v && /^\d+$/.test(String(v))) tasksToDelete.push(parseInt(String(v)));
   });
-  var prepSteps = (tasksToDelete.length > 0 ? 1 : 0) + (INVOICE_ENTITY_ID ? 1 : 0);
-  var completed = 0;
   function finalizeDelete() {
     BX24.callMethod('crm.item.delete', { entityTypeId: ENTITY_TYPE_ID, id: id }, function (res) {
       deleteInProgress[id] = false;
@@ -408,26 +415,13 @@ function deletePurchaseWithCleanup(id, done) {
       else { items = items.filter(function (i) { return i.id !== id; }); render(); if (done) done(true); }
     });
   }
-  function stepDone(ok, msg) { completed++; logAction('[ОЧИСТКА] шаг ' + completed + '/' + prepSteps + ': ' + msg, ok ? 'info' : 'error'); if (completed >= prepSteps) finalizeDelete(); }
-  if (prepSteps === 0) { finalizeDelete(); return; }
-  if (tasksToDelete.length > 0) {
-    var taskBatch = {};
-    tasksToDelete.forEach(function (tid, idx) { taskBatch['t' + idx] = ['tasks.task.delete', { taskId: tid }]; });
-    BX24.callBatch(taskBatch, function (res) {
-      tasksToDelete.forEach(function (tid, idx) { var r = res['t' + idx]; if (r && r.error && r.error() && !/UNKNOWN/i.test(getApiErrorMessage(r))) logAction('[ОЧИСТКА] задача ' + tid + ': ' + getApiErrorMessage(r), 'error'); });
-      stepDone(true, 'Задачи удалены');
-    });
-  }
-  if (INVOICE_ENTITY_ID) {
-    BX24.callMethod('crm.item.list', { entityTypeId: INVOICE_ENTITY_ID, filter: { title: '%№' + id + '%' }, select: ['id', 'title'] }, function (res) {
-      if (res.error()) { stepDone(false, 'Ошибка поиска счетов'); return; }
-      var invItems = res.data().items || [];
-      if (!invItems.length) { stepDone(true, 'Счетов нет'); return; }
-      var invBatch = {};
-      invItems.forEach(function (inv, idx) { invBatch['i' + idx] = ['crm.item.delete', { entityTypeId: INVOICE_ENTITY_ID, id: inv.id }]; });
-      BX24.callBatch(invBatch, function () { stepDone(true, 'Счета удалены: ' + invItems.length); });
-    });
-  }
+  if (tasksToDelete.length === 0) { finalizeDelete(); return; }
+  var taskBatch = {};
+  tasksToDelete.forEach(function (tid, idx) { taskBatch['t' + idx] = ['tasks.task.delete', { taskId: tid }]; });
+  BX24.callBatch(taskBatch, function (res) {
+    tasksToDelete.forEach(function (tid, idx) { var r = res['t' + idx]; if (r && r.error && r.error() && !/UNKNOWN/i.test(getApiErrorMessage(r))) logAction('[ОЧИСТКА] задача ' + tid + ': ' + getApiErrorMessage(r), 'error'); });
+    finalizeDelete();
+  });
 }
 
 function loadAllData() {
@@ -453,13 +447,6 @@ function runScenarioAfterCreate(itemId) {
   scenarioRunning[itemId] = true;
   var item = items.find(function (i) { return i.id === itemId; });
   if (!item) return;
-  var secDef = fieldDefs[actualFields.section];
-  var dirDef = fieldDefs[actualFields.direction];
-  var firstSec = secDef && secDef.items && secDef.items.length > 0 ? secDef.items[0].ID : null;
-  var firstDir = dirDef && dirDef.items && dirDef.items.length > 0 ? dirDef.items[0].ID : null;
-  var secText = firstSec && secDef ? (secDef.items.find(function (i) { return String(i.ID) === String(firstSec); }) || {}).VALUE : '';
-  var dirText = firstDir && dirDef ? (dirDef.items.find(function (i) { return String(i.ID) === String(firstDir); }) || {}).VALUE : '';
-  var combinedText = (secText && dirText) ? (secText + ' / ' + dirText) : secText;
   var targetStageName = currentScenario === 'upload' ? 'загрузка' : currentScenario === 'approval' ? 'согласование' : 'сбор данных';
   var targetStageId = getStageIdByName(targetStageName);
   if (!targetStageId) { logAction('Стадия "' + targetStageName + '" не найдена', 'error'); return; }
@@ -467,9 +454,6 @@ function runScenarioAfterCreate(itemId) {
   if (actualFields.manager && fieldDefs[actualFields.manager]) fields[actualFields.manager] = [String(currentUser.ID)];
   if (actualFields.deptHead && fieldDefs[actualFields.deptHead]) fields[actualFields.deptHead] = [String(currentUser.ID)];
   if (currentScenario === 'upload' || currentScenario === 'approval') {
-    if (firstSec) fields[actualFields.section] = firstSec;
-    if (firstDir) fields[actualFields.direction] = firstDir;
-    if (combinedText && actualFields.combinedDir) fields[actualFields.combinedDir] = combinedText;
     if (!item[actualFields.amountProduct] || parseFloat(item[actualFields.amountProduct]) === 0) fields[actualFields.amountProduct] = 10000;
   }
   BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: parseInt(itemId), fields: fields }, function (res) {
@@ -511,7 +495,7 @@ function syncManagersFromTasks(done) {
       if (isUserUnavailable(f.mgrId)) {
         logAction('Исполнитель недоступен: ' + (userNames[f.mgrId] || f.mgrId), 'error');
         const headId = resolveDeptHeadId(f.item, true);
-        if (headId) sendBotNotification(headId, 'Исполнитель недоступен', greetUser(headId) + '\n\nИсполнитель ' + (userNames[f.mgrId] || f.mgrId) + ' недоступен. Делегируйте закупку №' + f.item.id + '.', [{ text: '📋 Открыть закупку', url: buildAppLink('view', f.item.id, 'my_requests') }].filter(l => l.url), null, 'unavail_' + f.item.id);
+        if (headId) sendBotNotification(headId, 'Исполнитель недоступен', greetUser(headId) + '\n\nИсполнитель ' + (userNames[f.mgrId] || f.mgrId) + ' недоступен. Делегируйте закупку №' + f.item.id + '.', [{ text: '📋 Открыть закупку №' + f.item.id, url: buildAppLink('view', f.item.id, 'my_requests') }].filter(l => l.url), null, 'unavail_' + f.item.id);
         finish(f.item.id);
         return;
       }
@@ -524,7 +508,7 @@ function syncManagersFromTasks(done) {
         f.item[actualFields.manager] = [f.mgrId];
         if (sborStageId) f.item.stageId = sborStageId;
         if (!f.item[actualFields.taskSbor]) {
-          var shortDescText = cleanText(f.item[actualFields.shortDesc]) || f.item.title;
+          var shortDescText = getShortDesc(f.item);
           var headId = resolveDeptHeadId(f.item, true);
           var createdBy = parseInt(systemUserId) || 1;
           var taskPayload = {
@@ -553,7 +537,6 @@ function syncManagersFromTasks(done) {
   }, function () { need.forEach(function (i) { syncManagersInProgress[i.id] = false; }); done(); });
 }
 
-// ✅ Переделано: обрабатываем ссылку каждый раз, когда id отличается от последнего
 function handleUrlParams() {
   var params = getIncomingParams();
   var itemId = params.itemId;

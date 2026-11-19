@@ -4,7 +4,6 @@ function openAdminPanel() {
   if (!document.getElementById('modal-settings')) return;
   try {
     document.getElementById('set-entityid').value = settings.entityTypeId;
-    document.getElementById('set-invoiceentityid').value = settings.invoiceEntityTypeId;
     document.getElementById('set-categoryid').value = settings.categoryId;
     document.getElementById('set-systemuserid').value = settings.systemUserId || 175;
     document.getElementById('set-clientid').value = settings.clientId || '';
@@ -27,7 +26,7 @@ function renderFieldsStatus() {
   const container = document.getElementById('fields-status-container');
   if (!container) return;
   container.innerHTML = '';
-  const required = ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory', 'combinedDir', 'postponeDate'];
+  const required = ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory', 'combinedDir', 'postponeDate', 'detailSupplier', 'section', 'direction'];
   required.forEach(key => {
     const code = settings.mapping[key];
     const exists = code && fieldDefs[code];
@@ -41,13 +40,13 @@ function createField(key) {
   if (fieldDefs[code]) { showToast('Поле "' + code + '" уже существует', 'info'); return; }
   logAction('Создание поля: ' + code, 'info');
   BX24.callMethod('crm.item.field.add', { entityTypeId: ENTITY_TYPE_ID, fields: { name: 'Тех: ' + key, code: code, type: 'string', multiple: 'N', isRequired: 'N' } }, function(res) {
-    if (res.error()) { logAction('Ошибка: ' + getApiErrorMessage(res), 'error'); showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); }
-    else { logAction('Поле создано', 'success'); showToast('Поле создано. Обновите страницу (F5).', 'success'); }
+    if (res.error()) { showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); }
+    else { showToast('Поле создано. Обновите страницу (F5).', 'success'); }
   });
 }
 
 function autoMapFields() {
-  const titleMap = { shortDesc: ['что нужно закупить', 'кратко'], amountProduct: ['сумма закупки', 'сумма товаров'], amountDelivery: ['доставка'], deadlineZakup: ['крайний срок закупки'], deadlinePay: ['крайний срок оплаты'], section: ['раздел направления', 'раздел расхода'], direction: ['направление расхода'], combinedDir: ['раздел+направление', 'раздел + направление'], fileInvoice: ['копия сч', 'счёт'], comment: ['комментарий'], postponeDate: ['дата отложения'], manager: ['менеджер отдела', 'исполнитель'], deptHead: ['руководитель отдела'], approver: ['согласующий'] };
+  const titleMap = { shortDesc: ['что нужно закупить', 'кратко'], amountProduct: ['сумма закупки', 'сумма товаров'], amountDelivery: ['доставка'], deadlineZakup: ['крайний срок закупки'], deadlinePay: ['крайний срок оплаты'], section: ['раздел направления', 'раздел расхода'], direction: ['направление расхода'], combinedDir: ['раздел+направление', 'раздел + направление'], fileInvoice: ['копия сч', 'счёт'], comment: ['комментарий'], postponeDate: ['дата отложения'], manager: ['менеджер отдела', 'исполнитель'], deptHead: ['руководитель отдела'], approver: ['согласующий'], detailSupplier: ['поставщик', 'supplier'], creator: ['кто создал', 'создал запрос', 'автор запроса'] };
   let changed = 0;
   for (const key in titleMap) {
     const needles = titleMap[key];
@@ -63,9 +62,18 @@ function autoMapFields() {
 function autoFillHeadsFromB24() {
   let filled = 0;
   departments.forEach(d => { if (d.UF_HEAD && !settings.deptHeads[d.ID]) { settings.deptHeads[d.ID] = String(d.UF_HEAD); filled++; } });
-  logAction('Авто-руководители: ' + filled, 'info');
   showToast('Заполнено: ' + filled, 'success');
   renderSettingsTable();
+}
+
+function runManualAbsenceCheck() {
+  const btn = document.getElementById('btn-absence-check');
+  if (btn) { btn.disabled = true; btn.innerText = 'Проверка...'; }
+  refreshUnavailableUsersForce(function () {
+    if (btn) { btn.disabled = false; btn.innerText = 'Проверить отсутствия сейчас'; }
+    renderUnavailableUsers();
+    showToast('Проверка отсутствий выполнена', 'success');
+  });
 }
 
 function renderSettingsTable() {
@@ -130,7 +138,7 @@ function renderMappingSettings() {
     { key: 'shortDesc', label: 'Что закупить (Кратко)' }, { key: 'amountProduct', label: 'Сумма товаров' }, { key: 'amountDelivery', label: 'Сумма доставки' },
     { key: 'deadlineZakup', label: 'Крайний срок закупки' }, { key: 'deadlinePay', label: 'Крайний срок оплаты' }, { key: 'section', label: 'Раздел' }, { key: 'direction', label: 'Направление' },
     { key: 'combinedDir', label: 'Раздел+Направление' }, { key: 'fileInvoice', label: 'Копия счета' }, { key: 'comment', label: 'Комментарий' }, { key: 'postponeDate', label: 'Дата отложения' },
-    { key: 'detailName', label: 'Детализация: Наименование' }, { key: 'detailPurpose', label: 'Детализация: Цель' }, { key: 'detailPrice', label: 'Детализация: Цена' }, { key: 'detailQty', label: 'Детализация: Количество' }, { key: 'detailLink', label: 'Детализация: Ссылка' },
+    { key: 'detailName', label: 'Детализация: Наименование' }, { key: 'detailPurpose', label: 'Детализация: Цель' }, { key: 'detailSupplier', label: 'Детализация: Поставщик' }, { key: 'detailPrice', label: 'Детализация: Цена' }, { key: 'detailQty', label: 'Детализация: Количество' }, { key: 'detailLink', label: 'Детализация: Ссылка' },
     { key: 'manager', label: 'Менеджер отдела' }, { key: 'deptHead', label: 'Руководитель отдела' }, { key: 'approver', label: 'Согласующий' },
     { key: 'taskVyborSotr', label: '[Тех] ID задачи выбора сотрудника' }, { key: 'taskSbor', label: '[Тех] ID задачи сбора' }, { key: 'taskZagruz', label: '[Тех] ID задачи загрузки' }, { key: 'delegateHistory', label: '[Тех] История делегирований' }
   ];
@@ -148,7 +156,6 @@ function renderMappingSettings() {
 
 function saveSettings() {
   settings.entityTypeId = parseInt(document.getElementById('set-entityid').value) || 1072;
-  settings.invoiceEntityTypeId = parseInt(document.getElementById('set-invoiceentityid').value) || 15;
   settings.categoryId = parseInt(document.getElementById('set-categoryid').value) || 65;
   settings.systemUserId = parseInt(document.getElementById('set-systemuserid').value) || 175;
   settings.clientId = document.getElementById('set-clientid').value.trim();
@@ -169,7 +176,7 @@ function saveSettings() {
   document.querySelectorAll('.unavail-check').forEach(chk => { if (chk.checked) settings.unavailableUsers.push(chk.getAttribute('data-uid')); });
   logAction('Сохранение настроек...', 'info');
   BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, (res) => {
-    if (res.error()) { logAction('Ошибка: ' + getApiErrorMessage(res), 'error'); showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); }
-    else { logAction('Настройки сохранены', 'success'); showToast('Настройки сохранены'); setTimeout(() => location.reload(), 1000); }
+    if (res.error()) { showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); }
+    else { showToast('Настройки сохранены'); setTimeout(() => location.reload(), 1000); }
   });
 }

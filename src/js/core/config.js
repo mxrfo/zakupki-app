@@ -3,7 +3,6 @@
 let APP_BUILD_ID = 'AUTO';
 
 let ENTITY_TYPE_ID = 1072;
-let INVOICE_ENTITY_ID = 1068;
 let currentCategoryId = 65;
 let systemUserId = 175;
 
@@ -37,20 +36,11 @@ const DEFAULT_MAPPING = {
   delegateHistory: 'ufCrm17_TECH_DELEG'
 };
 
-const INVOICE_FIELD_HINTS = {
-  invoiceTitle: ['название', 'title', 'номер'],
-  invoiceSum: ['сумма', 'итого', 'sum', 'total'],
-  invoicePayFor: ['за что', 'основание', 'назначение', 'pay for'],
-  invoiceFile: ['файл', 'скан', 'копия', 'file', 'документ'],
-  invoiceDeadline: ['срок', 'крайний', 'deadline', 'оплат']
-};
-
 const CACHE_KEY = 'purchase_app_meta_cache_1088';
 
 let settings = {
   categoryId: 65,
   entityTypeId: 1072,
-  invoiceEntityTypeId: 1068,
   systemUserId: 175,
   clientId: '',
   clientSecret: '',

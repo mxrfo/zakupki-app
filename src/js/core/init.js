@@ -62,7 +62,6 @@ function bindNewPlacement(current) {
   });
 }
 
-// ✅ Автомаппинг: заполняет пустые И перебивает коды, которых нет в fieldDefs
 function autoMapFields() {
   const fd = window.fieldDefs || {};
   const mapping = settings.mapping || {};
@@ -189,7 +188,6 @@ function init() {
         document.getElementById('test-mode-toggle').checked = isTestMode;
         currentScenario = localStorage.getItem('purchase_scenario') || 'none';
         ENTITY_TYPE_ID = settings.entityTypeId || 1072;
-        INVOICE_ENTITY_ID = settings.invoiceEntityTypeId || 1068;
         currentCategoryId = settings.categoryId || 65;
         systemUserId = settings.systemUserId || 175;
 
@@ -266,7 +264,6 @@ function init() {
   });
 }
 
-// ✅ Критичные поля теперь ищутся по заголовку, если код в маппинге не найден в fieldDefs
 function applyActualFieldsFromMapping() {
   actualFields = {};
   for (let key in settings.mapping) {

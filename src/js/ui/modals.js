@@ -55,8 +55,7 @@ function openExecutorModal(id) {
   document.getElementById('executor-id').value = id;
   document.getElementById('executor-task-id').value = taskId;
   document.getElementById('executor-title').innerText = 'Выбор исполнителя — закупка №' + id;
-  const descVal = (cleanText(item[actualFields.shortDesc]) || item.title || '—');
-  document.getElementById('executor-desc').value = descVal;
+  document.getElementById('executor-desc').value = (getShortDesc(item));
   let deptId = '';
   const deptVal = item[actualFields.dept];
   if (deptVal) deptId = String(Array.isArray(deptVal) ? deptVal[0] : deptVal);
@@ -106,7 +105,7 @@ function submitExecutor(e) {
       showToast('Исполнитель утверждён: ' + (userNames[toUserId] || toUserId), 'success');
       try {
         if (item && !item[actualFields.taskSbor]) {
-          const shortDescText = cleanText(item[actualFields.shortDesc]) || item.title;
+          const shortDescText = getShortDesc(item);
           const headId = resolveDeptHeadId(item, true);
           const taskPayload = {
             TITLE: '[🛒] Сбор данных и расчет по закупке',
@@ -134,10 +133,11 @@ function openViewModal(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
   const mainTitle = cleanText(item.title) || 'Детали закупки';
-  const shortDesc = cleanText(item[actualFields.shortDesc]) || '—';
+  const shortDesc = getShortDesc(item);
   document.getElementById('view-title').innerText = mainTitle;
-  const creatorName = userNames[item.createdBy] || '—';
-  const creatorDept = userDepts[item.createdBy] || '—';
+  const c = getCreatorInfo(item);
+  const creatorName = c.name;
+  const creatorDept = c.dept;
   const mgrVal = item[actualFields.manager];
   const mgrIds = Array.isArray(mgrVal) ? mgrVal : (mgrVal ? [mgrVal] : []);
   const managerName = mgrIds.map(m => userNames[m]).filter(Boolean).join(', ') || '—';
@@ -226,8 +226,12 @@ function openEditModal(id) {
   deptSelect.innerHTML = '';
   departments.forEach(d => { const sn = settings.deptShortNames[d.ID]; if ((settings.visibleDepts.includes(String(d.ID)) && sn) || item[actualFields.dept] == d.ID) deptSelect.innerHTML += `<option value="${d.ID}" ${item[actualFields.dept] == d.ID ? 'selected' : ''}>${d.NAME} (${sn || '—'})</option>`; });
   document.getElementById('create-deadline').value = item[actualFields.deadlineZakup] ? item[actualFields.deadlineZakup].split('T')[0] : '';
-  document.getElementById('create-short-desc').value = cleanText(item[actualFields.shortDesc]) || '';
+  document.getElementById('create-short-desc').value = getShortDesc(item);
   document.getElementById('create-amount-product').value = parseAmount(item[actualFields.amountProduct]) || '';
+  populateCreateSection();
+  const curSec = String(Array.isArray(item[actualFields.section]) ? item[actualFields.section][0] : (item[actualFields.section] || ''));
+  const curDir = String(Array.isArray(item[actualFields.direction]) ? item[actualFields.direction][0] : (item[actualFields.direction] || ''));
+  if (curSec) { document.getElementById('create-section').value = curSec; updateDirectionsCreate(curDir); }
   const tbody = document.getElementById('detail-tbody');
   tbody.innerHTML = '';
   const names = item[actualFields.detailName] || [];
@@ -275,17 +279,9 @@ function openDataModal(id) {
   document.getElementById('form-data').reset();
   document.getElementById('data-id').value = id;
   document.getElementById('data-modal-title').innerText = cleanText(item.title);
-  document.getElementById('data-modal-desc').innerText = cleanText(item[actualFields.shortDesc]) || '—';
+  document.getElementById('data-modal-desc').innerText = getShortDesc(item);
   document.getElementById('data-amount-product').value = parseAmount(item[actualFields.amountProduct]) || '';
   document.getElementById('data-amount-delivery').value = parseAmount(item[actualFields.amountDelivery]) || '';
-
-  const secSelect = document.getElementById('data-section');
-  secSelect.innerHTML = '<option value="">-- Выберите раздел --</option>';
-  const secDef = fieldDefs[actualFields.section];
-  if (secDef && secDef.items) {
-    const curSec = String(Array.isArray(item[actualFields.section]) ? item[actualFields.section][0] : (item[actualFields.section] || ''));
-    secDef.items.forEach(i => { secSelect.innerHTML += `<option value="${i.ID}" ${String(i.ID) === curSec ? 'selected' : ''}>${i.VALUE}</option>`; });
-  }
 
   const tbody = document.getElementById('data-detail-tbody');
   tbody.innerHTML = '';
@@ -311,9 +307,6 @@ function openDataModal(id) {
     tr.innerHTML = `<td><input type="text" class="data-det-name" value="${arrN[i] || ''}"></td><td><input type="text" class="data-det-purpose" value="${arrP[i] || ''}"></td>${hasSupplier ? `<td><input type="text" class="data-det-supplier" value="${arrS[i] || ''}"></td>` : ''}<td><input type="number" class="data-det-price" step="0.01" value="${priceVal}" oninput="calculateDataRowTotal(this)"></td><td><input type="number" class="data-det-qty" step="1" value="${qtyVal}" oninput="calculateDataRowTotal(this)"></td><td><input type="text" class="data-det-total" value="${totalVal ? totalVal.toFixed(2) : ''}" readonly></td><td><input type="url" class="data-det-link" value="${arrL[i] || ''}"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
     tbody.appendChild(tr);
   }
-
-  document.getElementById('data-direction').innerHTML = '<option value="">-- Выберите направление --</option>';
-  if (item[actualFields.section]) updateDirections(Array.isArray(item[actualFields.direction]) ? item[actualFields.direction][0] : item[actualFields.direction]);
 
   const modalTitle = document.querySelector('#modal-data .modal-header h2');
   const submitBtn = document.querySelector('#form-data button[type="submit"]');
@@ -342,13 +335,21 @@ function openEditAmountModal(id) {
   document.getElementById('modal-edit-amount').style.display = 'flex';
 }
 
+// ✅ openUploadModal: блокировка после передачи экономисту (только стадия 'загрузка')
 function openUploadModal(id) {
   const item = items.find(i => i.id === id);
+  if (!item) return;
+  const stage = spStages[item.stageId];
+  const stName = stage ? stage.name.toLowerCase().replace(/ё/g, 'е') : '';
+  if (!stName.includes('загрузка')) {
+    showToast('Счёт уже передан экономисту — загрузка/замена недоступна', 'info');
+    return;
+  }
   document.getElementById('form-upload').reset();
   document.getElementById('upload-id').value = id;
   const nameDisplay = document.getElementById('file-name-display');
   const fileInput = document.getElementById('upload-file');
-  const fileInfo = item ? getFileInfo(item, actualFields.fileInvoice) : null;
+  const fileInfo = getFileInfo(item, actualFields.fileInvoice);
   if (fileInfo && fileInfo.url) {
     nameDisplay.innerText = 'Уже загружен: ' + fileInfo.name + ' (можно заменить)';
     nameDisplay.style.color = '#10b981';
@@ -358,12 +359,9 @@ function openUploadModal(id) {
     nameDisplay.style.color = '#0f172a';
     fileInput.required = true;
   }
-  if (item) {
-    const stage = spStages[item.stageId];
-    const modal = document.querySelector('#modal-upload .modal');
-    if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
-    if (item[actualFields.deadlinePay]) document.getElementById('upload-deadline').value = String(item[actualFields.deadlinePay]).split('T')[0];
-  }
+  const modal = document.querySelector('#modal-upload .modal');
+  if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
+  if (item[actualFields.deadlinePay]) document.getElementById('upload-deadline').value = String(item[actualFields.deadlinePay]).split('T')[0];
   document.getElementById('modal-upload').style.display = 'flex';
 }
 
