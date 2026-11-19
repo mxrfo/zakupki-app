@@ -70,30 +70,45 @@ function getClientId() {
   return (settings.clientId || '').trim();
 }
 
-// ✅ Перерегистрация placement (handler URL меняется при обновлении архива).
-//    Идемпотентно по build id: при новом build флаг сбрасывается и bind выполняется заново.
+// ✅ Принудительная перерегистрация placement: unbind старого handler + bind нового
+//    Вызывается ПРИ КАЖДОМ запуске, чтобы handler URL всегда был актуальным.
 function ensureAppPlacement() {
   const handlerUrl = window.location.href.split('?')[0].split('#')[0];
-  const bindKey = 'b24_placement_bound_' + handlerUrl + '_' + APP_BUILD_ID;
-  if (localStorage.getItem(bindKey)) return;
-  BX24.callMethod('placement.bind', {
+  
+  // Сначала пытаемся unbind (на случай если старый handler уже привязан)
+  BX24.callMethod('placement.unbind', {
     PLACEMENT: 'REST_APP_URI',
-    HANDLER: handlerUrl,
-    TITLE: 'Закупки'
-  }, function (res) {
-    if (res.error()) {
-      const errStr = getApiErrorMessage(res);
-      if (/already|binded/i.test(errStr)) {
-        logAction('placement.bind: уже зарегистрирован (handler обновлён)', 'info');
-      } else if (/UNKNOWN/i.test(errStr)) {
-        logAction('placement.bind: UNKNOWN — проверьте право "placement" И перевыпустите токен приложения (пересохранить интеграцию). Без него ссылки бота ведут на /online/', 'error');
-      } else {
-        logAction('placement.bind: ' + errStr, 'error');
+    HANDLER: handlerUrl
+  }, function (unbindRes) {
+    if (unbindRes.error()) {
+      // unbind мог вернуть ошибку если handler не был привязан — это нормально
+      const errStr = getApiErrorMessage(unbindRes);
+      if (!/not found|not binded/i.test(errStr)) {
+        logAction('placement.unbind: ' + errStr, 'info');
       }
     } else {
-      logAction('placement.bind: виджет REST_APP_URI зарегистрирован/обновлён: ' + handlerUrl, 'success');
+      logAction('placement.unbind: старый handler удалён', 'success');
     }
-    localStorage.setItem(bindKey, '1');
+    
+    // Теперь bind нового handler
+    BX24.callMethod('placement.bind', {
+      PLACEMENT: 'REST_APP_URI',
+      HANDLER: handlerUrl,
+      TITLE: 'Закупки'
+    }, function (bindRes) {
+      if (bindRes.error()) {
+        const errStr = getApiErrorMessage(bindRes);
+        if (/already|binded/i.test(errStr)) {
+          logAction('placement.bind: уже зарегистрирован (handler обновлён)', 'info');
+        } else if (/UNKNOWN/i.test(errStr)) {
+          logAction('placement.bind: UNKNOWN — пересохраните интеграцию (снять/поставить галку placement и сохранить)', 'error');
+        } else {
+          logAction('placement.bind: ' + errStr, 'error');
+        }
+      } else {
+        logAction('placement.bind: виджет REST_APP_URI зарегистрирован: ' + handlerUrl, 'success');
+      }
+    });
   });
 }
 
@@ -113,15 +128,9 @@ function syncClientIdAndBuild() {
   const buildChanged = savedBuild && savedBuild !== APP_BUILD_ID;
   const firstRun = !savedBuild;
   if (buildChanged || firstRun) {
-    logAction('Обнаружено обновление архива (' + (savedBuild || 'первый запуск') + ' → ' + APP_BUILD_ID + '). Сбрасываю кэш бота и флаг привязки placement.', 'info');
+    logAction('Обнаружено обновление архива (' + (savedBuild || 'первый запуск') + ' → ' + APP_BUILD_ID + '). Сбрасываю кэш бота.', 'info');
     try {
       if (typeof clearBotCache === 'function') clearBotCache();
-    } catch (e) {}
-    // сбрасываем ВСЕ флаги привязки, чтобы ensureAppPlacement() перебиндил под новый build
-    try {
-      Object.keys(localStorage)
-        .filter(function (k) { return k.indexOf('b24_placement_bound_') === 0; })
-        .forEach(function (k) { localStorage.removeItem(k); });
     } catch (e) {}
     settings.lastBuildId = APP_BUILD_ID;
     BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function (r) {
@@ -234,7 +243,7 @@ function init() {
 
       setLoadingStep(2, 5);
 
-      // ✅ Один вызов placement.bind (флаг сбрасывается в syncClientIdAndBuild при новом build)
+      // ✅ Принудительная перерегистрация placement (unbind + bind) при каждом запуске
       try {
         if (settings.clientId && actualRoles.isAdmin) ensureAppPlacement();
       } catch (e) {}
