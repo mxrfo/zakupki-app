@@ -1,5 +1,9 @@
 // js/config.js — Константы, ID сущностей, маппинги полей
 
+// ✅ Идентификатор сборки. Меняйте при каждом релизе (или подставляйте из build.js).
+//    Используется для детекта «загружен новый архив» → пересоздание бота и перебинд placement.
+let APP_BUILD_ID = '2026.11.18.1700';
+
 // ID сущностей Битрикс24
 let ENTITY_TYPE_ID = 1072;
 let INVOICE_ENTITY_ID = 15;
@@ -68,5 +72,6 @@ let settings = {
   mapping: { ...DEFAULT_MAPPING },
   deadlineRedDays: 3,
   deadlineYellowDays: 7,
-  unavailableUsers: []
+  unavailableUsers: [],
+  lastBuildId: ''
 };

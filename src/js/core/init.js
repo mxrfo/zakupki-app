@@ -1,13 +1,13 @@
-// js/init.js — Инициализация приложения
+// js/init.js — Инициализация приложения (оптимизированная)
 
-window.addEventListener('error', function(ev) {
+window.addEventListener('error', function (ev) {
   try {
     if (typeof logAction === 'function') {
       logAction('JS ERROR: ' + (ev.message || 'unknown') + ' @ ' + (ev.filename || '') + ':' + (ev.lineno || ''), 'error');
     }
   } catch (e) {}
 });
-window.addEventListener('unhandledrejection', function(ev) {
+window.addEventListener('unhandledrejection', function (ev) {
   try {
     if (typeof logAction === 'function') {
       logAction('UNHANDLED REJECTION: ' + (ev.reason && ev.reason.message ? ev.reason.message : ev.reason), 'error');
@@ -57,60 +57,86 @@ function tryRedirectToPortal() {
   }
 }
 
-// ✅ ВСЕГДА перерегистрируем placement (handler URL может измениться после обновления архива)
-function ensureAppPlacement() {
+// ✅ Надёжное получение client_id (getAuth → URL → settings)
+function getClientId() {
+  try {
+    const auth = BX24.getAuth();
+    if (auth) { if (auth.client_id) return auth.client_id; if (auth.CLIENT_ID) return auth.CLIENT_ID; }
+  } catch (e) {}
+  try {
+    const m = window.location.search.match(/[?&]client_id=([^&]+)/);
+    if (m) return decodeURIComponent(m[1]);
+  } catch (e) {}
+  return (settings.clientId || '').trim();
+}
+
+// ✅ Перерегистрация placement ВСЕГДА (handler URL меняется при обновлении архива)
+function ensureAppPlacement(force) {
   const handlerUrl = window.location.href.split('?')[0].split('#')[0];
+  const bindKey = 'b24_placement_bound_' + handlerUrl + '_' + APP_BUILD_ID;
+  if (!force && localStorage.getItem(bindKey)) return;
   BX24.callMethod('placement.bind', {
     PLACEMENT: 'REST_APP_URI',
     HANDLER: handlerUrl,
     TITLE: 'Закупки'
-  }, function(res) {
+  }, function (res) {
     if (res.error()) {
       const errStr = getApiErrorMessage(res);
       if (/already|binded/i.test(errStr)) {
         logAction('placement.bind: уже зарегистрирован (handler обновлён)', 'info');
+      } else if (/UNKNOWN/i.test(errStr)) {
+        logAction('placement.bind: UNKNOWN — проверьте право "placement" у приложения в Интеграциях! Без него ссылки бота ведут на /online/', 'error');
       } else {
         logAction('placement.bind: ' + errStr, 'error');
       }
     } else {
       logAction('placement.bind: виджет REST_APP_URI зарегистрирован/обновлён: ' + handlerUrl, 'success');
     }
+    localStorage.setItem(bindKey, '1');
   });
 }
 
-function syncClientIdFromAuth() {
-  try {
-    const auth = BX24.getAuth();
-    if (!auth || !auth.client_id) {
-      logAction('syncClientIdFromAuth: BX24.getAuth() не вернул client_id', 'error');
-      return;
+// ✅ Синхронизация client_id + детект нового архива по build id
+function syncClientIdAndBuild() {
+  const liveId = getClientId();
+  const savedId = (settings.clientId || '').trim();
+
+  // client_id: обновляем только если реально получили живой и он отличается
+  if (liveId && liveId !== savedId) {
+    logAction('client_id обновлён: ' + (savedId || '—') + ' → ' + liveId, 'info');
+    settings.clientId = liveId;
+  } else if (!liveId) {
+    logAction('client_id не удалось получить из getAuth/URL (в iframe это нормально). Использую сохранённый: ' + (savedId || '—'), 'info');
+  }
+
+  // build id: детект нового архива
+  const savedBuild = (settings.lastBuildId || '').trim();
+  const buildChanged = savedBuild && savedBuild !== APP_BUILD_ID;
+  const firstRun = !savedBuild;
+  if (buildChanged || firstRun) {
+    logAction('Обнаружено обновление архива (' + (savedBuild || 'первый запуск') + ' → ' + APP_BUILD_ID + '). Сбрасываю кэш бота и перебиндиваю placement.', 'info');
+    try {
+      if (typeof clearBotCache === 'function') clearBotCache();
+    } catch (e) {}
+    settings.lastBuildId = APP_BUILD_ID;
+    // сохраняем build id, чтобы не повторялось при каждом запуске
+    BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function (r) {
+      if (r.error()) logAction('Ошибка сохранения lastBuildId: ' + getApiErrorMessage(r), 'error');
+      else logAction('lastBuildId сохранён: ' + APP_BUILD_ID, 'success');
+    });
+    // перебинд placement принудительно
+    try { ensureAppPlacement(true); } catch (e) {}
+    // пересоздать бота при первой же отправке — getBotId сам увидит new build id
+  } else {
+    // build id тот же — синхронизируем client_id (если поменялся) без сброса бота
+    if (liveId && liveId !== savedId) {
+      BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function () {});
     }
-    const liveId = auth.client_id;
-    const savedId = (settings.clientId || '').trim();
-    if (!savedId) {
-      settings.clientId = liveId;
-      logAction('client_id подтянут из авторизации: ' + liveId, 'info');
-      BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function(r) {
-        if (r.error()) logAction('Ошибка сохранения client_id: ' + getApiErrorMessage(r), 'error');
-        else logAction('client_id сохранён в настройки', 'success');
-      });
-    } else if (savedId !== liveId) {
-      logAction('client_id рассинхронизирован: настройки=' + savedId + ' → актуальный=' + liveId + '. Обновляю.', 'error');
-      settings.clientId = liveId;
-      BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function(r) {
-        if (r.error()) logAction('Ошибка сохранения client_id: ' + getApiErrorMessage(r), 'error');
-        else logAction('client_id обновлён в настройках на актуальный', 'success');
-      });
-    } else {
-      logAction('client_id актуален: ' + liveId, 'info');
-    }
-  } catch (e) {
-    logAction('syncClientIdFromAuth: ошибка ' + e.message, 'error');
   }
 }
 
 function init() {
-  logAction('Инициализация приложения...', 'info');
+  logAction('Инициализация приложения... build=' + APP_BUILD_ID, 'info');
   setLoadingStep(0, 5);
 
   if (typeof BX24 === 'undefined') {
@@ -120,7 +146,7 @@ function init() {
   }
 
   let inited = false;
-  const initTimeout = setTimeout(function() {
+  const initTimeout = setTimeout(function () {
     if (inited) return;
     showNoAuthError();
   }, 8000);
@@ -179,31 +205,19 @@ function init() {
         }
       }
 
-      // ✅ Синхронизируем client_id ПОСЛЕ загрузки настроек
-      syncClientIdFromAuth();
+      // ✅ Синхронизация client_id + детект нового архива (после загрузки настроек)
+      syncClientIdAndBuild();
 
       let mappingMigrated = false;
       if (!settings.mapping) {
         settings.mapping = { ...DEFAULT_MAPPING };
         mappingMigrated = true;
       } else {
-        if (settings.mapping.shortDesc === 'ufCrm17_1792761268') {
-          settings.mapping.shortDesc = DEFAULT_MAPPING.shortDesc;
-          mappingMigrated = true;
-        }
-        if (settings.mapping.postponeDate === 'ufCrm17_1793859756') {
-          settings.mapping.postponeDate = DEFAULT_MAPPING.postponeDate;
-          mappingMigrated = true;
-        }
-        if (settings.mapping.detailPrice === 'ufCrm17_price_ed') {
-          settings.mapping.detailPrice = DEFAULT_MAPPING.detailPrice;
-          mappingMigrated = true;
-        }
+        if (settings.mapping.shortDesc === 'ufCrm17_1792761268') { settings.mapping.shortDesc = DEFAULT_MAPPING.shortDesc; mappingMigrated = true; }
+        if (settings.mapping.postponeDate === 'ufCrm17_1793859756') { settings.mapping.postponeDate = DEFAULT_MAPPING.postponeDate; mappingMigrated = true; }
+        if (settings.mapping.detailPrice === 'ufCrm17_price_ed') { settings.mapping.detailPrice = DEFAULT_MAPPING.detailPrice; mappingMigrated = true; }
         ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory'].forEach(k => {
-          if (!settings.mapping[k]) {
-            settings.mapping[k] = DEFAULT_MAPPING[k];
-            mappingMigrated = true;
-          }
+          if (!settings.mapping[k]) { settings.mapping[k] = DEFAULT_MAPPING[k]; mappingMigrated = true; }
         });
       }
       if (mappingMigrated) {
@@ -222,9 +236,10 @@ function init() {
 
       setLoadingStep(2, 5);
 
-      // ✅ ВСЕГДА перерегистрируем placement (если есть client_id и мы админ)
+      // ✅ placement перерегистрируется внутри syncClientIdAndBuild при обновлении архива;
+      //    здесь — обычный вызов (идемпотентен по build id)
       try {
-        if (settings.clientId && actualRoles.isAdmin) ensureAppPlacement();
+        if (settings.clientId && actualRoles.isAdmin) ensureAppPlacement(false);
       } catch (e) {}
 
       const CACHE_TTL = 5 * 60 * 1000;
@@ -274,7 +289,6 @@ function init() {
       }
       userFilter.SELECT = ['ID', 'NAME', 'LAST_NAME', 'UF_DEPARTMENT'];
       userFilter.ORDER = { LAST_NAME: 'ASC' };
-
       metaBatch.users = ['user.get', userFilter];
 
       BX24.callBatch(metaBatch, (metaRes) => {

@@ -38,9 +38,22 @@ const JS_FILES_ORDER = [
   'src/js/core/init.js'
 ];
 
+// ✅ Файл, в котором build.js подставит актуальную метку сборки
+const BUILD_ID_FILE = 'src/js/core/config.js';
+
 // === ФУНКЦИИ ===
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+// ✅ Подставляет метку сборки в строку `let APP_BUILD_ID = '...';`
+function injectBuildId(content, buildId) {
+  const re = /let\s+APP_BUILD_ID\s*=\s*'[^']*'\s*;/;
+  if (!re.test(content)) {
+    console.warn('⚠️  В ' + BUILD_ID_FILE + ' не найден маркер APP_BUILD_ID — метка не будет подставлена!');
+    return content;
+  }
+  return content.replace(re, "let APP_BUILD_ID = '" + buildId + "';");
 }
 
 function build() {
@@ -59,7 +72,12 @@ function build() {
   let js = '';
   JS_FILES_ORDER.forEach(file => {
     if (fs.existsSync(file)) {
-      const content = fs.readFileSync(file, 'utf8');
+      let content = fs.readFileSync(file, 'utf8');
+      // ✅ Для config.js подставляем живую метку сборки = timestamp архива
+      if (file === BUILD_ID_FILE) {
+        content = injectBuildId(content, timestamp);
+        console.log('🏷️  APP_BUILD_ID подставлен: ' + timestamp);
+      }
       js += '\n\n// ============================================================\n';
       js += '// МОДУЛЬ: ' + path.basename(file) + '\n';
       js += '// ============================================================\n\n';
