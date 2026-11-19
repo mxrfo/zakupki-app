@@ -70,11 +70,12 @@ function getClientId() {
   return (settings.clientId || '').trim();
 }
 
-// ✅ Перерегистрация placement ВСЕГДА (handler URL меняется при обновлении архива)
-function ensureAppPlacement(force) {
+// ✅ Перерегистрация placement (handler URL меняется при обновлении архива).
+//    Идемпотентно по build id: при новом build флаг сбрасывается и bind выполняется заново.
+function ensureAppPlacement() {
   const handlerUrl = window.location.href.split('?')[0].split('#')[0];
   const bindKey = 'b24_placement_bound_' + handlerUrl + '_' + APP_BUILD_ID;
-  if (!force && localStorage.getItem(bindKey)) return;
+  if (localStorage.getItem(bindKey)) return;
   BX24.callMethod('placement.bind', {
     PLACEMENT: 'REST_APP_URI',
     HANDLER: handlerUrl,
@@ -85,7 +86,7 @@ function ensureAppPlacement(force) {
       if (/already|binded/i.test(errStr)) {
         logAction('placement.bind: уже зарегистрирован (handler обновлён)', 'info');
       } else if (/UNKNOWN/i.test(errStr)) {
-        logAction('placement.bind: UNKNOWN — проверьте право "placement" у приложения в Интеграциях! Без него ссылки бота ведут на /online/', 'error');
+        logAction('placement.bind: UNKNOWN — проверьте право "placement" И перевыпустите токен приложения (пересохранить интеграцию). Без него ссылки бота ведут на /online/', 'error');
       } else {
         logAction('placement.bind: ' + errStr, 'error');
       }
@@ -101,7 +102,6 @@ function syncClientIdAndBuild() {
   const liveId = getClientId();
   const savedId = (settings.clientId || '').trim();
 
-  // client_id: обновляем только если реально получили живой и он отличается
   if (liveId && liveId !== savedId) {
     logAction('client_id обновлён: ' + (savedId || '—') + ' → ' + liveId, 'info');
     settings.clientId = liveId;
@@ -109,29 +109,27 @@ function syncClientIdAndBuild() {
     logAction('client_id не удалось получить из getAuth/URL (в iframe это нормально). Использую сохранённый: ' + (savedId || '—'), 'info');
   }
 
-  // build id: детект нового архива
   const savedBuild = (settings.lastBuildId || '').trim();
   const buildChanged = savedBuild && savedBuild !== APP_BUILD_ID;
   const firstRun = !savedBuild;
   if (buildChanged || firstRun) {
-    logAction('Обнаружено обновление архива (' + (savedBuild || 'первый запуск') + ' → ' + APP_BUILD_ID + '). Сбрасываю кэш бота и перебиндиваю placement.', 'info');
+    logAction('Обнаружено обновление архива (' + (savedBuild || 'первый запуск') + ' → ' + APP_BUILD_ID + '). Сбрасываю кэш бота и флаг привязки placement.', 'info');
     try {
       if (typeof clearBotCache === 'function') clearBotCache();
     } catch (e) {}
+    // сбрасываем ВСЕ флаги привязки, чтобы ensureAppPlacement() перебиндил под новый build
+    try {
+      Object.keys(localStorage)
+        .filter(function (k) { return k.indexOf('b24_placement_bound_') === 0; })
+        .forEach(function (k) { localStorage.removeItem(k); });
+    } catch (e) {}
     settings.lastBuildId = APP_BUILD_ID;
-    // сохраняем build id, чтобы не повторялось при каждом запуске
     BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function (r) {
       if (r.error()) logAction('Ошибка сохранения lastBuildId: ' + getApiErrorMessage(r), 'error');
       else logAction('lastBuildId сохранён: ' + APP_BUILD_ID, 'success');
     });
-    // перебинд placement принудительно
-    try { ensureAppPlacement(true); } catch (e) {}
-    // пересоздать бота при первой же отправке — getBotId сам увидит new build id
-  } else {
-    // build id тот же — синхронизируем client_id (если поменялся) без сброса бота
-    if (liveId && liveId !== savedId) {
-      BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function () {});
-    }
+  } else if (liveId && liveId !== savedId) {
+    BX24.callMethod('app.option.set', { options: { settings: JSON.stringify(settings) } }, function () {});
   }
 }
 
@@ -236,10 +234,9 @@ function init() {
 
       setLoadingStep(2, 5);
 
-      // ✅ placement перерегистрируется внутри syncClientIdAndBuild при обновлении архива;
-      //    здесь — обычный вызов (идемпотентен по build id)
+      // ✅ Один вызов placement.bind (флаг сбрасывается в syncClientIdAndBuild при новом build)
       try {
-        if (settings.clientId && actualRoles.isAdmin) ensureAppPlacement(false);
+        if (settings.clientId && actualRoles.isAdmin) ensureAppPlacement();
       } catch (e) {}
 
       const CACHE_TTL = 5 * 60 * 1000;
