@@ -65,33 +65,36 @@ function getClientId() {
     if (auth) {
       if (auth.client_id) return auth.client_id;
       if (auth.CLIENT_ID) return auth.CLIENT_ID;
-      if (auth.appSid) return auth.appSid;
     }
   } catch (e) {}
-  
-  // 2. Из URL-параметров (placement передаёт client_id)
+
+  // 2. Из URL-параметров (иногда портал передаёт client_id при открытии через портал)
   try {
     const params = new URLSearchParams(window.location.search);
-    const clientId = params.get('client_id') || params.get('CLIENT_ID') || params.get('appSid');
+    const clientId = params.get('client_id') || params.get('CLIENT_ID');
     if (clientId) return decodeURIComponent(clientId);
   } catch (e) {}
-  
-  // 3. Из placement.info()
+
+  // 3. Из placement.info().options
   try {
     if (typeof BX24 !== 'undefined' && BX24.placement && typeof BX24.placement.info === 'function') {
       const info = BX24.placement.info();
-      if (info && info.options && info.options.client_id) return info.options.client_id;
+      const o = (info && info.options) || {};
+      if (o.client_id) return o.client_id;
+      if (o.CLIENT_ID) return o.CLIENT_ID;
     }
   } catch (e) {}
-  
-  // 4. Из настроек (сохранённый ранее)
+
+  // 4. Из настроек (сохранённый ранее, в т.ч. вписанный вручную)
   return (settings.clientId || '').trim();
 }
 
-// ✅ Принудительная перерегистрация placement: unbind старого handler + bind нового
+// ✅ Принудительная перерегистрация placement: unbind старого handler + bind нового.
+//    НЕ требует client_id — handler строится из location.href. Вызывается всегда для админа,
+//    чтобы /marketplace/view/{client_id}/ резолвился в приложение.
 function ensureAppPlacement() {
   const handlerUrl = window.location.href.split('?')[0].split('#')[0];
-  
+
   BX24.callMethod('placement.unbind', {
     PLACEMENT: 'REST_APP_URI',
     HANDLER: handlerUrl
@@ -104,7 +107,7 @@ function ensureAppPlacement() {
     } else {
       logAction('placement.unbind: старый handler удалён', 'success');
     }
-    
+
     BX24.callMethod('placement.bind', {
       PLACEMENT: 'REST_APP_URI',
       HANDLER: handlerUrl,
@@ -115,7 +118,7 @@ function ensureAppPlacement() {
         if (/already|binded/i.test(errStr)) {
           logAction('placement.bind: уже зарегистрирован (handler обновлён)', 'info');
         } else if (/UNKNOWN/i.test(errStr)) {
-          logAction('placement.bind: UNKNOWN — проверьте право placement и пересохраните интеграцию', 'error');
+          logAction('placement.bind: UNKNOWN — право "placement" не активно в токене. Пересохраните интеграцию (снять/поставить галку placement → Сохранить) и перезапустите приложение из меню портала.', 'error');
         } else {
           logAction('placement.bind: ' + errStr, 'error');
         }
@@ -128,13 +131,13 @@ function ensureAppPlacement() {
 
 // ✅ Авто-маппинг полей: если поле не выбрано, ищем по названию в fieldDefs
 function autoMapFields() {
-  const fieldDefs = window.fieldDefs || {};
+  const fd = window.fieldDefs || {};
   const mapping = settings.mapping || {};
   let changed = false;
-  
+
   const searchTerms = {
     comment: ['комментарий', 'comment'],
-    detailPrice: ['цена за 1', 'price', 'цена за единицу'],
+    detailPrice: ['цена за 1', 'цена за единицу', 'price'],
     manager: ['менеджер отдела', 'исполнитель', 'manager'],
     deptHead: ['руководитель отдела', 'dept head', 'head'],
     taskVyborSotr: ['задача по выбору', 'vybor', 'выбор сотрудника'],
@@ -142,25 +145,26 @@ function autoMapFields() {
     taskZagruz: ['задача по загрузке', 'zagruz', 'загрузка счёта'],
     delegateHistory: ['делегирован', 'delegate', 'история делегирований']
   };
-  
+
   for (const key in searchTerms) {
     if (!mapping[key] || mapping[key] === '') {
       const terms = searchTerms[key];
-      for (const fieldCode in fieldDefs) {
-        const title = (fieldDefs[fieldCode].title || '').toLowerCase();
+      for (const fieldCode in fd) {
+        const title = (fd[fieldCode].title || '').toLowerCase();
+        let hit = false;
         for (const term of terms) {
-          if (title.includes(term.toLowerCase())) {
-            mapping[key] = fieldCode;
-            changed = true;
-            logAction(`Авто-маппинг: ${key} → ${fieldCode} (${fieldDefs[fieldCode].title})`, 'info');
-            break;
-          }
+          if (title.includes(term.toLowerCase())) { hit = true; break; }
         }
-        if (mapping[key]) break;
+        if (hit) {
+          mapping[key] = fieldCode;
+          changed = true;
+          logAction(`Авто-маппинг: ${key} → ${fieldCode} (${fd[fieldCode].title})`, 'info');
+          break;
+        }
       }
     }
   }
-  
+
   if (changed) {
     settings.mapping = mapping;
     saveSettingsToBoth();
@@ -182,8 +186,7 @@ function loadSettingsWithFallback() {
           logAction('Ошибка парсинга настроек из app.option: ' + e.message, 'error');
         }
       }
-      
-      // Если app.option пуст — берём из localStorage
+
       if (!loaded) {
         try {
           const backup = localStorage.getItem('purchase_settings_backup');
@@ -199,7 +202,7 @@ function loadSettingsWithFallback() {
           logAction('Ошибка чтения backup из localStorage: ' + e.message, 'error');
         }
       }
-      
+
       resolve();
     });
   });
@@ -230,7 +233,10 @@ function syncClientIdAndBuild() {
     settings.clientId = liveId;
     saveSettingsToBoth();
   } else if (!liveId) {
-    logAction('client_id не удалось получить. Использую сохранённый: ' + (savedId || '—'), 'info');
+    logAction('⚠ client_id недоступен из iframe (статичное приложение не отдаёт его в SDK/URL). ' +
+      'Впишите его вручную: ⚙ Настройки → поле "Client ID приложения" → значение из карточки интеграции портала ' +
+      '(Разработчикам → Интеграции → Локальные приложения → ваше → Client ID) → Сохранить. ' +
+      'Без него кнопки бота будут вести на карточку CRM, а не на приложение.', 'error');
   }
 
   const savedBuild = (settings.lastBuildId || '').trim();
@@ -303,11 +309,7 @@ function init() {
         }
       }
 
-      // ✅ Загрузка настроек с fallback
       loadSettingsWithFallback().then(function () {
-        // ✅ Авто-маппинг полей, если какие-то не выбраны
-        autoMapFields();
-
         let mappingMigrated = false;
         if (!settings.mapping) {
           settings.mapping = { ...DEFAULT_MAPPING };
@@ -336,12 +338,12 @@ function init() {
 
         setLoadingStep(2, 5);
 
-        // ✅ Синхронизация client_id + детект нового архива
         syncClientIdAndBuild();
 
-        // ✅ Принудительная перерегистрация placement
+        // ✅ placement.bind ВСЕГДА для админа (не требует client_id) — регистрирует handler,
+        //    чтобы /marketplace/view/{client_id}/ открывал приложение, а не /online/ или 404.
         try {
-          if (settings.clientId && actualRoles.isAdmin) ensureAppPlacement();
+          if (actualRoles.isAdmin) ensureAppPlacement();
         } catch (e) {}
 
         const CACHE_TTL = 5 * 60 * 1000;
@@ -368,6 +370,7 @@ function init() {
 
         if (useCache) {
           applyActualFieldsFromMapping();
+          autoMapFields();
           checkUserRoles();
           setLoadingStep(5, 5);
           loadAllData();
@@ -377,13 +380,12 @@ function init() {
         logAction('Загрузка свежих полей и справочников...', 'info');
         setLoadingStep(3, 5);
 
-        // ✅ Загружаем ВСЕХ активных пользователей (без фильтра по отделам)
         const metaBatch = {
           uCurrent: ['user.get', { ID: currentUser.ID }],
           fields: ['crm.item.fields', { entityTypeId: ENTITY_TYPE_ID }],
           statuses: ['crm.status.list', {}],
           depts: ['department.get', {}],
-          users: ['user.get', { 
+          users: ['user.get', {
             active: true,
             SELECT: ['ID', 'NAME', 'LAST_NAME', 'UF_DEPARTMENT', 'ACTIVE'],
             ORDER: { LAST_NAME: 'ASC' }
@@ -400,6 +402,7 @@ function init() {
           if (metaRes.fields && !metaRes.fields.error()) {
             fieldDefs = metaRes.fields.data().fields;
             applyActualFieldsFromMapping();
+            autoMapFields();
             logAction('Поля успешно обновлены', 'success');
           }
 
