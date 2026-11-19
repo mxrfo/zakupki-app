@@ -5,7 +5,7 @@ var adminActiveTab = 'main';
 function switchAdminTab(tab) {
   adminActiveTab = tab;
   document.querySelectorAll('.admin-tab').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
-  document.querySelectorAll('.admin-panel').forEach(function (p) { p.style.display = (p.getAttribute('data-panel') === tab) ? 'block' : 'none'; });
+  document.querySelectorAll('.admin-panel').forEach(function (p) { p.classList.toggle('active', p.getAttribute('data-panel') === tab); });
   if (tab === 'bot') renderBotStatus();
   if (tab === 'absence') renderUnavailableUsers();
 }
@@ -40,27 +40,26 @@ function renderBotStatus() {
   const box = document.getElementById('bot-status-box');
   if (!box) return;
   const botId = (settings.botId || localStorage.getItem('b24_bot_id') || '—');
-  const chatId = (settings.chatId || localStorage.getItem('b24_group_chat_id') || '—');
+  const chatId = (lastBotStatus.chatId || localStorage.getItem('b24_group_chat_id') || '—');
   const res = lastBotStatus.result || 'нет данных';
   const ts = lastBotStatus.ts ? new Date(lastBotStatus.ts).toLocaleTimeString('ru-RU') : '—';
   const ok = /ok/.test(res);
   box.innerHTML = `
     <div class="bot-stat"><span class="bot-stat-label">ID бота</span><span class="bot-stat-value">${botId}</span></div>
-    <div class="bot-stat"><span class="bot-stat-label">ID группового чата</span><span class="bot-stat-value">${chatId}</span></div>
+    <div class="bot-stat"><span class="bot-stat-label">Последний диалог</span><span class="bot-stat-value">${chatId}</span></div>
     <div class="bot-stat"><span class="bot-stat-label">Последняя доставка</span><span class="bot-stat-value" style="color:${ok ? '#10b981' : '#ef4444'}">${res} @ ${ts}</span></div>
     <div class="bot-stat"><span class="bot-stat-label">Handler</span><span class="bot-stat-value" style="word-break:break-all;">${getBotHandlerUrl() || '—'}</span></div>
   `;
 }
 
 function resetBotChat() {
-  if (!confirm('Сбросить групповой чат бота? Приложение создаст новый рабочий чат при следующем уведомлении.')) return;
-  localStorage.removeItem('b24_group_chat_id');
-  Object.keys(localStorage).filter(function (k) { return k.indexOf('b24_bot_chat_') === 0 || k.indexOf('b24_dk_') === 0; }).forEach(function (k) { localStorage.removeItem(k); });
-  settings.chatId = '';
-  saveSettingsToBoth();
-  document.getElementById('set-chatid').value = '';
-  logAction('Чат бота сброшен (localStorage + app.option). Перезагрузка...', 'info');
-  showToast('Чат сброшен, перезагрузка...', 'success');
+  if (!confirm('Сбросить диалоги бота? Приложение создаст новые при следующем уведомлении.')) return;
+  if (typeof resetAutoChat === 'function') resetAutoChat();
+  else { localStorage.removeItem('b24_group_chat_id'); Object.keys(localStorage).filter(function (k) { return k.indexOf('b24_bot_chat_') === 0; }).forEach(function (k) { localStorage.removeItem(k); }); }
+  Object.keys(localStorage).filter(function (k) { return k.indexOf('b24_dk_') === 0; }).forEach(function (k) { localStorage.removeItem(k); });
+  const el = document.getElementById('set-chatid'); if (el) el.value = '';
+  logAction('Диалоги бота сброшены. Перезагрузка...', 'info');
+  showToast('Диалоги сброшены, перезагрузка...', 'success');
   setTimeout(function () { location.reload(); }, 800);
 }
 

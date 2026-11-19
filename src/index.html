@@ -103,33 +103,33 @@
 <div class="modal-body">
 <input type="hidden" id="edit-item-id">
 <div class="form-section-block">
-  <h4 class="form-section-title">Основная информация</h4>
-  <div class="form-group"><label>Ответственный отдел *</label><select id="create-dept" required></select></div>
-  <div class="form-group"><label>Крайний срок закупки *</label><input type="date" id="create-deadline" required></div>
-  <div class="form-row" style="display:flex; gap:16px; flex-wrap:wrap;">
-    <div class="form-group" style="flex:1; min-width:200px;"><label>Раздел направления расхода д/с *</label><select id="create-section" required onchange="updateDirectionsCreate()"></select></div>
-    <div class="form-group" style="flex:1; min-width:200px;"><label>Направление расхода д/с *</label><select id="create-direction" required></select></div>
-  </div>
+<h4 class="form-section-title">Основная информация</h4>
+<div class="form-group"><label>Ответственный отдел *</label><select id="create-dept" required></select></div>
+<div class="form-group"><label>Крайний срок закупки *</label><input type="date" id="create-deadline" required></div>
+<div class="form-row" style="display:flex; gap:16px; flex-wrap:wrap;">
+<div class="form-group" style="flex:1; min-width:200px;"><label>Раздел направления расхода д/с *</label><select id="create-section" required onchange="updateDirectionsCreate()"></select></div>
+<div class="form-group" style="flex:1; min-width:200px;"><label>Направление расхода д/с *</label><select id="create-direction" required></select></div>
+</div>
 </div>
 <div class="form-section-block">
-  <h4 class="form-section-title">Что нужно закупить</h4>
-  <div class="form-group"><label>Краткое описание *</label><input type="text" id="create-short-desc" required placeholder="Например: оборудование для лаборатории"></div>
-  <details class="admin-section" style="margin-bottom:0; margin-top:12px;">
-    <summary style="font-weight:600; color:var(--brand-blue);">Детализация закупки (нажмите, чтобы развернуть)</summary>
-    <div class="section-content" style="background:#fff;">
-      <div class="detail-table-wrapper">
-        <table class="detail-table" id="detail-table">
-          <thead><tr><th style="width: 25%;">Наименование</th><th style="width: 20%;">Цель использования</th><th style="width: 15%;">Цена за 1 шт</th><th style="width: 10%;">Количество</th><th style="width: 15%;">Всего</th><th style="width: 15%;">Ссылка</th><th style="width: 40px;"></th></tr></thead>
-          <tbody id="detail-tbody"></tbody>
-        </table>
-      </div>
-      <button type="button" class="btn btn-sm" onclick="addDetailRow()">+ Добавить строку</button>
-    </div>
-  </details>
+<h4 class="form-section-title">Что нужно закупить</h4>
+<div class="form-group"><label>Краткое описание *</label><input type="text" id="create-short-desc" required placeholder="Например: оборудование для лаборатории"></div>
+<details class="admin-section" style="margin-bottom:0; margin-top:12px;">
+<summary style="font-weight:600; color:var(--brand-blue);">Детализация закупки (нажмите, чтобы развернуть)</summary>
+<div class="section-content" style="background:#fff;">
+<div class="detail-table-wrapper">
+<table class="detail-table" id="detail-table">
+<thead><tr><th style="width: 25%;">Наименование</th><th style="width: 20%;">Цель использования</th><th style="width: 15%;">Цена за 1 шт</th><th style="width: 10%;">Количество</th><th style="width: 15%;">Всего</th><th style="width: 15%;">Ссылка</th><th style="width: 40px;"></th></tr></thead>
+<tbody id="detail-tbody"></tbody>
+</table>
+</div>
+<button type="button" class="btn btn-sm" onclick="addDetailRow()">+ Добавить строку</button>
+</div>
+</details>
 </div>
 <div class="form-section-block">
-  <h4 class="form-section-title">Сумма</h4>
-  <div class="form-group" style="margin-bottom:0;"><label>Сумма позиций (без доставки)</label><input type="number" id="create-amount-product" step="0.01" placeholder="0.00"></div>
+<h4 class="form-section-title">Сумма</h4>
+<div class="form-group" style="margin-bottom:0;"><label>Сумма позиций (без доставки)</label><input type="number" id="create-amount-product" step="0.01" placeholder="0.00"></div>
 </div>
 </div>
 <div class="modal-footer">
@@ -241,133 +241,103 @@
 </div>
 </div>
 <div id="modal-executor" class="modal-overlay">
-  <div class="modal" style="max-width: 500px;">
-    <div class="modal-header">
-      <h2 id="executor-title">Выбор исполнителя</h2>
-      <button onclick="closeModal('modal-executor')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
-    </div>
-    <form id="form-executor" onsubmit="submitExecutor(event)">
-      <div class="modal-body">
-        <input type="hidden" id="executor-id">
-        <input type="hidden" id="executor-task-id">
-        <div class="form-group">
-          <label>Закупка</label>
-          <input type="text" id="executor-desc" disabled style="background:#f1f5f9;">
-        </div>
-        <div class="form-group">
-          <label>Назначить исполнителем *</label>
-          <select id="executor-to" required></select>
-        </div>
-        <div style="font-size:12px; color:#64748b; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:10px;">
-          После утверждения задача будет автоматически закрыта, сотрудник станет менеджером закупки, и ему придёт уведомление о сборе данных.
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn" onclick="closeModal('modal-executor')">Отмена</button>
-        <button type="submit" class="btn btn-primary" id="btn-executor-save">Утвердить</button>
-      </div>
-    </form>
-  </div>
+<div class="modal" style="max-width: 500px;">
+<div class="modal-header"><h2 id="executor-title">Выбор исполнителя</h2><button onclick="closeModal('modal-executor')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
+<form id="form-executor" onsubmit="submitExecutor(event)">
+<div class="modal-body">
+<input type="hidden" id="executor-id">
+<input type="hidden" id="executor-task-id">
+<div class="form-group"><label>Закупка</label><input type="text" id="executor-desc" disabled style="background:#f1f5f9;"></div>
+<div class="form-group"><label>Назначить исполнителем *</label><select id="executor-to" required></select></div>
+<div style="font-size:12px; color:#64748b; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:10px;">После утверждения задача будет автоматически закрыта, сотрудник станет менеджером закупки, и ему придёт уведомление о сборе данных.</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn" onclick="closeModal('modal-executor')">Отмена</button>
+<button type="submit" class="btn btn-primary" id="btn-executor-save">Утвердить</button>
+</div>
+</form>
+</div>
 </div>
 <div id="modal-settings" class="modal-overlay">
-<div class="modal" style="max-width: 1040px;">
+<div class="modal" style="max-width: 1000px;">
 <div class="modal-header"><h2>Настройки приложения</h2><button onclick="closeModal('modal-settings')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
-<div class="modal-body admin-body">
-  <div class="admin-tabs">
-    <button class="admin-tab active" data-tab="main" onclick="switchAdminTab('main')">Основные</button>
-    <button class="admin-tab" data-tab="roles" onclick="switchAdminTab('roles')">Роли отделов</button>
-    <button class="admin-tab" data-tab="fields" onclick="switchAdminTab('fields')">Поля CRM</button>
-    <button class="admin-tab" data-tab="deps" onclick="switchAdminTab('deps')">Связи списков</button>
-    <button class="admin-tab" data-tab="absence" onclick="switchAdminTab('absence')">Отсутствия</button>
-    <button class="admin-tab" data-tab="bot" onclick="switchAdminTab('bot')">Чат-бот</button>
-  </div>
+<div class="modal-body">
+<div class="admin-tabs">
+<button type="button" class="admin-tab active" data-tab="main" onclick="switchAdminTab('main')">Основные</button>
+<button type="button" class="admin-tab" data-tab="roles" onclick="switchAdminTab('roles')">Роли отделов</button>
+<button type="button" class="admin-tab" data-tab="crm" onclick="switchAdminTab('crm')">Поля CRM</button>
+<button type="button" class="admin-tab" data-tab="deps" onclick="switchAdminTab('deps')">Связи списков</button>
+<button type="button" class="admin-tab" data-tab="absence" onclick="switchAdminTab('absence')">Отсутствия</button>
+<button type="button" class="admin-tab" data-tab="bot" onclick="switchAdminTab('bot')">Чат-бот</button>
+</div>
 
-  <div class="admin-panel" data-panel="main">
-    <div class="admin-card">
-      <div class="admin-card-title">Сущности</div>
-      <div class="grid-2">
-        <div class="form-group"><label>ID Смарт-процесса (Закупки)</label><input type="number" id="set-entityid" value="1072"></div>
-        <div class="form-group"><label>ID Воронки (Category ID)</label><input type="number" id="set-categoryid" value="65"></div>
-        <div class="form-group"><label>ID Системного пользователя</label><input type="number" id="set-systemuserid" value="175"><div class="hint">От его имени отправляются уведомления.</div></div>
-        <div class="form-group"><label>Client ID приложения</label><input type="text" id="set-clientid" placeholder="local.xxxxxxxxxx"><div class="hint">Из карточки интеграции портала.</div></div>
-        <div class="form-group"><label>Client Secret (не обяз.)</label><input type="text" id="set-clientsecret" placeholder="xxxxxxxxxx"></div>
-      </div>
-    </div>
-    <div class="admin-card">
-      <div class="admin-card-title">Дедлайны</div>
-      <div class="grid-2">
-        <div class="form-group"><label>Дней до дедлайна для КРАСНОГО</label><input type="number" id="set-deadline-red" value="3" min="0"></div>
-        <div class="form-group"><label>Дней до дедлайна для ЖЁЛТОГО</label><input type="number" id="set-deadline-yellow" value="7" min="0"></div>
-      </div>
-    </div>
-  </div>
+<div class="admin-panel active" data-panel="main">
+<div style="display:flex; gap:16px; margin-bottom:16px; flex-wrap:wrap;">
+<div class="form-group" style="flex:1; min-width:200px;"><label>ID Смарт-процесса (Закупки)</label><input type="number" id="set-entityid" value="1072"></div>
+<div class="form-group" style="flex:1; min-width:200px;"><label>ID Воронки (Category ID)</label><input type="number" id="set-categoryid" value="65"></div>
+</div>
+<div style="display:flex; gap:16px; flex-wrap:wrap;">
+<div class="form-group" style="flex:1; min-width:200px;"><label>ID Системного пользователя</label><input type="number" id="set-systemuserid" value="175"><div style="font-size:11px; color:#64748b; margin-top:4px;">От его имени отправляются уведомления.</div></div>
+<div class="form-group" style="flex:1; min-width:200px;"><label>Client ID приложения</label><input type="text" id="set-clientid" placeholder="local.xxxxxxxxxx"><div style="font-size:11px; color:#64748b; margin-top:4px;">Из карточки интеграции портала.</div></div>
+<div class="form-group" style="flex:1; min-width:200px;"><label>Client Secret (не обяз.)</label><input type="text" id="set-clientsecret" placeholder="xxxxxxxxxx"></div>
+</div>
+<div style="border-top:1px solid var(--border-color); padding-top:16px; margin-top:8px;">
+<div style="display:flex; gap:16px; flex-wrap:wrap;">
+<div class="form-group" style="flex:1; min-width:200px;"><label>Дней до дедлайна для КРАСНОГО</label><input type="number" id="set-deadline-red" value="3" min="0"></div>
+<div class="form-group" style="flex:1; min-width:200px;"><label>Дней до дедлайна для ЖЁЛТОГО</label><input type="number" id="set-deadline-yellow" value="7" min="0"></div>
+</div>
+</div>
+</div>
 
-  <div class="admin-panel" data-panel="roles" style="display:none;">
-    <div class="admin-card">
-      <div class="admin-card-title">Роли по отделам</div>
-      <div class="card-actions"><button type="button" class="btn btn-sm btn-primary" onclick="autoFillHeadsFromB24()">Заполнить руководителей из Б24</button></div>
-      <div class="table-scroll">
-        <table class="settings-table" id="dept-roles-table">
-          <thead><tr><th>Отдел</th><th>Краткое имя</th><th>Выводить</th><th>Руководитель</th><th>Менеджер по ум.</th><th>Экономисты?</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+<div class="admin-panel" data-panel="roles">
+<div style="overflow-x:auto;">
+<table class="settings-table" id="dept-roles-table">
+<thead><tr><th>Отдел</th><th>Краткое имя</th><th>Выводить</th><th>Руководитель</th><th>Менеджер по ум.</th><th style="text-align:center;">Экономисты?</th></tr></thead>
+<tbody></tbody>
+</table>
+</div>
+<button type="button" class="btn btn-sm" onclick="autoFillHeadsFromB24()">Заполнить руководителей из Б24</button>
+</div>
 
-  <div class="admin-panel" data-panel="fields" style="display:none;">
-    <div class="admin-card">
-      <div class="admin-card-title">Статус полей CRM</div>
-      <div class="card-actions">
-        <button type="button" class="btn btn-sm btn-primary" onclick="autoMapFields()">Автонастроить маппинг</button>
-        <button type="button" class="btn btn-sm" onclick="createField('delegateHistory')">Создать «История делегирований»</button>
-        <button type="button" class="btn btn-sm" onclick="createField('detailSupplier')">Создать «Поставщик»</button>
-      </div>
-      <div id="fields-status-container" class="field-status-grid"></div>
-    </div>
-    <div class="admin-card">
-      <div class="admin-card-title">Сопоставление полей CRM</div>
-      <div id="mapping-container" class="mapping-grid"></div>
-    </div>
-  </div>
+<div class="admin-panel" data-panel="crm">
+<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+<button type="button" class="btn btn-sm btn-primary" onclick="autoMapFields()">Автонастроить маппинг</button>
+<button type="button" class="btn btn-sm" onclick="createField('delegateHistory')">Создать поле «История делегирований»</button>
+<button type="button" class="btn btn-sm" onclick="createField('detailSupplier')">Создать поле «Поставщик»</button>
+</div>
+<p style="font-size:12px; color:#64748b; margin-bottom:8px;">Статус полей CRM:</p>
+<div id="fields-status-container"></div>
+<p style="font-size:12px; color:#64748b; margin:16px 0 8px;">Сопоставление полей CRM:</p>
+<div id="mapping-container"></div>
+</div>
 
-  <div class="admin-panel" data-panel="deps" style="display:none;">
-    <div class="admin-card">
-      <div class="admin-card-title">Связи списков (Раздел → Направление)</div>
-      <p class="empty-note">Выберите направления для каждого раздела.</p>
-      <div id="list-dependencies-container"></div>
-    </div>
-  </div>
+<div class="admin-panel" data-panel="deps">
+<p style="font-size:12px; color:#64748b; margin-bottom:10px;">Выберите направления для каждого раздела.</p>
+<div id="list-dependencies-container"></div>
+</div>
 
-  <div class="admin-panel" data-panel="absence" style="display:none;">
-    <div class="admin-card">
-      <div class="admin-card-title">Отсутствия сотрудников</div>
-      <div class="card-actions"><button type="button" class="btn btn-sm btn-primary" onclick="runManualAbsenceCheck()" id="btn-absence-check">Проверить отсутствия сейчас</button></div>
-      <div class="absence-meta" id="absence-meta">Проверено: — · сейчас отсутствуют: 0</div>
-      <div class="grid-2" style="margin-top:12px;">
-        <div class="form-group"><label>Код доп. поля статуса отсутствия (не обяз.)</label><input type="text" id="set-absence-field" placeholder="пусто = авто-детект UF_ABSENCE"><div class="hint">По умолчанию отсутствие определяется из системного поля профиля UF_ABSENCE (пары дат).</div></div>
-        <div class="form-group"><label>Значения доп. поля, означающие отсутствие</label><input type="text" id="set-absence-values" placeholder="отпуск,больничный,командировка"><div class="hint">Используется только если задано доп. поле выше.</div></div>
-      </div>
-      <div id="unavailable-users-container" class="user-list"></div>
-    </div>
-  </div>
+<div class="admin-panel" data-panel="absence">
+<button type="button" class="btn btn-sm btn-primary" onclick="runManualAbsenceCheck()" id="btn-absence-check">Проверить отсутствия сейчас</button>
+<p style="font-size:12px; color:#64748b; margin:10px 0;" id="absence-meta"></p>
+<div id="unavailable-users-container" style="max-height:320px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; padding:8px;"></div>
+</div>
 
-  <div class="admin-panel" data-panel="bot" style="display:none;">
-    <div class="admin-card">
-      <div class="admin-card-title">Статус чат-бота</div>
-      <div class="card-actions">
-        <button type="button" class="btn btn-sm btn-primary" onclick="forceCreateBot()">Создать бота сейчас</button>
-        <button type="button" class="btn btn-sm" onclick="testBotSend()">Тестовое сообщение себе</button>
-        <button type="button" class="btn btn-sm" style="background:#fef3c7;color:#b45309;border-color:#fcd34d;" onclick="resetBotChat()">Сбросить чат бота</button>
-      </div>
-      <div class="bot-status" id="bot-status-box"></div>
-      <div class="grid-2" style="margin-top:12px;">
-        <div class="form-group"><label>ID чат-бота (если авто-поиск не сработал)</label><input type="number" id="set-botid" placeholder="например 345"><div class="hint">Число из URL карточки бота. Приоритет над авто-поиском.</div></div>
-        <div class="form-group"><label>ID группового чата бота (не обяз.)</label><input type="text" id="set-chatid" placeholder="пусто = создать автоматически"><div class="hint">Оставьте пустым, чтобы приложение само создало и запомнило рабочий чат.</div></div>
-        <div class="form-group" style="grid-column:1/-1;"><label>URL обработчика событий бота (handler)</label><input type="text" id="set-bothandler" placeholder="пусто = текущий URL приложения"><div class="hint">Обязателен при eventMode=fetch.</div></div>
-      </div>
-    </div>
-  </div>
+<div class="admin-panel" data-panel="bot">
+<p style="font-size:12px; color:#64748b; margin-bottom:8px;">Статус чат-бота:</p>
+<div class="bot-status-box" id="bot-status-box"></div>
+<div style="display:flex; gap:8px; margin:12px 0; flex-wrap:wrap;">
+<button type="button" class="btn btn-sm btn-primary" onclick="forceCreateBot()">Создать бота сейчас</button>
+<button type="button" class="btn btn-sm" onclick="testBotSend()">Тестовое сообщение себе</button>
+<button type="button" class="btn btn-sm" style="background:#fef3c7;color:#b45309;border-color:#fcd34d;" onclick="resetBotChat()">Сбросить чат бота</button>
+<button type="button" class="btn btn-sm" onclick="openBotAdminPage()">Открыть карточку ботов</button>
+</div>
+<div class="form-group"><label>ID чат-бота (если авто-поиск не сработал)</label><input type="number" id="set-botid" placeholder="например 345"><div style="font-size:11px; color:#64748b; margin-top:4px;">Число из URL карточки бота. Приоритет над авто-поиском. Переживает обновления архива.</div></div>
+<div class="form-group"><label>ID группового чата бота (не обяз.)</label><input type="text" id="set-chatid" placeholder="пусто = создавать автоматически"><div style="font-size:11px; color:#64748b; margin-top:4px;">Оставьте пустым, чтобы приложение само создало и запомнило рабочий чат.</div></div>
+<div class="form-group"><label>URL обработчика событий бота (handler)</label><input type="text" id="set-bothandler" placeholder="пусто = текущий URL приложения"><div style="font-size:11px; color:#64748b; margin-top:4px;">Обязателен при eventMode=fetch.</div></div>
+<div class="form-group"><label>Код доп. поля статуса отсутствия (не обяз.)</label><input type="text" id="set-absence-field" placeholder="оставьте пустым для авто-детекта UF_ABSENCE"></div>
+<div class="form-group"><label>Значения доп. поля, означающие отсутствие</label><input type="text" id="set-absence-values" placeholder="отпуск,больничный,командировка"></div>
+</div>
+
 </div>
 <div class="modal-footer"><button class="btn btn-primary" onclick="saveSettings()">Сохранить</button></div>
 </div>
