@@ -185,9 +185,9 @@ function createGroupChat(botId, seedUserId, cb) {
 }
 
 function getGroupChatId(botId, seedUserId, cb) {
-  if (settings.chatId) { logAction('Использую настроенный чат ID: ' + settings.chatId, 'info'); return cb(settings.chatId); }
+  if (settings.chatId) { logAction('Использую чат ID (настроенный/сохранённый): ' + settings.chatId, 'info'); return cb(settings.chatId); }
   const cached = localStorage.getItem('b24_group_chat_id');
-  if (cached) { settings.chatId = cached; return cb(cached); }
+  if (cached) { logAction('Использую чат ID из localStorage: ' + cached, 'info'); settings.chatId = cached; return cb(cached); }
 
   if (chatInFlight) { logAction('Чат уже создаётся — в очередь', 'info'); chatQueue.push(cb); return; }
   chatInFlight = true;
@@ -198,9 +198,6 @@ function getGroupChatId(botId, seedUserId, cb) {
   });
 }
 
-// ✅ ИСПРАВЛЕНО: НЕ пересоздаём чат при ошибке добавления.
-// imbot.v2.Chat.user.add часто возвращает UNKNOWN/ALREADY_EXISTS, если пользователь уже в чате — это НЕ ошибка.
-// Пересоздание раньше плодило пустые чаты. Теперь просто логируем и продолжаем.
 function addUserToGroupChat(botId, chatId, userId, cb) {
   cb = cb || function () {};
   if (!chatId || !userId) return cb();
@@ -210,8 +207,7 @@ function addUserToGroupChat(botId, chatId, userId, cb) {
     userIds: [parseInt(userId)]
   }, function (res) {
     if (res.error()) {
-      const errStr = describeError(res);
-      logAction('Добавление пользователя ' + userId + ' в чат ' + chatId + ': ' + errStr + ' (возможно уже участник — продолжаем без пересоздания)', 'info');
+      logAction('Добавление пользователя ' + userId + ' в чат ' + chatId + ': ' + describeError(res) + ' (продолжаем)', 'info');
     } else {
       logAction('Пользователь ' + userId + ' добавлен в чат ' + chatId, 'success');
     }
@@ -263,6 +259,15 @@ function sendToPersonalChat(botId, userId, title, message, links, cb) {
   });
 }
 
+// ✅ Полностью сбрасывает авто-чат (localStorage + settings + app.option), чтобы битый чат больше не подтягивался
+function resetAutoChat() {
+  localStorage.removeItem('b24_group_chat_id');
+  settings.chatId = '';
+  saveSettingsToBoth();
+}
+
+// ✅ Основной поток: если отправка в АВТО-чат упала — пересоздаём его и пробуем ещё раз (один раз).
+// Ручной чат из формы не трогаем — там подсказка.
 function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
   if (dedupePass(fullKey)) { if (cb) cb(true); return; }
@@ -270,27 +275,46 @@ function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
     if (!botId) { logAction('Не удалось получить ID бота — уведомление пропущено', 'error'); if (cb) cb(false); return; }
     getGroupChatId(botId, userId, function (chatId) {
       if (!chatId) { logAction('Нет группового чата, пробую личный чат...', 'info'); sendToPersonalChat(botId, userId, title, message, links, cb); return; }
-      addUserToGroupChat(botId, chatId, userId, function () {
-        botSendToGroup(botId, chatId, title, message, links, function (ok) {
-          if (!ok) {
-            // ✅ Fallback в личный чат делаем ТОЛЬКО если групповой чат НЕ задан вручную.
-            // Если задан вручную и отправка в него упала — не плодим личные чаты, а чётко сигналим.
-            const manualChat = (settings.chatId || '').trim();
-            if (manualChat) {
-              logAction('⚠ Не удалось отправить в настроенный чат ' + manualChat + '. Проверьте, что бот состоит в этом чате. Если не уверены — очистите поле «ID группового чата бота» в настройках и сохраните: приложение создаст рабочий чат само.', 'error');
-              if (cb) cb(false);
-            } else {
-              logAction('Fallback: личный чат', 'info');
-              sendToPersonalChat(botId, userId, title, message, links, cb);
+
+      const attempt = function (cid, isRetry) {
+        addUserToGroupChat(botId, cid, userId, function () {
+          botSendToGroup(botId, cid, title, message, links, function (ok) {
+            if (ok) { if (cb) cb(true); return; }
+
+            const autoChat = (localStorage.getItem('b24_group_chat_id') === cid);
+
+            // Битый авто-чат и ещё не пробовали пересоздать → чиним автоматически
+            if (autoChat && !isRetry) {
+              logAction('⚠ Авто-чат ' + cid + ' битый (бот не участник). Пересоздаю рабочий чат...', 'error');
+              resetAutoChat();
+              getGroupChatId(botId, userId, function (newId) {
+                if (!newId) { logAction('Не удалось пересоздать чат', 'error'); if (cb) cb(false); return; }
+                logAction('Создан новый чат ' + newId + ', повторяю отправку', 'info');
+                attempt(newId, true);
+              });
+              return;
             }
-          } else if (cb) cb(true);
+
+            // Ручной чат из формы упал → не плодим личные чаты, даём подсказку
+            if (!autoChat) {
+              logAction('⚠ Не удалось отправить в настроенный вручную чат ' + cid + '. Бот должен быть его участником. Если не уверены — нажмите «Сбросить чат бота» в настройках: приложение создаст рабочий чат само.', 'error');
+              if (cb) cb(false);
+              return;
+            }
+
+            // Авто-чат упал даже после пересоздания → личный чат как последний шанс
+            logAction('Fallback: личный чат', 'info');
+            sendToPersonalChat(botId, userId, title, message, links, cb);
+          });
         });
-      });
+      };
+
+      attempt(chatId, false);
     });
   });
 }
 
-// ✅ НЕ удаляем b24_group_chat_id — чат живёт на портале (как и бот)
+// ✅ НЕ удаляем b24_bot_id / b24_group_chat_id — они живут на портале и в app.option
 function clearBotCache() {
   Object.keys(localStorage).filter(function (k) { return k.indexOf('b24_bot_chat_') === 0 || k.indexOf('b24_dk_') === 0; }).forEach(function (k) { localStorage.removeItem(k); });
   logAction('Кэш личных чатов и дедупа сброшен (ID бота и группового чата сохранены)', 'info');

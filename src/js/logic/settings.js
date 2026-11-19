@@ -24,6 +24,28 @@ function openAdminPanel() {
   } catch (e) { console.error('Ошибка открытия настроек:', e); showToast('Ошибка: ' + e.message, 'error'); }
 }
 
+// ✅ Полностью сбрасывает чат бота: localStorage + settings.chatId + app.option, затем перезагрузка.
+function resetBotChat() {
+  if (!confirm('Сбросить групповой чат бота? Приложение создаст новый рабочий чат при следующем уведомлении.')) return;
+  localStorage.removeItem('b24_group_chat_id');
+  Object.keys(localStorage).filter(function (k) { return k.indexOf('b24_bot_chat_') === 0 || k.indexOf('b24_dk_') === 0; }).forEach(function (k) { localStorage.removeItem(k); });
+  settings.chatId = '';
+  saveSettingsToBoth();
+  logAction('Чат бота сброшен (localStorage + app.option). Перезагрузка...', 'info');
+  showToast('Чат сброшен, перезагрузка...', 'success');
+  setTimeout(function () { location.reload(); }, 800);
+}
+
+// ✅ Тестовая отправка себе
+function testBotSend() {
+  const uid = parseInt(currentUser.ID);
+  logAction('Тестовая отправка ботом пользователю ' + uid + '...', 'info');
+  notifyUserViaBot(uid, 'Тестовое сообщение', 'Проверка работы чат-бота приложения «Закупки». Если вы видите это сообщение — бот работает.', [{ text: '📋 Открыть приложение', url: buildAppLink('view', 0, 'my_requests') }], function (ok) {
+    if (ok) showToast('Тестовое сообщение отправлено', 'success');
+    else showToast('Не удалось отправить — см. логи', 'error');
+  }, 'test_' + uid + '_' + Date.now());
+}
+
 function renderFieldsStatus() {
   const container = document.getElementById('fields-status-container');
   if (!container) return;
@@ -183,14 +205,4 @@ function saveSettings() {
     if (res.error()) { showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); }
     else { showToast('Настройки сохранены'); setTimeout(() => location.reload(), 1000); }
   });
-}
-
-// ✅ Тестовая отправка себе в чат
-function testBotSend() {
-  const uid = parseInt(currentUser.ID);
-  logAction('Тестовая отправка ботом пользователю ' + uid + '...', 'info');
-  notifyUserViaBot(uid, 'Тестовое сообщение', 'Проверка работы чат-бота приложения «Закупки». Если вы видите это сообщение — бот работает.', [{ text: '📋 Открыть приложение', url: buildAppLink('view', 0, 'my_requests') }], function (ok) {
-    if (ok) showToast('Тестовое сообщение отправлено', 'success');
-    else showToast('Не удалось отправить — см. логи', 'error');
-  }, 'test_' + uid + '_' + Date.now());
 }
