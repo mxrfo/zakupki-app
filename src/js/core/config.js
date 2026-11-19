@@ -26,7 +26,7 @@ const DEFAULT_MAPPING = {
   detailPrice: 'UF_CRM_17_PRICE_ED',
   detailQty: 'ufCrm17_1792998488',
   detailLink: 'ufCrm17_1792761300',
-  detailSupplier: 'ufCrm17_TECH_SUPPLIER',
+  detailSupplier: 'UF_CRM_17_POSTAVSHIK',
   postponeDate: 'ufCrm17_1794583117',
   manager: 'ufCrm17_OTDEL_ISPOL_SOTR',
   deptHead: 'ufCrm17_OTDEL_ISPOL_RUK',
@@ -37,7 +37,6 @@ const DEFAULT_MAPPING = {
   delegateHistory: 'ufCrm17_TECH_DELEG'
 };
 
-// ✅ Кодексы полей входящих счетов определяются на лету (см. getInvoiceFieldCodes)
 const INVOICE_FIELD_HINTS = {
   invoiceTitle: ['название', 'title', 'номер'],
   invoiceSum: ['сумма', 'итого', 'sum', 'total'],

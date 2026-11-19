@@ -38,68 +38,57 @@ function getCurrentHandlerUrl() { return window.location.href.split('?')[0].spli
 function ensureAppPlacement() {
   const current = getCurrentHandlerUrl();
   const saved = (settings.lastHandlerUrl || '').trim();
-
-  if (saved === current && saved !== '') {
-    logAction('placement.bind: handler не изменился, пропускаем', 'info');
-    return;
-  }
-
+  if (saved === current && saved !== '') { logAction('placement.bind: handler не изменился, пропускаем', 'info'); return; }
   if (saved !== '') {
     logAction('placement.unbind: удаляю старый handler ' + saved, 'info');
     BX24.callMethod('placement.unbind', { PLACEMENT: 'REST_APP_URI', HANDLER: saved }, function (unbindRes) {
-      if (unbindRes.error() && !/not found|not binded|UNKNOWN/i.test(getApiErrorMessage(unbindRes))) {
-        logAction('placement.unbind: ' + getApiErrorMessage(unbindRes), 'error');
-      }
+      if (unbindRes.error() && !/not found|not binded|UNKNOWN/i.test(getApiErrorMessage(unbindRes))) logAction('placement.unbind: ' + getApiErrorMessage(unbindRes), 'error');
       bindNewPlacement(current);
     });
-  } else {
-    bindNewPlacement(current);
-  }
+  } else bindNewPlacement(current);
 }
 
 function bindNewPlacement(current) {
   logAction('placement.bind: привязываю новый handler ' + current, 'info');
-  BX24.callMethod('placement.bind', {
-    PLACEMENT: 'REST_APP_URI',
-    HANDLER: current,
-    TITLE: 'Закупки'
-  }, function (bindRes) {
+  BX24.callMethod('placement.bind', { PLACEMENT: 'REST_APP_URI', HANDLER: current, TITLE: 'Закупки' }, function (bindRes) {
     if (bindRes.error()) {
       const errStr = getApiErrorMessage(bindRes);
-      if (/already|binded/i.test(errStr)) {
-        logAction('placement.bind: уже зарегистрирован', 'info');
-      } else if (/UNKNOWN/i.test(errStr)) {
-        logAction('placement.bind: UNKNOWN — проверьте право "placement" в Интеграциях и пересохраните приложение', 'error');
-      } else {
-        logAction('placement.bind: ' + errStr, 'error');
-      }
-    } else {
-      logAction('placement.bind: успешно зарегистрирован', 'success');
-    }
+      if (/already|binded/i.test(errStr)) logAction('placement.bind: уже зарегистрирован', 'info');
+      else if (/UNKNOWN/i.test(errStr)) logAction('placement.bind: UNKNOWN — проверьте право "placement" в Интеграциях и пересохраните приложение', 'error');
+      else logAction('placement.bind: ' + errStr, 'error');
+    } else logAction('placement.bind: успешно зарегистрирован', 'success');
     settings.lastHandlerUrl = current;
     saveSettingsToBoth();
   });
 }
 
-function syncClientIdAndBuild() {
-  const liveId = getClientId();
-  const savedId = (settings.clientId || '').trim();
-  if (liveId && liveId !== savedId) {
-    logAction('client_id обновлён: ' + (savedId || '—') + ' → ' + liveId, 'info');
-    settings.clientId = liveId;
-  } else if (!liveId) {
-    logAction('⚠ client_id недоступен. Впишите его вручную в ⚙ Настройки → "Client ID приложения".', 'error');
+// ✅ Автомаппинг: заполняет пустые И перебивает коды, которых нет в fieldDefs
+function autoMapFields() {
+  const fd = window.fieldDefs || {};
+  const mapping = settings.mapping || {};
+  let changed = false;
+  const searchTerms = {
+    comment: ['комментарий', 'comment'], detailPrice: ['цена за 1', 'цена за единицу', 'price'],
+    detailSupplier: ['поставщик', 'supplier'],
+    manager: ['менеджер отдела', 'исполнитель', 'manager'], deptHead: ['руководитель отдела', 'dept head', 'head'],
+    taskVyborSotr: ['задача по выбору', 'vybor', 'выбор сотрудника'], taskSbor: ['задача по сбору', 'sbor', 'сбор данных'],
+    taskZagruz: ['задача по загрузке', 'zagruz', 'загрузка счёта'], delegateHistory: ['делегирован', 'delegate', 'история делегирований'],
+    postponeDate: ['дата отложения', 'отложен'], creator: ['кто создал', 'создал запрос', 'автор запроса']
+  };
+  const codeExists = (code) => code && Object.keys(fd).some(k => k.toLowerCase() === String(code).toLowerCase());
+  for (const key in searchTerms) {
+    const cur = mapping[key];
+    const needRemap = !cur || cur === '' || !codeExists(cur);
+    if (!needRemap) continue;
+    for (const fieldCode in fd) {
+      const title = (fd[fieldCode].title || '').toLowerCase();
+      let hit = false;
+      for (const term of searchTerms[key]) { if (title.includes(term.toLowerCase())) { hit = true; break; } }
+      if (hit) { mapping[key] = fieldCode; changed = true; logAction(`Авто-маппинг: ${key} → ${fieldCode} (${fd[fieldCode].title})`, 'info'); break; }
+    }
   }
-
-  const savedBuild = (settings.lastBuildId || '').trim();
-  if ((savedBuild && savedBuild !== APP_BUILD_ID) || !savedBuild) {
-    logAction('Обнаружено обновление архива (' + (savedBuild || 'первый запуск') + ' → ' + APP_BUILD_ID + '). Сбрасываю кэш бота.', 'info');
-    try { if (typeof clearBotCache === 'function') clearBotCache(); } catch (e) {}
-    settings.lastBuildId = APP_BUILD_ID;
-    saveSettingsToBoth();
-  } else if (liveId && liveId !== savedId) {
-    saveSettingsToBoth();
-  }
+  if (changed) { settings.mapping = mapping; saveSettingsToBoth(); }
+  return changed;
 }
 
 function loadSettingsWithFallback() {
@@ -133,6 +122,21 @@ function saveSettingsToBoth() {
   });
 }
 
+function syncClientIdAndBuild() {
+  const liveId = getClientId();
+  const savedId = (settings.clientId || '').trim();
+  if (liveId && liveId !== savedId) { logAction('client_id обновлён: ' + (savedId || '—') + ' → ' + liveId, 'info'); settings.clientId = liveId; }
+  else if (!liveId) { logAction('⚠ client_id недоступен. Впишите его вручную: ⚙ Настройки → "Client ID приложения".', 'error'); }
+
+  const savedBuild = (settings.lastBuildId || '').trim();
+  if ((savedBuild && savedBuild !== APP_BUILD_ID) || !savedBuild) {
+    logAction('Обнаружено обновление архива (' + (savedBuild || 'первый запуск') + ' → ' + APP_BUILD_ID + '). Сбрасываю кэш бота.', 'info');
+    try { if (typeof clearBotCache === 'function') clearBotCache(); } catch (e) {}
+    settings.lastBuildId = APP_BUILD_ID;
+    saveSettingsToBoth();
+  } else if (liveId && liveId !== savedId) { saveSettingsToBoth(); }
+}
+
 function init() {
   logAction('Инициализация приложения... build=' + APP_BUILD_ID, 'info');
   setLoadingStep(0, 5);
@@ -144,10 +148,7 @@ function init() {
   }
 
   let inited = false;
-  const initTimeout = setTimeout(function () {
-    if (inited) return;
-    showNoAuthError();
-  }, 8000);
+  const initTimeout = setTimeout(function () { if (inited) return; showNoAuthError(); }, 8000);
 
   BX24.init(() => {
     inited = true;
@@ -179,11 +180,8 @@ function init() {
         if (!settings.mapping) { settings.mapping = { ...DEFAULT_MAPPING }; mappingMigrated = true; }
         else {
           if (settings.mapping.shortDesc === 'ufCrm17_1792761268') { settings.mapping.shortDesc = DEFAULT_MAPPING.shortDesc; mappingMigrated = true; }
-          if (settings.mapping.postponeDate === 'ufCrm17_1793859756') { settings.mapping.postponeDate = DEFAULT_MAPPING.postponeDate; mappingMigrated = true; }
           if (settings.mapping.detailPrice === 'ufCrm17_price_ed') { settings.mapping.detailPrice = DEFAULT_MAPPING.detailPrice; mappingMigrated = true; }
-          ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory'].forEach(k => {
-            if (!settings.mapping[k]) { settings.mapping[k] = DEFAULT_MAPPING[k]; mappingMigrated = true; }
-          });
+          ['manager', 'deptHead', 'approver', 'taskVyborSotr', 'taskSbor', 'taskZagruz', 'delegateHistory'].forEach(k => { if (!settings.mapping[k]) { settings.mapping[k] = DEFAULT_MAPPING[k]; mappingMigrated = true; } });
         }
         if (mappingMigrated) { logAction('Миграция маппинга выполнена', 'info'); saveSettingsToBoth(); }
 
@@ -191,13 +189,12 @@ function init() {
         document.getElementById('test-mode-toggle').checked = isTestMode;
         currentScenario = localStorage.getItem('purchase_scenario') || 'none';
         ENTITY_TYPE_ID = settings.entityTypeId || 1072;
-        INVOICE_ENTITY_ID = settings.invoiceEntityTypeId || 15;
+        INVOICE_ENTITY_ID = settings.invoiceEntityTypeId || 1068;
         currentCategoryId = settings.categoryId || 65;
         systemUserId = settings.systemUserId || 175;
 
         setLoadingStep(2, 5);
         syncClientIdAndBuild();
-
         try { if (actualRoles.isAdmin) ensureAppPlacement(); } catch (e) {}
 
         const CACHE_TTL = 5 * 60 * 1000;
@@ -218,6 +215,7 @@ function init() {
 
         if (useCache) {
           applyActualFieldsFromMapping();
+          if (autoMapFields()) applyActualFieldsFromMapping();
           checkUserRoles();
           refreshUnavailableUsers(function() { setLoadingStep(5, 5); loadAllData(); });
           return;
@@ -235,7 +233,7 @@ function init() {
         }, (metaRes) => {
           setLoadingStep(4, 5);
           if (metaRes.uCurrent && !metaRes.uCurrent.error() && metaRes.uCurrent.data().length > 0) currentUser.UF_DEPARTMENT = metaRes.uCurrent.data()[0].UF_DEPARTMENT;
-          if (metaRes.fields && !metaRes.fields.error()) { fieldDefs = metaRes.fields.data().fields; applyActualFieldsFromMapping(); logAction('Поля успешно обновлены', 'success'); }
+          if (metaRes.fields && !metaRes.fields.error()) { fieldDefs = metaRes.fields.data().fields; applyActualFieldsFromMapping(); autoMapFields(); applyActualFieldsFromMapping(); logAction('Поля успешно обновлены', 'success'); }
           if (metaRes.statuses && !metaRes.statuses.error()) {
             spStages = {}; spStagesSorted = [];
             const prefix = `DT${ENTITY_TYPE_ID}_${currentCategoryId}:`;
@@ -259,7 +257,6 @@ function init() {
             }
             logAction(`Загружено пользователей: ${allUsers.length} (все активные)`, 'info');
           }
-
           saveToCacheWithTimestamp();
           checkUserRoles();
           refreshUnavailableUsers(function() { setLoadingStep(5, 5); loadAllData(); });
@@ -269,23 +266,26 @@ function init() {
   });
 }
 
+// ✅ Критичные поля теперь ищутся по заголовку, если код в маппинге не найден в fieldDefs
 function applyActualFieldsFromMapping() {
   actualFields = {};
   for (let key in settings.mapping) {
     const fieldCode = settings.mapping[key];
-    let foundKey = Object.keys(fieldDefs).find(k => k.toLowerCase() === fieldCode.toLowerCase());
-    if (foundKey) actualFields[key] = foundKey; else actualFields[key] = fieldCode;
+    let foundKey = Object.keys(fieldDefs).find(k => k.toLowerCase() === String(fieldCode).toLowerCase());
+    actualFields[key] = foundKey || fieldCode;
   }
-  for (let key in fieldDefs) {
-    const title = (fieldDefs[key].title || '').toLowerCase();
-    if (title.includes('ответственный отдел') || title.includes('отдел')) { actualFields.dept = key; break; }
+  function findByTitle(needles) {
+    return Object.keys(fieldDefs).find(code => {
+      const t = (fieldDefs[code].title || '').toLowerCase().replace(/ё/g, 'е');
+      return needles.some(n => t.includes(n));
+    });
   }
-  if (!actualFields.combinedDir) {
-    for (let key in fieldDefs) {
-      const title = (fieldDefs[key].title || '').toLowerCase();
-      if (title.includes('раздел+направление') || title.includes('раздел + направление')) { actualFields.combinedDir = key; break; }
-    }
-  }
+  const codeExists = (code) => code && Object.keys(fieldDefs).some(k => k.toLowerCase() === String(code).toLowerCase());
+  if (!codeExists(actualFields.dept)) { const f = findByTitle(['ответственный отдел']); if (f) actualFields.dept = f; }
+  if (!codeExists(actualFields.combinedDir)) { const f = findByTitle(['раздел+направление', 'раздел + направление']); if (f) actualFields.combinedDir = f; }
+  if (!codeExists(actualFields.postponeDate)) { const f = findByTitle(['дата отложения', 'отложен']); if (f) actualFields.postponeDate = f; }
+  if (!codeExists(actualFields.creator)) { const f = findByTitle(['кто создал', 'создал запрос', 'автор запроса']); if (f) actualFields.creator = f; }
+  if (!codeExists(actualFields.detailSupplier)) { const f = findByTitle(['поставщик', 'supplier']); if (f) actualFields.detailSupplier = f; }
 }
 
 function saveToCacheWithTimestamp() {

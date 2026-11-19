@@ -224,7 +224,13 @@ function submitData(e) {
   if (actualFields.combinedDir && combinedText) fields[actualFields.combinedDir] = combinedText;
   if (hasDetails) { fields[actualFields.detailName] = arrNames; fields[actualFields.detailPurpose] = arrPurposes; fields[actualFields.detailPrice] = arrPrices; fields[actualFields.detailQty] = arrQtys; fields[actualFields.detailLink] = arrLinks; if (hasSupplier) fields[actualFields.detailSupplier] = arrSuppliers; }
   else { fields[actualFields.detailName] = []; fields[actualFields.detailPurpose] = []; fields[actualFields.detailPrice] = []; fields[actualFields.detailQty] = []; fields[actualFields.detailLink] = []; if (hasSupplier) fields[actualFields.detailSupplier] = []; }
-  if (targetStageId) fields.stageId = targetStageId;
+
+  // ✅ Определяем текущую стадию: если уже согласование — не двигаем стадию и не закрываем задачу сбора
+  const curItem = items.find(i => i.id == id);
+  const curStage = curItem ? spStages[curItem.stageId] : null;
+  const curName = curStage ? curStage.name.toLowerCase().replace(/ё/g, 'е') : '';
+  const onApproval = curName.includes('согласование') && !curName.includes('обработка');
+  if (!onApproval && targetStageId) fields.stageId = targetStageId;
 
   logAction('Сохранение данных расчета...', 'info');
   BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: id, fields: fields }, (res) => {
@@ -232,12 +238,14 @@ function submitData(e) {
     else {
       logAction('Данные сохранены', 'success');
       const item = items.find(i => i.id == id);
-      const taskSborId = item ? item[actualFields.taskSbor] : null;
-      if (taskSborId && String(taskSborId).match(/^\d+$/)) {
-        BX24.callMethod('tasks.task.update', { taskId: parseInt(taskSborId), fields: { STATUS: 5 } }, (trRes) => {
-          if (trRes.error()) logAction('Ошибка завершения задачи сбора: ' + getApiErrorMessage(trRes), 'error');
-          else logAction('Задача сбора завершена', 'success');
-        });
+      if (!onApproval) {
+        const taskSborId = item ? item[actualFields.taskSbor] : null;
+        if (taskSborId && String(taskSborId).match(/^\d+$/)) {
+          BX24.callMethod('tasks.task.update', { taskId: parseInt(taskSborId), fields: { STATUS: 5 } }, (trRes) => {
+            if (trRes.error()) logAction('Ошибка завершения задачи сбора: ' + getApiErrorMessage(trRes), 'error');
+            else logAction('Задача сбора завершена', 'success');
+          });
+        }
       }
       try {
         if (item) {
@@ -245,10 +253,12 @@ function submitData(e) {
           item[actualFields.amountProduct] = amountProduct ? parseFloat(amountProduct) : 0;
           if (amountDelivery) item[actualFields.amountDelivery] = parseFloat(amountDelivery);
           if (combinedText) item[actualFields.combinedDir] = combinedText;
-          if (targetStageId) item.stageId = targetStageId;
+          if (!onApproval && targetStageId) item.stageId = targetStageId;
           const headId = resolveDeptHeadId(item, true);
-          if (headId) { logAction(`Уведомление о согласовании → ID ${headId}`, 'info'); notifyApprovalNeeded(headId, item); }
-          else logAction('Не удалось определить руководителя', 'error');
+          if (headId) {
+            if (onApproval) { logAction(`Уведомление об изменении данных → ID ${headId}`, 'info'); notifyDataChangedOnApproval(headId, item); }
+            else { logAction(`Уведомление о согласовании → ID ${headId}`, 'info'); notifyApprovalNeeded(headId, item); }
+          } else logAction('Не удалось определить руководителя', 'error');
         }
       } catch (e) { logAction('Ошибка уведомления: ' + e.message, 'error'); }
       showToast('Данные сохранены');
@@ -292,6 +302,8 @@ function submitUpload(e) {
       if (hasNewFile && filePayload) {
         createInvoiceRecord(item, filePayload[0]);
       }
+      // ✅ Уведомляем согласующего о загруженном счёте с кнопками утвердить/отклонить
+      try { const econId = resolveDeptHeadId(item, true); if (econId) notifyInvoiceUploaded(econId, item); } catch (e) { logAction('Ошибка уведомления по счёту: ' + e.message, 'error'); }
       closeModal('modal-upload');
       loadAllData();
     });

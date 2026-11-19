@@ -35,7 +35,8 @@ function openDelegateModal(id) {
     if (String(u.ACTIVE) === 'N') return;
     const depts = Array.isArray(u.UF_DEPARTMENT) ? u.UF_DEPARTMENT : (u.UF_DEPARTMENT ? [u.UF_DEPARTMENT] : []);
     const inDept = deptId ? depts.some(d => String(d) === deptId) : true;
-    if (inDept) { sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${isUserUnavailable(u.ID) ? ' (недоступен)' : ''}</option>`; added++; }
+    const isSelf = String(u.ID) === String(currentUser.ID);
+    if (inDept || isSelf) { sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${isSelf ? ' (я)' : ''}${isUserUnavailable(u.ID) ? ' (недоступен)' : ''}</option>`; added++; }
   });
   if (added === 0) allUsers.forEach(u => { if (String(u.ID) !== String(currentMgr) && String(u.ACTIVE) !== 'N') sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${isUserUnavailable(u.ID) ? ' (недоступен)' : ''}</option>`; });
   document.getElementById('modal-delegate').style.display = 'flex';
@@ -66,7 +67,8 @@ function openExecutorModal(id) {
     if (String(u.ACTIVE) === 'N') return;
     const depts = Array.isArray(u.UF_DEPARTMENT) ? u.UF_DEPARTMENT : (u.UF_DEPARTMENT ? [u.UF_DEPARTMENT] : []);
     const inDept = deptId ? depts.some(d => String(d) === deptId) : false;
-    if (inDept) { const self = String(u.ID) === String(currentUser.ID) ? ' (я)' : ''; sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${self}${isUserUnavailable(u.ID) ? ' (недоступен)' : ''}</option>`; added++; }
+    const isSelf = String(u.ID) === String(currentUser.ID);
+    if (inDept || isSelf) { sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${isSelf ? ' (я)' : ''}${isUserUnavailable(u.ID) ? ' (недоступен)' : ''}</option>`; added++; }
   });
   if (added === 0) {
     allUsers.forEach(u => {
@@ -262,8 +264,12 @@ function openDataModal(id) {
   if (!item) return;
   const stage = spStages[item.stageId];
   const stName = stage ? stage.name.toLowerCase().replace(/ё/g, 'е') : '';
-  if (!stName.includes('сбор данных') && !stName.includes('корректировк')) {
-    showToast('Данные уже отправлены на согласование — редактирование недоступно', 'info');
+  const isAdminUI = currentRole === 'admin';
+  const isMgrUI = isAdminUI || currentRole === 'manager';
+  const allowSbor = stName.includes('сбор данных') || stName.includes('корректировк');
+  const allowApprovalEdit = stName.includes('согласование') && !stName.includes('обработка') && isMgrUI;
+  if (!allowSbor && !allowApprovalEdit) {
+    showToast('Данные уже отправлены дальше — редактирование недоступно', 'info');
     return;
   }
   document.getElementById('form-data').reset();
@@ -311,7 +317,10 @@ function openDataModal(id) {
 
   const modalTitle = document.querySelector('#modal-data .modal-header h2');
   const submitBtn = document.querySelector('#form-data button[type="submit"]');
-  if (stName.includes('корректировк')) {
+  if (allowApprovalEdit) {
+    if (modalTitle) modalTitle.innerText = 'Редактирование данных (согласование)';
+    if (submitBtn) { submitBtn.innerText = 'Сохранить изменения'; submitBtn.style.background = '#1e3a8a'; submitBtn.style.color = '#fff'; }
+  } else if (stName.includes('корректировк')) {
     if (modalTitle) modalTitle.innerText = 'Корректировка данных';
     if (submitBtn) { submitBtn.innerText = 'Отправить на согласование'; submitBtn.style.background = '#1e3a8a'; submitBtn.style.color = '#fff'; }
   } else {

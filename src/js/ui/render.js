@@ -16,7 +16,6 @@ function getUserDeptIds() {
     Object.keys(settings.deptHeads || {}).forEach(k => { if (String(settings.deptHeads[k]) === String(currentUser.ID)) ids.push(String(k)); });
     Object.keys(settings.deptManagers || {}).forEach(k => { if (String(settings.deptManagers[k]) === String(currentUser.ID)) ids.push(String(k)); });
   }
-  // ✅ visibleDepts как fallback — только для admin/econ; для employee/head/manager — строго свои отделы
   if (ids.length === 0 && (currentRole === 'admin' || currentRole === 'econ') && settings.visibleDepts && settings.visibleDepts.length) ids = settings.visibleDepts.map(String);
   return ids;
 }
@@ -34,7 +33,7 @@ function isDeptHeadForItem(item) {
 }
 
 function isDataAlreadySent(item, stName) {
-  return stName.includes('согласование') || stName.includes('загрузка') || stName.includes('обработка') || stName.includes('ожидание') || stName.includes('получение') || stName.includes('исполн') || stName.includes('успех');
+  return stName.includes('загрузка') || stName.includes('обработка') || stName.includes('ожидание') || stName.includes('получение') || stName.includes('исполн') || stName.includes('успех');
 }
 
 function switchTab(tab) {
@@ -134,12 +133,13 @@ function hasBeenSentToWork(item, stName) {
   return !!(hasTask || hasManager);
 }
 
-// ✅ Иконки согласования в один ряд (маленькие, с title)
 function approvalButtonsIcon(item) {
   return `<button class="action-icon-btn approve" title="Согласовать" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_terms')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>` +
     `<button class="action-icon-btn" style="background:#fef3c7;color:#b45309;" title="На доработку" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_rework')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6a3 3 0 0 0-4.2 4.2L4 16.7V20h3.3l6.5-6.5a3 3 0 0 0 0-4.2z"/><path d="M18 8l2-2"/></svg></button>` +
     `<button class="action-icon-btn reject" title="Отклонить" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_terms')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
 }
+
+const CLOCK_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" style="margin-left:6px; vertical-align:middle;" title="Отложено"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
 
 function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
   const isHeadUI = isAdminUI || currentRole === 'head';
@@ -156,7 +156,7 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       const savedAmount = approvedAmounts[item.id];
       const isAmountChanged = savedAmount !== undefined && savedAmount !== currentTotalAmount;
       const dataSent = isDataAlreadySent(item, stName);
-      const canDelegate = (isAdminUI || isDeptHeadForItem(item)) && !isAdminUI; // для head — в ДЕЙСТВИЯ
+      const canDelegate = (isAdminUI || isDeptHeadForItem(item)) && !isAdminUI;
       let buttonsHtml = '';
       if (isCreator && stName.includes('создание') && !hasBeenSentToWork(item, stName)) {
         buttonsHtml += `<button class="btn btn-primary" style="flex:1;" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_work')" title="Отправить в работу">В работу</button>`;
@@ -175,13 +175,15 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
         if ((isMgrUI || isHeadUI) && stName.includes('корректировк') && !dataSent) {
           buttonsHtml += `<button class="btn" style="flex:1; background:#1e293b; color:#fff; border:none;" onclick="event.stopPropagation(); openDataModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Исправить данные</button>`;
         }
+        // ✅ Менеджер на согласовании — полное редактирование данных
+        if (isMgrUI && stName.includes('согласование') && !stName.includes('обработка')) {
+          buttonsHtml += `<button class="btn btn-primary" style="flex:1;" onclick="event.stopPropagation(); openDataModal(${item.id})">Изменить данные</button>`;
+        }
         if (isMgrUI && stName.includes('загрузка')) {
           buttonsHtml += `<button class="btn" style="flex:1; background:#1e293b; color:#fff; border:none;" onclick="event.stopPropagation(); openUploadModal(${item.id})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Загрузить счет</button>`;
         }
-        if (currentRole === 'manager' && stName.includes('согласование')) {
-          buttonsHtml += `<button class="btn btn-primary" style="flex:1;" onclick="event.stopPropagation(); openEditAmountModal(${item.id})">Изменить сумму</button>`;
-        }
-        if ((isEconUI || isHeadUI) && stName.includes('согласование условий')) {
+        // ✅ Кнопки согласования — только экономист/админ (руководитель их не видит)
+        if (isEconUI && stName.includes('согласование условий')) {
           buttonsHtml += approvalButtonsIcon(item);
         }
         if (isEconUI && stName.includes('обработка входящего счета')) {
@@ -190,7 +192,6 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
           buttonsHtml += `<button class="action-icon-btn reject" title="Отклонить счет" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_invoice')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
         }
       }
-      // ✅ Делегирование для руководителя — в ДЕЙСТВИЯ (не в Админ)
       const mgrVal2 = item[actualFields.manager];
       const hasMgr = Array.isArray(mgrVal2) ? mgrVal2.length > 0 : !!mgrVal2;
       if (canDelegate && hasMgr && !isTerminalStage(stName)) {
@@ -278,6 +279,8 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
     const canSeeInvoice = !(activeTab === 'all' && currentRole !== 'admin' && currentRole !== 'econ');
     const combinedDirText = resolveCombinedDir(item) || '—';
     const canDelegate = (isAdminUI || isDeptHeadForItem(item)) && !isAdminUI;
+    const postponeDate = item[actualFields.postponeDate];
+    const isPostponed = postponeDate && new Date(postponeDate) > new Date();
     let buttonsHtml = '';
     if (isCreator && stName.includes('создание') && !hasBeenSentToWork(item, stName)) {
       buttonsHtml += `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_work')">В работу</button>`;
@@ -296,13 +299,14 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       if ((isMgrUI || isHeadUI) && stName.includes('корректировк') && !dataSent) {
         buttonsHtml += `<button class="btn btn-sm" style="background:#1e293b;color:#fff;border:none;" onclick="event.stopPropagation(); openDataModal(${item.id})">Исправить данные</button>`;
       }
+      if (isMgrUI && stName.includes('согласование') && !stName.includes('обработка')) {
+        buttonsHtml += `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openDataModal(${item.id})">Изменить данные</button>`;
+      }
       if (isMgrUI && stName.includes('загрузка')) {
         buttonsHtml += `<button class="btn btn-sm" style="background:#1e293b;color:#fff;border:none;" onclick="event.stopPropagation(); openUploadModal(${item.id})">Загрузить счет</button>`;
       }
-      if (currentRole === 'manager' && stName.includes('согласование')) {
-        buttonsHtml += `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openEditAmountModal(${item.id})">Изменить сумму</button>`;
-      }
-      if ((isEconUI || isHeadUI) && stName.includes('согласование условий')) {
+      // ✅ согласование — только econ/admin
+      if (isEconUI && stName.includes('согласование условий')) {
         buttonsHtml += approvalButtonsIcon(item);
       }
       if (isEconUI && stName.includes('обработка входящего счета')) {
@@ -324,8 +328,9 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       adminHtml += `<button class="action-icon-btn delete" title="Удалить" onclick="deleteItem(${item.id}, event)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>`;
     }
     const commentIcon = econComment ? `<span class="comment-icon" title="${econComment.replace(/"/g, '&quot;')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>` : '';
+    const clockIcon = isPostponed ? CLOCK_ICON : '';
     html += `<tr>
-      <td><div style="font-weight:700; color:var(--brand-blue); cursor:pointer; display:flex; align-items:center;" onclick="openViewModal(${item.id})">${mainTitle} ${commentIcon}</div><div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${cleanText(item[actualFields.shortDesc]) || '—'}</div></td>
+      <td><div style="font-weight:700; color:var(--brand-blue); cursor:pointer; display:flex; align-items:center;" onclick="openViewModal(${item.id})">${mainTitle} ${commentIcon} ${clockIcon}</div><div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${cleanText(item[actualFields.shortDesc]) || '—'}</div></td>
       <td><span class="note-badge" style="background:${stageColor}">${stage.name}</span></td>
       <td><div style="font-weight:600;">${creatorName}</div><div style="font-size:11px; color:var(--text-muted);">${creatorDept}</div></td>
       ${currentRole !== 'manager' ? `<td>${deptName}</td>` : ''}

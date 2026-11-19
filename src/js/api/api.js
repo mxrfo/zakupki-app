@@ -4,6 +4,7 @@
 let b24Ready = false;
 var deleteInProgress = {};
 var urlParamsProcessed = false;
+var lastHandledItemId = '';
 var invoiceFieldCodesCache = null;
 
 function getPortalDomain() {
@@ -217,25 +218,58 @@ function notifyAfterDecision(managerId, item, approved) {
   }, 'decision_' + item.id + '_' + (approved ? 'ok' : 'no'));
 }
 
+// ✅ Менеджер изменил данные на этапе согласования — повторно уведомляем согласующего
+function notifyDataChangedOnApproval(econId, item) {
+  econId = parseInt(econId);
+  if (!econId || !item) return;
+  const card = buildApprovalCard(item);
+  const title = 'Изменены данные по закупке №' + card.no + ' на этапе согласования';
+  const message = greetUser(econId) + '\n\nМенеджер внёс изменения. Проверьте обновлённые условия:\n' + card.text;
+  const links = [
+    { text: '✅ Согласовать', url: buildAppLink('approve', item.id, 'inbox') },
+    { text: '🔧 На доработку', url: buildAppLink('rework', item.id, 'inbox') },
+    { text: '❌ Отклонить', url: buildAppLink('reject', item.id, 'inbox') }
+  ].filter(l => l.url);
+  notifyUserViaBot(econId, title, message, links, null, 'data_changed_' + item.id + '_' + Date.now());
+}
+
+// ✅ Счёт загружен — уведомляем согласующего с кнопками утвердить/отклонить
+function notifyInvoiceUploaded(econId, item) {
+  econId = parseInt(econId);
+  if (!econId || !item) return;
+  const meta = buildPurchaseMeta(item);
+  const title = 'Загружен входящий счёт по закупке №' + meta.no;
+  const message = greetUser(econId) + '\n\n' + formatPurchaseBody(meta) + '\nНеобходимо утвердить счёт и подтвердить оплату.';
+  const links = [
+    { text: '✅ Утвердить счёт', url: buildAppLink('approve_invoice', item.id, 'inbox') },
+    { text: '❌ Отклонить счёт', url: buildAppLink('reject_invoice', item.id, 'inbox') }
+  ].filter(l => l.url);
+  notifyUserViaBot(econId, title, message, links, null, 'inv_upload_' + item.id);
+}
+
+// ✅ Уведомления по счёту с кнопками действия
 function notifyInvoiceEvent(item, kind) {
   if (!item) return;
   const meta = buildPurchaseMeta(item);
   const mgrArr = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []);
-  const recipients = [];
-  if (mgrArr.length) recipients.push(parseInt(mgrArr[0]));
-  const headId = resolveDeptHeadId(item, true);
-  if (headId) recipients.push(headId);
-  const uniq = [...new Set(recipients.filter(Boolean))];
+  const mgrId = mgrArr.length ? parseInt(mgrArr[0]) : null;
+  const econId = resolveDeptHeadId(item, true);
+  const links = {
+    approved: econId ? [{ text: '💳 Подтвердить оплату', url: buildAppLink('confirm_payment', item.id, 'inbox') }] : [],
+    paid: [{ text: '📦 Подтвердить получение', url: buildAppLink('confirm_receipt', item.id, 'inbox') }],
+    rejected: [{ text: '🔧 Исправить данные', url: buildAppLink('fill', item.id, 'inbox') }]
+  };
   const map = {
-    approved: { title: 'Входящий счёт утверждён', msg: 'Входящий счёт по закупке №' + meta.no + ' «' + meta.shortDesc + '» утверждён экономистом. Ожидайте оплату.' },
-    paid: { title: 'Входящий счёт оплачен', msg: 'Входящий счёт по закупке №' + meta.no + ' «' + meta.shortDesc + '» оплачен. Товары в пути — подтвердите получение.' },
-    rejected: { title: 'Входящий счёт отклонён', msg: 'Входящий счёт по закупке №' + meta.no + ' «' + meta.shortDesc + '» отклонён. Требуется корректировка.' }
+    approved: { title: 'Входящий счёт утверждён', msg: 'Входящий счёт по закупке №' + meta.no + ' «' + meta.shortDesc + '» утверждён экономистом. Ожидайте оплату.', to: [mgrId], econ: econId },
+    paid: { title: 'Входящий счёт оплачен', msg: 'Входящий счёт по закупке №' + meta.no + ' «' + meta.shortDesc + '» оплачен. Товары в пути — подтвердите получение.', to: [mgrId, parseInt(item.createdBy)], econ: null },
+    rejected: { title: 'Входящий счёт отклонён', msg: 'Входящий счёт по закупке №' + meta.no + ' «' + meta.shortDesc + '» отклонён. Требуется корректировка.', to: [mgrId], econ: null }
   };
   const info = map[kind];
   if (!info) return;
-  const links = [{ text: '📋 Открыть закупку', url: buildAppLink('view', item.id, 'inbox') }].filter(l => l.url);
-  uniq.forEach(function (uid) {
-    notifyUserViaBot(uid, info.title, greetUser(uid) + '\n\n' + info.msg, links, null, 'invoice_' + kind + '_' + item.id);
+  const recipients = [...new Set((info.to || []).filter(Boolean))];
+  const actionLinks = links[kind] || [];
+  recipients.forEach(function (uid) {
+    notifyUserViaBot(uid, info.title, greetUser(uid) + '\n\n' + info.msg, actionLinks, null, 'invoice_' + kind + '_' + item.id);
   });
 }
 
@@ -268,7 +302,7 @@ function runAbsenceCheck(done) {
   const values = (settings.absenceValues || 'отпуск,больничный,командировка,не в офисе').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   logAction('Проверка отсутствий (поле: ' + field + ')...', 'info');
   BX24.callMethod('user.get', { active: true, SELECT: ['ID', 'NAME', 'LAST_NAME', field] }, function (res) {
-    if (res.error()) { logAction('Ошибка проверки отсутствий: ' + getApiErrorMessage(res) + ' — проверьте код поля', 'error'); if (done) done(); return; }
+    if (res.error()) { logAction('Ошибка проверки отсутствий: ' + getApiErrorMessage(res), 'error'); if (done) done(); return; }
     const list = res.data() || [];
     const absents = [];
     list.forEach(u => {
@@ -294,7 +328,7 @@ function getInvoiceFieldCodes(cb) {
     for (const hintKey in INVOICE_FIELD_HINTS) {
       const needles = INVOICE_FIELD_HINTS[hintKey];
       const found = Object.keys(fd).find(code => {
-        if (['id', 'title', 'xmlId', 'createdTime', 'updatedTime', 'createdBy', 'updatedBy', 'categoryId', 'stageId', 'assignedById', 'opened', 'movedTime', 'movedBy', 'lastActivityTime', 'lastActivityBy'].includes(code)) return false;
+        if (['id','title','xmlId','createdTime','updatedTime','createdBy','updatedBy','categoryId','stageId','assignedById','opened','movedTime','movedBy','lastActivityTime','lastActivityBy'].includes(code)) return false;
         const t = (fd[code].title || '').toLowerCase().replace(/ё/g, 'е');
         return needles.some(n => t.includes(n));
       });
@@ -519,34 +553,39 @@ function syncManagersFromTasks(done) {
   }, function () { need.forEach(function (i) { syncManagersInProgress[i.id] = false; }); done(); });
 }
 
+// ✅ Переделано: обрабатываем ссылку каждый раз, когда id отличается от последнего
 function handleUrlParams() {
-  if (urlParamsProcessed) return;
   var params = getIncomingParams();
   var itemId = params.itemId;
   var action = params.action;
   var tab = params.tab;
-  if (itemId) {
-    urlParamsProcessed = true;
-    var attempts = 0;
-    var checkItemsInterval = setInterval(function () {
-      attempts++;
-      if (items.length > 0 || attempts >= 20) {
-        clearInterval(checkItemsInterval);
-        if (items.length > 0) {
-          var id = parseInt(itemId);
-          if (tab) { try { if (typeof switchTab === 'function') switchTab(tab); } catch (e) {} }
-          if (action === 'fill') openDataModal(id);
-          else if (action === 'upload') openUploadModal(id);
-          else if (action === 'approve') openActionModal(id, 'approve_terms');
-          else if (action === 'reject') openActionModal(id, 'reject_terms');
-          else if (action === 'rework') openActionModal(id, 'send_to_rework');
-          else if (action === 'select_executor') openExecutorModal(id);
-          else openViewModal(id);
-          try { window.history.replaceState({}, '', window.location.protocol + "//" + window.location.host + window.location.pathname); } catch (e) {}
-        } else showToast('Не удалось загрузить данные', 'error');
-      }
-    }, 500);
-  }
+  if (!itemId) return;
+  if (String(itemId) === String(lastHandledItemId) && urlParamsProcessed) return;
+  lastHandledItemId = itemId;
+  urlParamsProcessed = true;
+  var attempts = 0;
+  var checkItemsInterval = setInterval(function () {
+    attempts++;
+    if (items.length > 0 || attempts >= 20) {
+      clearInterval(checkItemsInterval);
+      if (items.length > 0) {
+        var id = parseInt(itemId);
+        if (tab) { try { if (typeof switchTab === 'function') switchTab(tab); } catch (e) {} }
+        if (action === 'fill') openDataModal(id);
+        else if (action === 'upload') openUploadModal(id);
+        else if (action === 'approve') openActionModal(id, 'approve_terms');
+        else if (action === 'reject') openActionModal(id, 'reject_terms');
+        else if (action === 'rework') openActionModal(id, 'send_to_rework');
+        else if (action === 'select_executor') openExecutorModal(id);
+        else if (action === 'approve_invoice') openActionModal(id, 'approve_invoice');
+        else if (action === 'reject_invoice') openActionModal(id, 'reject_invoice');
+        else if (action === 'confirm_payment') openActionModal(id, 'confirm_payment');
+        else if (action === 'confirm_receipt') openActionModal(id, 'confirm_receipt');
+        else openViewModal(id);
+        try { window.history.replaceState({}, '', window.location.protocol + "//" + window.location.host + window.location.pathname); } catch (e) {}
+      } else showToast('Не удалось загрузить данные', 'error');
+    }
+  }, 500);
 }
 
 function getIncomingParams() {
@@ -581,6 +620,7 @@ function getNextStageId(currentStageId) {
     lastSyncTime = now;
     logAction('Возврат во вкладку — автообновление', 'info');
     loadAllData();
+    handleUrlParams();
   };
   window.addEventListener('focus', tryReload);
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') tryReload(); });
