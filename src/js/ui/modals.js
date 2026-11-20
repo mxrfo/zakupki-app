@@ -104,6 +104,9 @@ function submitExecutor(e) {
       if (btn) { btn.disabled = false; btn.innerText = 'Утвердить'; }
       showToast('Исполнитель утверждён: ' + (userNames[toUserId] || toUserId), 'success');
       try {
+        if (item) groupStatusNotify(item, 'assigned', 'group_assigned_' + item.id + '_' + toUserId);
+      } catch (err) { logAction('Ошибка группового статуса: ' + err.message, 'error'); }
+      try {
         if (item && !item[actualFields.taskSbor]) {
           const shortDescText = getShortDesc(item);
           const headId = resolveDeptHeadId(item, true);

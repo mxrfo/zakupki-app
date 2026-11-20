@@ -91,6 +91,9 @@ ${shortDescText}`,
     if (Object.keys(fields).length === 0) { proceedToTask(); return; }
     BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: id, fields: fields }, (res) => {
       if (res.error()) { showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); sendToWorkInProgress[id] = false; if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = submitBtn.dataset.originalText || 'Отправить'; } return; }
+      // ✅ Синхронизируем локальный item с сохранёнными полями (комментарий, руководитель),
+      // иначе уведомление руководителю уходит без комментария из «В работу».
+      try { Object.keys(fields).forEach(function (k) { item[k] = fields[k]; }); } catch (e) {}
       proceedToTask();
     });
     return;
@@ -108,7 +111,14 @@ ${shortDescText}`,
       if (res.error()) { showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); }
       else {
         showToast('Отправлено на доработку', 'success');
-        try { const mgrArr = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []); const mgrId = mgrArr.length > 0 ? parseInt(mgrArr[0]) : null; if (mgrId) notifyReworkNeeded(mgrId, item, comment); } catch (e) {}
+        try {
+          const mgrArr = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []);
+          const mgrId = mgrArr.length > 0 ? parseInt(mgrArr[0]) : null;
+          if (mgrId) notifyReworkNeeded(mgrId, item, comment);
+          item.stageId = targetStageId;
+          if (comment) item[actualFields.comment] = comment;
+          groupStatusNotify(item, 'rework');
+        } catch (e) {}
         closeModal('modal-action');
         loadAllData();
       }
@@ -142,11 +152,13 @@ ${shortDescText}`,
     if (res.error()) { showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); }
     else {
       showToast('Статус обновлен', 'success');
+      try { item.stageId = targetStageId; if (comment) item[actualFields.comment] = comment; } catch (e) {}
       if (type === 'approve_terms' || type === 'reject_terms') {
         try { const mgrArr = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []); const mgrId = mgrArr.length > 0 ? parseInt(mgrArr[0]) : null; if (mgrId) notifyAfterDecision(mgrId, item, type === 'approve_terms'); } catch (e) {}
+        try { groupStatusNotify(item, type === 'approve_terms' ? 'approved' : 'rejected'); } catch (e) {}
       }
       if (type === 'approve_invoice') { try { notifyInvoiceEvent(item, 'approved'); } catch (e) {} }
-      if (type === 'confirm_payment') { try { notifyInvoiceEvent(item, 'paid'); } catch (e) {} }
+      if (type === 'confirm_payment') { try { notifyInvoiceEvent(item, 'paid'); } catch (e) {} try { groupStatusNotify(item, 'invoice_paid'); } catch (e) {} }
       if (type === 'reject_invoice') { try { notifyInvoiceEvent(item, 'rejected'); } catch (e) {} }
       closeModal('modal-action');
       loadAllData();

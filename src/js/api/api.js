@@ -99,6 +99,7 @@ function buildTitle(kind, item) {
   return kind + ' (Закупка отделом ' + getDeptShort(item) + ' №' + item.id + ' от ' + formatCreatedDate(item.createdTime) + ')';
 }
 
+// ✅ Личные сообщения: "Сумма за товар" → "Сумма (без доставки)"
 function buildBody(item, opts) {
   opts = opts || {};
   const lines = [];
@@ -113,7 +114,7 @@ function buildBody(item, opts) {
     const delivery = parseAmount(item[actualFields.amountDelivery]) || 0;
     const total = product + delivery;
     if (opts.sumSplit) {
-      lines.push('[B]Сумма за товар:[/B] ' + product.toLocaleString('ru-RU') + ' ₽');
+      lines.push('[B]Сумма (без доставки):[/B] ' + product.toLocaleString('ru-RU') + ' ₽');
       lines.push('[B]Сумма за доставку:[/B] ' + delivery.toLocaleString('ru-RU') + ' ₽');
       lines.push('[B]ИТОГО:[/B] ' + total.toLocaleString('ru-RU') + ' ₽');
     } else if (total) {
@@ -140,11 +141,15 @@ function sendBotNotification(userId, title, message, links, cb, dedupeBase) {
   notifyUserViaBot(userId, title, message, links, cb, dedupeBase);
 }
 
-function notifySelectExecutor(userId, item, taskId) {
+// ✅ + comment: если комментарий не успел попасть в item, подставляем явно
+function notifySelectExecutor(userId, item, taskId, comment) {
   userId = parseInt(userId);
   if (!userId || !item) return;
   const title = buildTitle('Необходимо выбрать исполнителя', item);
-  const message = greetUser(userId) + '\n\n' + buildBody(item, { creator: true, sum: true, comment: true });
+  let message = greetUser(userId) + '\n\n' + buildBody(item, { creator: true, sum: true, comment: true });
+  if (comment && String(comment).trim() && message.indexOf('[B]Комментарий:[/B]') === -1) {
+    message += '\n[B]Комментарий:[/B] ' + cleanText(comment);
+  }
   const domain = getPortalDomain();
   const taskLink = taskId ? (domain ? domain + '/company/personal/user/' + userId + '/tasks/task/view/' + taskId + '/' : '') : '';
   const links = [
@@ -218,6 +223,7 @@ function notifyDataChangedOnApproval(econId, item) {
   notifyUserViaBot(econId, title, message, links, null, 'data_changed_' + item.id + '_' + Date.now());
 }
 
+// ✅ "Загружен счёт на оплату" — с полем "Файл для скачки" (file:true)
 function notifyInvoiceUploaded(econId, item) {
   econId = parseInt(econId);
   if (!econId || !item) return;
@@ -260,6 +266,57 @@ function notifyInvoiceEvent(item, kind) {
   });
 }
 
+/* ============================================================
+   ГРУППОВЫЕ СТАТУСНЫЕ УВЕДОМЛЕНИЯ (только общий чат, без кнопок)
+   Отмечается автор запроса, а не исполнитель.
+   ============================================================ */
+function buildGroupBody(item, opts) {
+  opts = opts || {};
+  const lines = [];
+  if (opts.deadline) lines.push('[B]Срок:[/B] ' + formatDeadline(item[actualFields.deadlineZakup]));
+  if (opts.dir) { const dir = resolveCombinedDir(item); if (dir) lines.push('[B]Раздел/Направление:[/B] ' + dir); }
+  if (opts.shortDesc) lines.push('[B]Что нужно закупить (Кратко):[/B] ' + getShortDesc(item));
+  if (opts.manager) { const m = getMgrInfo(item); if (m.id) lines.push('[B]Менеджер:[/B] ' + m.name + (m.dept && m.dept !== '—' ? ' (' + m.dept + ')' : '')); }
+  if (opts.creator) { const c = getCreatorInfo(item); lines.push('[B]Кто создал запрос:[/B] ' + c.name + (c.dept && c.dept !== '—' ? ' (' + c.dept + ')' : '')); }
+  const product = parseAmount(item[actualFields.amountProduct]) || 0;
+  const delivery = parseAmount(item[actualFields.amountDelivery]) || 0;
+  const total = product + delivery;
+  if (opts.sumTotal) lines.push('[B]Сумма (с доставкой):[/B] ' + total.toLocaleString('ru-RU') + ' ₽');
+  if (opts.sumBreakdown) {
+    lines.push('[B]Сумма (без доставки):[/B] ' + product.toLocaleString('ru-RU') + ' ₽');
+    lines.push('[B]Сумма за доставку:[/B] ' + delivery.toLocaleString('ru-RU') + ' ₽');
+    lines.push('[B]ИТОГО:[/B] ' + total.toLocaleString('ru-RU') + ' ₽');
+  }
+  return lines.join('\n');
+}
+
+const GROUP_STATUS_KINDS = {
+  assigned: { title: 'Передано в обработку', body: { deadline: true, dir: true, shortDesc: true, manager: true } },
+  sent_to_approval: { title: 'Отправлено на согласование', body: { deadline: true, dir: true, shortDesc: true, manager: true, creator: true, sumTotal: true } },
+  approved: { title: 'Согласовано', body: { shortDesc: true, manager: true, creator: true } },
+  rejected: { title: 'Отклонено', body: { shortDesc: true, manager: true, creator: true } },
+  rework: { title: 'Отправлено на корректировки', body: { shortDesc: true, manager: true, creator: true } },
+  invoice_received: { title: 'Счёт на оплату получен, отправлен на утверждение и оплату', body: { deadline: true, dir: true, shortDesc: true, sumBreakdown: true } },
+  invoice_paid: { title: 'Счёт оплачен', body: { deadline: true, dir: true, shortDesc: true, sumTotal: true } }
+};
+
+function groupStatusNotify(item, kind, dedupeBase) {
+  if (!item || !kind) return;
+  const conf = GROUP_STATUS_KINDS[kind];
+  if (!conf) return;
+  try {
+    const title = buildTitle(conf.title, item);
+    const c = getCreatorInfo(item);
+    const message = (c.id ? greetUser(c.id) + '\n\n' : '') + buildGroupBody(item, conf.body);
+    const userIds = [];
+    if (c.id) userIds.push(parseInt(c.id));
+    const m = getMgrInfo(item); if (m.id) userIds.push(parseInt(m.id));
+    const h = resolveDeptHeadId(item, false); if (h) userIds.push(parseInt(h));
+    const dd = dedupeBase || ('group_' + kind + '_' + item.id + '_' + (item.stageId || '') + '_' + (kind === 'assigned' ? (m.id || '') : ''));
+    notifyGroupStatus(title, message, userIds, null, dd);
+  } catch (e) { logAction('Ошибка группового статуса "' + kind + '": ' + e.message, 'error'); }
+}
+
 function isUserUnavailable(userId) {
   userId = String(userId);
   if (!settings.unavailableUsers) return false;
@@ -282,8 +339,6 @@ function refreshUnavailableUsersForce(done) {
   runAbsenceCheck(done);
 }
 
-// ✅ ИСПРАВЛЕНО: убрано несуществующее UF_ABSENCE_COMMENT из SELECT (из-за него user.get возвращал пустой список).
-// Парсинг UF_ABSENCE поддержан в нескольких форматах (массив пар дат / строка / объект).
 function parseAbsenceRanges(ab) {
   const ranges = [];
   if (!ab) return ranges;
@@ -382,6 +437,7 @@ function delegatePurchase(itemId, toUserId, note, cb) {
         const message = greetUser(toUserId) + '\n\n' + buildBody(item, { creator: true, sum: true, comment: true }) + '\n\nДелегировал: ' + (fromName || '—') + (note ? ('\nПричина: ' + note) : '');
         const links = [{ text: '📝 Заполнить данные', url: buildAppLink('fill', item.id, 'inbox') }].filter(l => l.url);
         notifyUserViaBot(toUserId, title, message, links, function (ok) { if (!ok) sendBotNotification(toUserId, title, message, links); }, 'delegate_' + itemId + '_' + toUserId);
+        groupStatusNotify(item, 'assigned', 'group_assigned_' + itemId + '_' + toUserId);
       } catch (e) { logAction('Ошибка уведомления о делегировании: ' + e.message, 'error'); }
       showToast('Закупка делегирована: ' + toName, 'success');
       loadAllData();
@@ -507,6 +563,7 @@ function syncManagersFromTasks(done) {
         if (r2.error()) { finish(f.item.id); return; }
         f.item[actualFields.manager] = [f.mgrId];
         if (sborStageId) f.item.stageId = sborStageId;
+        groupStatusNotify(f.item, 'assigned');
         if (!f.item[actualFields.taskSbor]) {
           var shortDescText = getShortDesc(f.item);
           var headId = resolveDeptHeadId(f.item, true);

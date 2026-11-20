@@ -1,32 +1,18 @@
 // ============================================================
 // МОДУЛЬ: bot.js — Чат-бот уведомлений (imbot.v2)
 // ============================================================
-// ИСПРАВЛЕНО (по логам 20.11 08:32):
-// 1. ERROR_METHOD_NOT_FOUND: в v2 метод называется imbot.v2.Chat.User.add
-//    (заглавная U), а не Chat.user.add.
-// 2. PARAM_KEYBOARD_ERROR: в v2 клавиатура — объект
-//    {BOT_ID, BUTTONS:[{TEXT,LINK,BG_COLOR_TOKEN},{TYPE:'NEWLINE'},...]},
-//    а не «массив строк» из старого im.*. При PARAM_KEYBOARD_ERROR —
-//    автоповтор без клавиатуры (текст не теряется).
-// 3. NO_AUTH_FOUND: все imbot.v2.* идут прямым fetch с JSON-телом и
-//    токеном в query (?auth=) — старый SDK шлет form-urlencode, который
-//    imbot.v2 не принимает.
-// 4. Схема доставки (В1-c): личная ветка (чат бот+получатель, участник
-//    добавляется СРАЗУ при создании через fields.userIds) + дубликат в
-//    общий чат «ALT · Закупки» (недостающие участники — Chat.User.add,
-//    идемпотентен). im.notify — только аварийный резерв (В3).
-// 5. Битые/чужие чаты пересоздаются автоматически (В4), ручной botId
-//    имеет приоритет (В5). Имя бота приводится к «ALT · Закупки».
-// Публичные имена сохранены: notifyUserViaBot, forceCreateBot,
-// clearBotCache, getBotHandlerUrl, lastBotStatus — их используют
-// api.js, settings.js, init.js.
+// ЛИЧНЫЕ уведомления (notifyUserViaBot) — только личная ветка (чат бот+человек),
+// при провале — резерв im.notify.
+// ГРУППОВОЙ чат «ALT · Закупки» — только статусные уведомления
+// (notifyGroupStatus), без кнопок, с @автором запроса.
+// Форматы: imbot.v2.Chat.User.add (заглавная U), keyboard {BOT_ID,BUTTONS},
+// JSON-rest транспорт (фикс NO_AUTH_FOUND).
 // ============================================================
 
 const BOT_CODE = 'purchase_app_bot';
 const BOT_NAME = 'ALT · Закупки';
 const GROUP_CHAT_TITLE = 'ALT · Закупки';
 
-// Живой статус для админки
 var lastBotStatus = { botId: '', chatId: '', result: '', ts: 0 };
 
 function callIfFn(v) {
@@ -89,7 +75,6 @@ function extractDialogId(d) {
   return chatData.dialogId || chatData.id || d.dialogId || d.CHAT_ID || d.id || null;
 }
 
-// dialogId группового чата в imbot.v2 имеет формат "chatNNNNN".
 function normalizeDialogId(d) {
   const s = String(d || '');
   if (/^chat\d+$/i.test(s)) return 'chat' + s.replace(/^chat/i, '');
@@ -97,8 +82,7 @@ function normalizeDialogId(d) {
   return s;
 }
 
-/* ================= REST-ТРАНСПОРТ ДЛЯ imbot.v2 =================
-   Обход бага старого SDK: auth передаётся в query-строке И в JSON-теле. */
+/* ================= REST-ТРАНСПОРТ ДЛЯ imbot.v2 ================= */
 function getRestDomain() {
   try {
     if (typeof BX24 !== 'undefined' && BX24.getDomain) {
@@ -119,7 +103,6 @@ function getRestAuth() {
   return null;
 }
 
-// result: { ok, result, error, error_description, status }
 function restImbotCall(method, payload, cb, _retried) {
   const done = function (r) { if (cb) cb(r); };
   const domain = getRestDomain();
@@ -168,7 +151,6 @@ function restImbotCall(method, payload, cb, _retried) {
     });
 }
 
-// Обёртка, совместимая со старым кодом: res.error() / res.data()
 function mkRes(r) {
   return {
     error: function () { return r.ok ? false : { error: r.error, error_description: r.error_description }; },
@@ -200,7 +182,6 @@ function getOrCreateBotToken() {
   return t;
 }
 
-// ✅ Приведение имени существующего бота к «ALT · Закупки» (однократно)
 function ensureBotName(botId) {
   if (localStorage.getItem('b24_bot_named_' + botId) === '1') return;
   restImbotCall('imbot.v2.Bot.update', {
@@ -324,11 +305,8 @@ let chatInFlight = false;
 let chatQueue = [];
 function drainChatQueue(id) { const q = chatQueue.slice(); chatQueue = []; q.forEach(function (cb) { cb(id); }); }
 
-// ✅ Чат создаётся СРАЗУ с получателем (fields.userIds) — бот автоматически
-// становится владельцем/участником, человек — участником.
-function createGroupChat(botId, seedUserId, cb) {
-  const userIds = [];
-  if (seedUserId) userIds.push(parseInt(seedUserId));
+function createGroupChat(botId, seedUserIds, cb) {
+  const userIds = [...new Set((seedUserIds || []).map(function (x) { return parseInt(x); }).filter(Boolean))];
   logAction('Создание группового чата «' + GROUP_CHAT_TITLE + '» (userIds=[' + userIds.join(',') + '])...', 'info');
   restImbotCall('imbot.v2.Chat.add', {
     botId: botId,
@@ -352,35 +330,35 @@ function createGroupChat(botId, seedUserId, cb) {
   });
 }
 
-function getGroupChatId(botId, seedUserId, cb) {
+function getGroupChatId(botId, seedUserIds, cb) {
   if (settings.chatId) { const cid = normalizeDialogId(settings.chatId); logAction('Использую групповой чат: ' + cid, 'info'); return cb(cid); }
   const cached = localStorage.getItem('b24_group_chat_id');
   if (cached) { const cid = normalizeDialogId(cached); logAction('Использую групповой чат из localStorage: ' + cid, 'info'); settings.chatId = cid; return cb(cid); }
 
   if (chatInFlight) { logAction('Чат уже создаётся — в очередь', 'info'); chatQueue.push(cb); return; }
   chatInFlight = true;
-  createGroupChat(botId, seedUserId, function (chatId) {
+  createGroupChat(botId, seedUserIds, function (chatId) {
     chatInFlight = false;
     cb(chatId);
     drainChatQueue(chatId);
   });
 }
 
-// ✅ Правильное имя метода: imbot.v2.Chat.User.add (заглавная U).
-// Идемпотентен: уже состоящих и несуществующих пропускает без ошибки.
-function addUserToChat(botId, chatId, userId, cb) {
+// ✅ imbot.v2.Chat.User.add (заглавная U), идемпотентен, принимает массив
+function addUsersToChat(botId, chatId, userIds, cb) {
   cb = cb || function () {};
-  if (!chatId || !userId) return cb();
+  const ids = [...new Set((userIds || []).map(function (x) { return parseInt(x); }).filter(Boolean))];
+  if (!chatId || !ids.length) return cb();
   restImbotCall('imbot.v2.Chat.User.add', {
     botId: botId,
     dialogId: normalizeDialogId(chatId),
-    userIds: [parseInt(userId)]
+    userIds: ids
   }, function (r) {
     const res = mkRes(r);
     if (res.error()) {
-      logAction('Chat.User.add (' + userId + ' → ' + chatId + '): ' + describeError(res) + ' (продолжаем)', 'info');
+      logAction('Chat.User.add (' + ids.join(',') + ' → ' + chatId + '): ' + describeError(res) + ' (продолжаем)', 'info');
     } else {
-      logAction('Пользователь ' + userId + ' в чате ' + chatId, 'success');
+      logAction('В чат ' + chatId + ' добавлены: ' + ids.join(','), 'success');
     }
     cb();
   });
@@ -388,8 +366,7 @@ function addUserToChat(botId, chatId, userId, cb) {
 
 /* ================= ОТПРАВКА СООБЩЕНИЙ ================= */
 
-// ✅ Формат клавиатуры imbot.v2: {BOT_ID, BUTTONS:[...]} с полями в ВЕРХНЕМ
-// регистре; кнопки на отдельных строках через {TYPE:'NEWLINE'}.
+// ✅ Формат клавиатуры imbot.v2: {BOT_ID, BUTTONS:[...]}
 function buildKeyboard(botId, links) {
   const btns = [];
   (links || []).forEach(function (l) {
@@ -400,7 +377,6 @@ function buildKeyboard(botId, links) {
   return btns.length ? { BOT_ID: parseInt(botId), BUTTONS: btns } : null;
 }
 
-// ok=false + reason: 'keyboard' | 'chat' | 'auth' | 'other'
 function botSendOnce(botId, dialogId, title, message, links, withKeyboard, cb) {
   const fields = { message: '[B]' + title + '[/B]\n' + message };
   if (withKeyboard) {
@@ -422,7 +398,6 @@ function botSendOnce(botId, dialogId, title, message, links, withKeyboard, cb) {
     if (hint) logAction(hint, 'error');
 
     if (code === 'PARAM_KEYBOARD_ERROR' && withKeyboard) {
-      // ✅ Повтор без клавиатуры — текст дойдёт в любом случае
       logAction('Повторяю отправку без клавиатуры...', 'info');
       return botSendOnce(botId, dialogId, title, message, links, false, cb);
     }
@@ -455,13 +430,12 @@ function ensurePersonalChat(botId, userId, cb) {
   });
 }
 
-// Личная доставка с одним пересозданием чата при проблеме
 function deliverPersonal(botId, userId, title, message, links, cb) {
   function attempt(recreated) {
     ensurePersonalChat(botId, userId, function (cid) {
       if (!cid) return cb(false);
       botSendOnce(botId, cid, title, message, links, true, function (r) {
-        if (r.ok) return cb(true);
+        if (r.ok) { lastBotStatus.chatId = cid; return cb(true); }
         if (r.reason === 'chat' && !recreated) {
           logAction('⚠ Личный чат ' + cid + ' битый — пересоздаю...', 'error');
           localStorage.removeItem('b24_bot_chat_' + userId);
@@ -474,33 +448,10 @@ function deliverPersonal(botId, userId, title, message, links, cb) {
   attempt(false);
 }
 
-// Сбрасывает сохранённый/ручной chatId группового чата
 function resetAutoChat() {
   localStorage.removeItem('b24_group_chat_id');
   settings.chatId = '';
   saveSettingsToBoth();
-}
-
-// Групповая доставка: добавить недостающего → отправить; при проблеме чата —
-// одно пересоздание чата (с этим же получателем) и повтор.
-function deliverGroup(botId, userId, title, message, links, cb) {
-  function attempt(recreated) {
-    getGroupChatId(botId, recreated ? userId : null, function (cid) {
-      if (!cid) return cb(false);
-      addUserToChat(botId, cid, userId, function () {
-        botSendOnce(botId, cid, title, message, links, true, function (r) {
-          if (r.ok) { lastBotStatus.chatId = cid; return cb(true); }
-          if ((r.reason === 'chat' || r.reason === 'auth') && !recreated) {
-            logAction('⚠ Групповой чат ' + cid + ' не принимает сообщения — пересоздаю...', 'error');
-            resetAutoChat();
-            return attempt(true);
-          }
-          cb(false);
-        });
-      });
-    });
-  }
-  attempt(false);
 }
 
 /* ================= РЕЗЕРВНАЯ ДОСТАВКА (im.notify) ================= */
@@ -522,7 +473,7 @@ function notifyViaImFallback(userId, title, message, links, cb) {
   });
 }
 
-/* ================= ОСНОВНОЙ ПОТОК (В1-c: личная + групповая) ================= */
+/* ================= ЛИЧНОЕ УВЕДОМЛЕНИЕ (без групповой ветки) ================= */
 function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
   if (dedupePass(fullKey)) { if (cb) cb(true); return; }
@@ -535,31 +486,50 @@ function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
       return;
     }
     lastBotStatus.botId = botId;
-
-    let personalOk = false, groupOk = false, finished = false, pending = 2;
-
-    const finish = function () {
-      if (finished) return;
-      finished = true;
-      const both = personalOk && groupOk;
-      const any = personalOk || groupOk;
-      lastBotStatus.result = any ? ('ok' + (both ? ' (личн+общ) ' : ' (частично) ')) : 'fail';
-      lastBotStatus.ts = Date.now();
-      if (any) {
-        if (!both) logAction('⚠ Доставка неполная: личная=' + personalOk + ', групповая=' + groupOk, 'info');
+    deliverPersonal(botId, userId, title, message, links, function (ok) {
+      if (ok) {
+        lastBotStatus.result = 'ok personal'; lastBotStatus.ts = Date.now();
         if (cb) cb(true);
       } else {
-        logAction('❌ Бот не доставил ни в личную, ни в групповую ветку — im.notify', 'error');
+        logAction('❌ Личная доставка ботом не удалась — im.notify', 'error');
         notifyViaImFallback(userId, title, message, links, cb);
       }
-    };
+    });
+  });
+}
 
-    const onBranch = function (setter) {
-      return function (ok) { setter(ok); if (--pending > 0) return; finish(); };
-    };
+/* ================= ГРУППОВОЙ СТАТУС (только общий чат, без кнопок) ================= */
+function notifyGroupStatus(title, message, userIds, cb, dedupeBase) {
+  const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
+  if (dedupePass(fullKey)) { if (cb) cb(true); return; }
 
-    deliverPersonal(botId, userId, title, message, links, onBranch(function (ok) { personalOk = ok; }));
-    deliverGroup(botId, userId, title, message, links, onBranch(function (ok) { groupOk = ok; }));
+  getBotId(function (botId) {
+    if (!botId) { logAction('Групповой статус пропущен: нет бота', 'error'); if (cb) cb(false); return; }
+    const ids = [...new Set((userIds || []).map(function (x) { return parseInt(x); }).filter(Boolean))];
+
+    function attempt(recreated) {
+      getGroupChatId(botId, recreated ? ids : null, function (cid) {
+        if (!cid) { if (cb) cb(false); return; }
+        addUsersToChat(botId, cid, ids, function () {
+          botSendOnce(botId, cid, title, message, [], true, function (r) {
+            if (r.ok) {
+              lastBotStatus.chatId = cid;
+              lastBotStatus.result = 'ok group @ ' + cid; lastBotStatus.ts = Date.now();
+              if (cb) cb(true);
+              return;
+            }
+            if ((r.reason === 'chat' || r.reason === 'auth') && !recreated) {
+              logAction('⚠ Групповой чат ' + cid + ' не принимает статусы — пересоздаю...', 'error');
+              resetAutoChat();
+              return attempt(true);
+            }
+            lastBotStatus.result = 'group fail'; lastBotStatus.ts = Date.now();
+            if (cb) cb(false);
+          });
+        });
+      });
+    }
+    attempt(false);
   });
 }
 

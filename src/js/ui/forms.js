@@ -35,7 +35,7 @@ function updateDirectionsCreate(selectedDirId = null) {
   const secId = secSelect.value;
   const dirSelect = document.getElementById('create-direction');
   dirSelect.innerHTML = '<option value="">-- Выберите направление --</option>';
-  if (!secId) { dirSelect.innerHTML = '<option value="">-- Сначала выберите раздел --</option>'; return; }
+  if (!secId) { dirSelect.innerHTML += '<option value="">-- Сначала выберите раздел --</option>'; return; }
   const dirDef = fieldDefs[actualFields.direction];
   if (!dirDef || !dirDef.items) return;
   const allowedDirs = settings.listDependencies[secId] || [];
@@ -265,7 +265,12 @@ function submitData(e) {
           const headId = resolveDeptHeadId(item, true);
           if (headId) {
             if (onApproval) { logAction(`Уведомление об изменении данных → ID ${headId}`, 'info'); notifyDataChangedOnApproval(headId, item); }
-            else { logAction(`Уведомление о согласовании → ID ${headId}`, 'info'); notifyApprovalNeeded(headId, item); }
+            else {
+              logAction(`Уведомление о согласовании → ID ${headId}`, 'info');
+              notifyApprovalNeeded(headId, item);
+              // ✅ Групповой статус: Отправлено на согласование
+              groupStatusNotify(item, 'sent_to_approval');
+            }
           } else logAction('Не удалось определить руководителя', 'error');
         }
       } catch (e) { logAction('Ошибка уведомления: ' + e.message, 'error'); }
@@ -312,9 +317,18 @@ function submitUpload(e) {
         item[actualFields.deadlinePay] = deadline;
         if (targetStageId) item.stageId = targetStageId;
       }
-      try { const econId = resolveDeptHeadId(item, true); if (econId) notifyInvoiceUploaded(econId, item); } catch (e) { logAction('Ошибка уведомления по счёту: ' + e.message, 'error'); }
-      closeModal('modal-upload');
-      loadAllData();
+      // ✅ Перечитываем карточку: payload вида [[имя, base64]] не содержит url,
+      // а в уведомлении нужен «Файл для скачки» с реальной ссылкой.
+      BX24.callMethod('crm.item.get', { entityTypeId: ENTITY_TYPE_ID, id: parseInt(id), select: ['*', 'UF_*'] }, function (gRes) {
+        if (!gRes.error() && gRes.data() && gRes.data().item && item) {
+          const fresh = gRes.data().item;
+          try { item[actualFields.fileInvoice] = fresh[actualFields.fileInvoice]; } catch (e) {}
+        }
+        try { const econId = resolveDeptHeadId(item, true); if (econId) notifyInvoiceUploaded(econId, item); } catch (e) { logAction('Ошибка уведомления по счёту: ' + e.message, 'error'); }
+        try { groupStatusNotify(item, 'invoice_received'); } catch (e) { logAction('Ошибка группового статуса по счёту: ' + e.message, 'error'); }
+        closeModal('modal-upload');
+        loadAllData();
+      });
     });
   };
 
