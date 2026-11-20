@@ -97,7 +97,7 @@
 </div>
 </div>
 
-<!-- ✅ ОПТИМИЗИРОВАННАЯ МОДАЛКА СОЗДАНИЯ -->
+<!-- ✅ МОДАЛКА СОЗДАНИЯ: карточки позиций + скрытый amount-product -->
 <div id="modal-create" class="modal-overlay">
   <div class="modal" id="create-modal-content">
     <div class="modal-header">
@@ -107,8 +107,9 @@
     <form id="form-create" onsubmit="submitCreateRequest(event)">
       <div class="modal-body">
         <input type="hidden" id="edit-item-id">
-        
-        <!-- Section 1: Основная информация (Compact 2x2 Grid) -->
+        <!-- ✅ восстановлено скрытое поле, на которое опирается JS -->
+        <input type="hidden" id="create-amount-product" value="">
+
         <div class="form-section-block">
           <h4 class="form-section-title">Основная информация</h4>
           <div class="form-grid-2x2">
@@ -131,23 +132,21 @@
           </div>
         </div>
 
-        <!-- Section 2: Что нужно закупить (Structured Item Cards) -->
         <div class="form-section-block">
           <h4 class="form-section-title">Что нужно закупить</h4>
           <div class="form-group">
             <label>Краткое описание *</label>
             <input type="text" id="create-short-desc" required placeholder="Например: оборудование для лаборатории">
           </div>
-          
+
           <h5 style="font-size: 14px; font-weight: 700; color: #334155; margin: 20px 0 12px 0;">Позиции закупки</h5>
           <div id="purchase-items-container"></div>
-          
+
           <button type="button" class="btn btn-sm" onclick="addDetailRow()" style="margin-top: 8px;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px; vertical-align: middle;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Добавить позицию
           </button>
 
-          <!-- Section 3: Clean Summary Footer Bar -->
           <div class="purchase-summary-bar">
             <span class="purchase-summary-label">Сумма позиций (без доставки):</span>
             <span class="purchase-summary-value" id="create-total-sum">0.00 ₽</span>
@@ -293,7 +292,6 @@
 <button type="button" class="admin-tab" data-tab="absence" onclick="switchAdminTab('absence')">Отсутствия</button>
 <button type="button" class="admin-tab" data-tab="bot" onclick="switchAdminTab('bot')">Чат-бот</button>
 </div>
-
 <div class="admin-panel active" data-panel="main">
 <div style="display:flex; gap:16px; margin-bottom:16px; flex-wrap:wrap;">
 <div class="form-group" style="flex:1; min-width:200px;"><label>ID Смарт-процесса (Закупки)</label><input type="number" id="set-entityid" value="1072"></div>
@@ -311,7 +309,6 @@
 </div>
 </div>
 </div>
-
 <div class="admin-panel" data-panel="roles">
 <div style="overflow-x:auto;">
 <table class="settings-table" id="dept-roles-table">
@@ -321,7 +318,6 @@
 </div>
 <button type="button" class="btn btn-sm" onclick="autoFillHeadsFromB24()">Заполнить руководителей из Б24</button>
 </div>
-
 <div class="admin-panel" data-panel="crm">
 <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
 <button type="button" class="btn btn-sm btn-primary" onclick="autoMapFields()">Автонастроить маппинг</button>
@@ -333,18 +329,15 @@
 <p style="font-size:12px; color:#64748b; margin:16px 0 8px;">Сопоставление полей CRM:</p>
 <div id="mapping-container"></div>
 </div>
-
 <div class="admin-panel" data-panel="deps">
 <p style="font-size:12px; color:#64748b; margin-bottom:10px;">Выберите направления для каждого раздела.</p>
 <div id="list-dependencies-container"></div>
 </div>
-
 <div class="admin-panel" data-panel="absence">
 <button type="button" class="btn btn-sm btn-primary" onclick="runManualAbsenceCheck()" id="btn-absence-check">Проверить отсутствия сейчас</button>
 <p style="font-size:12px; color:#64748b; margin:10px 0;" id="absence-meta"></p>
 <div id="unavailable-users-container" style="max-height:320px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px; padding:8px;"></div>
 </div>
-
 <div class="admin-panel" data-panel="bot">
 <p style="font-size:12px; color:#64748b; margin-bottom:8px;">Статус чат-бота:</p>
 <div class="bot-status-box" id="bot-status-box"></div>
@@ -360,7 +353,6 @@
 <div class="form-group"><label>Код доп. поля статуса отсутствия (не обяз.)</label><input type="text" id="set-absence-field" placeholder="оставьте пустым для авто-детекта UF_ABSENCE"></div>
 <div class="form-group"><label>Значения доп. поля, означающие отсутствие</label><input type="text" id="set-absence-values" placeholder="отпуск,больничный,командировка"></div>
 </div>
-
 </div>
 <div class="modal-footer"><button class="btn btn-primary" onclick="saveSettings()">Сохранить</button></div>
 </div>
