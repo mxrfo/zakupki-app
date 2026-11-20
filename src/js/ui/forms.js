@@ -1,22 +1,17 @@
 // js/forms.js — Обработка форм
 
-/* ============================================================
-   RESIZABLE COLUMNS для таблиц детализации
-   ============================================================ */
 function initResizableTable(tableId) {
   const table = document.getElementById(tableId);
   if (!table) return;
   const ths = table.querySelectorAll('thead th');
   ths.forEach(function (th, idx) {
-    // Пропускаем последний столбец (кнопка удаления)
     if (idx === ths.length - 1) return;
     if (th.querySelector('.resize-handle')) return;
     const handle = document.createElement('div');
     handle.className = 'resize-handle';
     th.appendChild(handle);
     handle.addEventListener('mousedown', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       handle.classList.add('active');
       const startX = e.pageX;
       const startWidth = th.offsetWidth;
@@ -36,10 +31,7 @@ function initResizableTable(tableId) {
   });
 }
 
-// Поставщик теперь ВСЕГДА отображается — функция-заглушка для совместимости
-function syncSupplierColumns() {
-  // Поставщик всегда в таблице, динамическая вставка не нужна
-}
+function syncSupplierColumns() {} // Заглушка, так как Поставщик теперь всегда в таблице
 
 function populateCreateSection() {
   const secSelect = document.getElementById('create-section');
@@ -60,8 +52,12 @@ function updateDirectionsCreate(selectedDirId = null) {
   if (!dirDef || !dirDef.items) return;
   const allowedDirs = settings.listDependencies[secId] || [];
   dirDef.items.forEach(item => {
-    if (allowedDirs.length > 0 && allowedDirs.includes(String(item.ID))) { const isSel = String(selectedDirId) === String(item.ID) ? 'selected' : ''; dirSelect.innerHTML += `<option value="${item.ID}" ${isSel}>${item.VALUE}</option>`; }
-    else if (allowedDirs.length === 0) { const isSel = String(selectedDirId) === String(item.ID) ? 'selected' : ''; dirSelect.innerHTML += `<option value="${item.ID}" ${isSel}>${item.VALUE}</option>`; }
+    const isSel = String(selectedDirId) === String(item.ID) ? 'selected' : '';
+    if (allowedDirs.length > 0 && allowedDirs.includes(String(item.ID))) {
+      dirSelect.innerHTML += `<option value="${item.ID}" ${isSel}>${item.VALUE}</option>`;
+    } else if (allowedDirs.length === 0) {
+      dirSelect.innerHTML += `<option value="${item.ID}" ${isSel}>${item.VALUE}</option>`;
+    }
   });
 }
 
@@ -69,27 +65,35 @@ function openCreateModal() {
   const deptSelect = document.getElementById('create-dept');
   deptSelect.innerHTML = '<option value="">-- Выберите отдел --</option>';
   let availableDepts = 0;
-  departments.forEach(d => { if (settings.visibleDepts.includes(String(d.ID)) && settings.deptShortNames[d.ID]) { deptSelect.innerHTML += `<option value="${d.ID}">${d.NAME} (${settings.deptShortNames[d.ID]})</option>`; availableDepts++; } });
+  departments.forEach(d => { 
+    if (settings.visibleDepts.includes(String(d.ID)) && settings.deptShortNames[d.ID]) { 
+      deptSelect.innerHTML += `<option value="${d.ID}">${d.NAME} (${settings.deptShortNames[d.ID]})</option>`; 
+      availableDepts++; 
+    } 
+  });
   if (availableDepts === 0) return showToast('Нет доступных отделов', 'error');
+  
   document.getElementById('create-modal-title').innerText = 'Создать запрос на закупку';
   document.getElementById('form-create').reset();
   document.getElementById('edit-item-id').value = '';
   document.getElementById('detail-tbody').innerHTML = '';
-  document.getElementById('create-amount-product').value = '';
-  document.getElementById('create-amount-product').readOnly = false;
-  document.getElementById('create-amount-product').style.backgroundColor = '#fff';
-  document.getElementById('create-amount-product').style.color = '#0f172a';
+  
+  const amountInput = document.getElementById('create-amount-product');
+  amountInput.value = '';
+  amountInput.readOnly = false;
+  amountInput.classList.add('input-editable');
+  amountInput.classList.remove('input-readonly-calculated');
+  
   document.getElementById('btn-save-create').disabled = false;
   document.getElementById('btn-save-create').innerText = 'Сохранить';
-  document.getElementById('create-modal-content').style.borderTop = 'none';
+  document.getElementById('create-modal-content').classList.add('modal-no-border-top');
+  
   populateCreateSection();
   addDetailRow();
-  // Resizable columns после рендера
   setTimeout(function () { initResizableTable('detail-table'); }, 50);
   document.getElementById('modal-create').style.display = 'flex';
 }
 
-// ✅ Новый порядок: Наименование, Цель, Цена с НДС, Кол-во, Всего, Поставщик, Ссылка
 function addDetailRow() {
   const tr = document.createElement('tr');
   tr.innerHTML = `<td><input type="text" class="det-name" oninput="calculateAllTotals()"></td>` +
@@ -136,8 +140,16 @@ function calculateAllTotals() {
     sum += total;
   });
   const amountInput = document.getElementById('create-amount-product');
-  if (hasDetails) { amountInput.value = sum > 0 ? sum.toFixed(2) : ''; amountInput.readOnly = true; amountInput.style.backgroundColor = '#f8fafc'; amountInput.style.color = '#64748b'; }
-  else { amountInput.readOnly = false; amountInput.style.backgroundColor = '#fff'; amountInput.style.color = '#0f172a'; }
+  if (hasDetails) { 
+    amountInput.value = sum > 0 ? sum.toFixed(2) : ''; 
+    amountInput.readOnly = true; 
+    amountInput.classList.add('input-readonly-calculated');
+    amountInput.classList.remove('input-editable');
+  } else { 
+    amountInput.readOnly = false; 
+    amountInput.classList.add('input-editable');
+    amountInput.classList.remove('input-readonly-calculated');
+  }
 }
 
 function calculateDataRowTotal(input) {
@@ -180,6 +192,7 @@ function submitCreateRequest(e) {
   btn.disabled = true;
   btn.innerText = 'Создание...';
   logAction('Начало создания запроса...', 'info');
+  
   const editId = document.getElementById('edit-item-id').value;
   const deadline = document.getElementById('create-deadline').value;
   const deptId = document.getElementById('create-dept').value;
@@ -203,14 +216,28 @@ function submitCreateRequest(e) {
     const q = tr.querySelector('.det-qty').value.trim();
     const l = tr.querySelector('.det-link').value.trim();
     const s = tr.querySelector('.det-supplier').value.trim();
-    if (n || p || q || l || pr || s) { arrNames.push(n); arrPurposes.push(p); arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); arrQtys.push(q); arrLinks.push(l); arrSuppliers.push(s); hasDetails = true; }
+    if (n || p || q || l || pr || s) { 
+      arrNames.push(n); arrPurposes.push(p); 
+      arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); 
+      arrQtys.push(q); arrLinks.push(l); arrSuppliers.push(s); 
+      hasDetails = true; 
+    }
   });
+  
   const shortDept = settings.deptShortNames[deptId] || (departments.find(d => d.ID == deptId)?.NAME || 'Отдел');
   const dateStr = new Date().toLocaleDateString('ru-RU');
-  const fields = { categoryId: currentCategoryId, [actualFields.shortDesc]: shortDesc, [actualFields.deadlineZakup]: deadline, [actualFields.dept]: deptId, [actualFields.creator]: currentUser.ID, [actualFields.amountProduct]: amountProduct ? parseFloat(amountProduct) : 0 };
+  const fields = { 
+    categoryId: currentCategoryId, 
+    [actualFields.shortDesc]: shortDesc, 
+    [actualFields.deadlineZakup]: deadline, 
+    [actualFields.dept]: deptId, 
+    [actualFields.creator]: currentUser.ID, 
+    [actualFields.amountProduct]: amountProduct ? parseFloat(amountProduct) : 0 
+  };
   if (section) fields[actualFields.section] = section;
   if (direction) fields[actualFields.direction] = direction;
   if (actualFields.combinedDir && combinedText) fields[actualFields.combinedDir] = combinedText;
+  
   if (hasDetails) {
     fields[actualFields.detailName] = arrNames;
     fields[actualFields.detailPurpose] = arrPurposes;
@@ -272,12 +299,18 @@ function submitData(e) {
     const q = tr.querySelector('.data-det-qty').value.trim();
     const l = tr.querySelector('.data-det-link').value.trim();
     const s = tr.querySelector('.data-det-supplier').value.trim();
-    if (n || p || q || l || pr || s) { arrNames.push(n); arrPurposes.push(p); arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); arrQtys.push(q); arrLinks.push(l); arrSuppliers.push(s); hasDetails = true; }
+    if (n || p || q || l || pr || s) { 
+      arrNames.push(n); arrPurposes.push(p); 
+      arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); 
+      arrQtys.push(q); arrLinks.push(l); arrSuppliers.push(s); 
+      hasDetails = true; 
+    }
   });
 
   const targetStageId = getStageIdByName('согласование');
   const fields = { [actualFields.amountProduct]: amountProduct ? parseFloat(amountProduct) : 0 };
   if (amountDelivery) fields[actualFields.amountDelivery] = parseFloat(amountDelivery);
+  
   if (hasDetails) {
     fields[actualFields.detailName] = arrNames;
     fields[actualFields.detailPurpose] = arrPurposes;

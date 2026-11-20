@@ -556,7 +556,7 @@ body {
 .toast.error { background: var(--brand-red); }
 
 /* ============================================================
-   12. Drag & Drop и утилиты
+   12. Drag & Drop, Утилиты и JS-хелперы
    ============================================================ */
 .note-card.drag-over { border-color: var(--brand-blue); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3); }
 
@@ -579,6 +579,27 @@ body {
 }
 .fab-btn:hover { background: #2563eb; transform: scale(1.05); }
 .fab-btn svg { width: 24px; height: 24px; }
+
+/* ✅ JS-хелперы для замены инлайн-стилей */
+.input-readonly-calculated {
+  background-color: #f8fafc !important;
+  color: #64748b !important;
+}
+.input-editable {
+  background-color: #fff !important;
+  color: #0f172a !important;
+}
+.modal-no-border-top {
+  border-top: none !important;
+}
+.btn-approval-submit {
+  background-color: #1e3a8a !important;
+  color: #fff !important;
+  border-color: #1e3a8a !important;
+}
+.btn-approval-submit:hover {
+  background-color: #1e40af !important;
+}
 
 /* View modal specifics */
 .view-meta-block { margin-bottom: 12px; }

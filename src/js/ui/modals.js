@@ -231,6 +231,7 @@ function openViewModal(id) {
   document.getElementById('view-body').innerHTML = html;
   const stage = spStages[item.stageId];
   const stageColor = stage ? stage.color : '#64748b';
+  // ✅ Динамический стиль оставлен, так как зависит от данных CRM
   document.getElementById('view-modal-content').style.borderTop = `6px solid ${stageColor}`;
   document.getElementById('modal-view').style.display = 'flex';
 }
@@ -270,7 +271,6 @@ function openEditModal(id) {
     const priceVal = parseAmount(arrPr[i]);
     const qtyVal = parseAmount(arrQ[i]);
     const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || '';
-    // ✅ Новый порядок: Наименование, Цель, Цена с НДС, Кол-во, Всего, Поставщик, Ссылка
     tr.innerHTML = `<td><input type="text" class="det-name" value="${arrN[i] || ''}" oninput="calculateAllTotals()"></td>` +
       `<td><input type="text" class="det-purpose" value="${arrP[i] || ''}"></td>` +
       `<td><input type="number" class="det-price" step="0.01" value="${priceVal}" oninput="calculateRowTotal(this)"></td>` +
@@ -284,9 +284,8 @@ function openEditModal(id) {
   calculateAllTotals();
   syncSupplierColumns();
   const stage = spStages[item.stageId];
-  document.getElementById('create-modal-content').style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
+  document.getElementById('create-modal-content').classList.add('modal-no-border-top');
   document.getElementById('modal-create').style.display = 'flex';
-  // ✅ Resizable columns после рендера
   setTimeout(function () { initResizableTable('detail-table'); }, 50);
 }
 
@@ -330,7 +329,6 @@ function openDataModal(id) {
     const priceVal = parseAmount(arrPr[i]);
     const qtyVal = parseAmount(arrQ[i]);
     const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || '';
-    // ✅ Новый порядок: Наименование, Цель, Цена с НДС, Кол-во, Всего, Поставщик, Ссылка
     tr.innerHTML = `<td><input type="text" class="data-det-name" value="${arrN[i] || ''}"></td>` +
       `<td><input type="text" class="data-det-purpose" value="${arrP[i] || ''}"></td>` +
       `<td><input type="number" class="data-det-price" step="0.01" value="${priceVal}" oninput="calculateDataRowTotal(this)"></td>` +
@@ -344,22 +342,24 @@ function openDataModal(id) {
 
   const modalTitle = document.querySelector('#modal-data .modal-header h2');
   const submitBtn = document.querySelector('#form-data button[type="submit"]');
+  
+  // ✅ Сброс и применение классов вместо инлайн-стилей
+  submitBtn.classList.remove('btn-approval-submit');
   if (allowApprovalEdit) {
     if (modalTitle) modalTitle.innerText = 'Редактирование данных (согласование)';
-    if (submitBtn) { submitBtn.innerText = 'Сохранить изменения'; submitBtn.style.background = '#1e3a8a'; submitBtn.style.color = '#fff'; }
+    if (submitBtn) { submitBtn.innerText = 'Сохранить изменения'; submitBtn.classList.add('btn-approval-submit'); }
   } else if (stName.includes('корректировк')) {
     if (modalTitle) modalTitle.innerText = 'Корректировка данных';
-    if (submitBtn) { submitBtn.innerText = 'Отправить на согласование'; submitBtn.style.background = '#1e3a8a'; submitBtn.style.color = '#fff'; }
+    if (submitBtn) { submitBtn.innerText = 'Отправить на согласование'; submitBtn.classList.add('btn-approval-submit'); }
   } else {
     if (modalTitle) modalTitle.innerText = 'Сбор данных и расчет';
-    if (submitBtn) { submitBtn.innerText = 'Отправить на согласование'; submitBtn.style.background = '#1e3a8a'; submitBtn.style.color = '#fff'; }
+    if (submitBtn) { submitBtn.innerText = 'Отправить на согласование'; submitBtn.classList.add('btn-approval-submit'); }
   }
 
   const modal = document.querySelector('#modal-data .modal');
-  if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
+  if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`; // Динамический стиль
   syncSupplierColumns();
   document.getElementById('modal-data').style.display = 'flex';
-  // ✅ Resizable columns после рендера
   setTimeout(function () { initResizableTable('data-detail-table'); }, 50);
 }
 
@@ -395,7 +395,7 @@ function openUploadModal(id) {
     fileInput.required = true;
   }
   const modal = document.querySelector('#modal-upload .modal');
-  if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
+  if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`; // Динамический стиль
   if (item[actualFields.deadlinePay]) document.getElementById('upload-deadline').value = String(item[actualFields.deadlinePay]).split('T')[0];
   document.getElementById('modal-upload').style.display = 'flex';
 }
