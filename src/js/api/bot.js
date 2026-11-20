@@ -1,31 +1,30 @@
 // ============================================================
 // МОДУЛЬ: bot.js — Чат-бот уведомлений (imbot.v2)
 // ============================================================
-// ИСПРАВЛЕНО (NO_AUTH_FOUND / 400 на imbot.v2.Chat.Message.send):
-// 1. Старый SDK (api.bitrix24.com/api/v1/) отправляет auth в form-теле
-//    (application/x-www-form-urlencoded). Новые методы imbot.v2.* такую
-//    авторизацию не принимают и возвращают 400 NO_AUTH_FOUND
-//    ("не передан ни access-токен, ни код вебхука").
-//    Теперь ВСЕ вызовы imbot.v2.* идут прямым fetch с JSON-телом и
-//    токеном в query-строке (?auth=...) и в теле — как требует OAuth-
-//    сценарий из документации. Остальные методы (crm.*, tasks.*, im.notify)
-//    продолжают работать через BX24.callMethod.
-// 2. describeError() научилась извлекать реальный код ошибки из объекта
-//    ajaxError старого SDK (раньше всегда писалось "UNKNOWN").
-// 3. Добавлена обработка expired_token (автообновление токена + повтор),
-//    insufficient_scope / NO_AUTH_FOUND (подсказка про scope imbot),
-//    BOT_OWNERSHIP_ERROR (перерегистрация бота текущим приложением).
-// 4. dialogId нормализуется к формату "chatNNNNN" (требование imbot.v2).
-// 5. Если доставка ботом невозможна — резервная отправка через im.notify,
-//    чтобы уведомление не терялось.
-// Публичные имена функций сохранены: notifyUserViaBot, forceCreateBot,
-// clearBotCache, getBotHandlerUrl, lastBotStatus — их используют api.js,
-// settings.js, init.js.
+// ИСПРАВЛЕНО (по логам 20.11 08:32):
+// 1. ERROR_METHOD_NOT_FOUND: в v2 метод называется imbot.v2.Chat.User.add
+//    (заглавная U), а не Chat.user.add.
+// 2. PARAM_KEYBOARD_ERROR: в v2 клавиатура — объект
+//    {BOT_ID, BUTTONS:[{TEXT,LINK,BG_COLOR_TOKEN},{TYPE:'NEWLINE'},...]},
+//    а не «массив строк» из старого im.*. При PARAM_KEYBOARD_ERROR —
+//    автоповтор без клавиатуры (текст не теряется).
+// 3. NO_AUTH_FOUND: все imbot.v2.* идут прямым fetch с JSON-телом и
+//    токеном в query (?auth=) — старый SDK шлет form-urlencode, который
+//    imbot.v2 не принимает.
+// 4. Схема доставки (В1-c): личная ветка (чат бот+получатель, участник
+//    добавляется СРАЗУ при создании через fields.userIds) + дубликат в
+//    общий чат «ALT · Закупки» (недостающие участники — Chat.User.add,
+//    идемпотентен). im.notify — только аварийный резерв (В3).
+// 5. Битые/чужие чаты пересоздаются автоматически (В4), ручной botId
+//    имеет приоритет (В5). Имя бота приводится к «ALT · Закупки».
+// Публичные имена сохранены: notifyUserViaBot, forceCreateBot,
+// clearBotCache, getBotHandlerUrl, lastBotStatus — их используют
+// api.js, settings.js, init.js.
 // ============================================================
 
 const BOT_CODE = 'purchase_app_bot';
-const BOT_NAME = 'Альтернатива · Закупки';
-const GROUP_CHAT_TITLE = 'Закупки · Альтернатива';
+const BOT_NAME = 'ALT · Закупки';
+const GROUP_CHAT_TITLE = 'ALT · Закупки';
 
 // Живой статус для админки
 var lastBotStatus = { botId: '', chatId: '', result: '', ts: 0 };
@@ -43,16 +42,11 @@ function describeError(res) {
     if (typeof e === 'string') {
       code = e;
     } else if (typeof e === 'object') {
-      // Старый SDK: ajaxError.ex = { error, error_description }
       let src = e;
       if (typeof e.getError === 'function') { try { src = e.getError() || e; } catch (_) {} }
       else if (e.ex && typeof e.ex === 'object') { src = e.ex; }
       code = callIfFn(src.error) || callIfFn(src.code) || 'UNKNOWN';
       desc = callIfFn(src.error_description) || callIfFn(src.description) || '';
-      if (!desc && typeof e.toString === 'function') {
-        const s = e.toString();
-        if (s && s.indexOf('[object') !== 0) desc = s;
-      }
     }
     if (!desc) desc = callIfFn(res.error_description) || '';
     if (typeof desc === 'function') desc = callIfFn(desc) || '';
@@ -95,9 +89,8 @@ function extractDialogId(d) {
   return chatData.dialogId || chatData.id || d.dialogId || d.CHAT_ID || d.id || null;
 }
 
-// ✅ dialogId группового чата в imbot.v2 имеет формат "chatNNNNN".
-// Если ID вбит руками числом — приводим к правильному формату.
-function normalizeGroupDialogId(d) {
+// dialogId группового чата в imbot.v2 имеет формат "chatNNNNN".
+function normalizeDialogId(d) {
   const s = String(d || '');
   if (/^chat\d+$/i.test(s)) return 'chat' + s.replace(/^chat/i, '');
   if (/^\d+$/.test(s)) return 'chat' + s;
@@ -135,7 +128,6 @@ function restImbotCall(method, payload, cb, _retried) {
   if (!domain) { done({ ok: false, error: 'NO_DOMAIN', error_description: 'Не определён адрес портала' }); return; }
 
   if (!auth || !auth.access_token) {
-    // Токен истёк — просим старый SDK обновить пару и повторяем один раз
     if (!_retried && typeof BX24 !== 'undefined' && BX24.refreshAuth) {
       _retried = true;
       try { BX24.refreshAuth(function () { restImbotCall(method, payload, cb, true); }); return; }
@@ -185,13 +177,13 @@ function mkRes(r) {
 }
 
 function scopeHint(code) {
-  if (code === 'insufficient_scope') return '❌ У токена приложения нет scope "imbot". Откройте карточку интеграции → права → добавьте "Чат-боты 2.0", пересохраните приложение и обновите страницу.';
-  if (code === 'NO_AUTH_FOUND') return '❌ Портал не принял авторизацию imbot.v2. Проверьте scope "imbot" в карточке интеграции и перезагрузите приложение.';
-  if (code === 'BOT_OWNERSHIP_ERROR') return '❌ Бот принадлежит другому приложению/токену. Выполняю перерегистрацию бота текущим приложением...';
+  if (code === 'insufficient_scope') return '❌ У токена приложения нет scope "imbot". Откройте карточку интеграции → права → добавьте "Чат-боты 2.0", пересохраните и обновите страницу.';
+  if (code === 'NO_AUTH_FOUND') return '❌ Портал не принял авторизацию imbot.v2. Проверьте scope "imbot" и перезагрузите приложение.';
+  if (code === 'BOT_OWNERSHIP_ERROR') return '❌ Бот принадлежит другому приложению. Выполняю перерегистрацию бота текущим приложением...';
   return '';
 }
 
-/* ================= МЬЮТЕКС СОЗДАНИЯ БОТА ================= */
+/* ================= БОТ: регистрация / поиск / имя ================= */
 let botInFlight = false;
 let botQueue = [];
 function drainBotQueue(id) {
@@ -208,6 +200,22 @@ function getOrCreateBotToken() {
   return t;
 }
 
+// ✅ Приведение имени существующего бота к «ALT · Закупки» (однократно)
+function ensureBotName(botId) {
+  if (localStorage.getItem('b24_bot_named_' + botId) === '1') return;
+  restImbotCall('imbot.v2.Bot.update', {
+    botId: botId,
+    fields: { properties: { name: BOT_NAME, workPosition: 'Система уведомлений по закупкам' } }
+  }, function (r) {
+    if (r.ok) {
+      localStorage.setItem('b24_bot_named_' + botId, '1');
+      logAction('Имя бота обновлено на «' + BOT_NAME + '»', 'success');
+    } else {
+      logAction('Bot.update (имя): ' + (r.error || '') + ' — не критично', 'info');
+    }
+  });
+}
+
 function registerBotNew(cb) {
   const handler = getBotHandlerUrl();
   logAction('Регистрация бота (v2, JSON-rest)... handler=' + handler, 'info');
@@ -217,17 +225,16 @@ function registerBotNew(cb) {
       type: 'bot',
       eventMode: 'fetch',
       handler: handler,
-      botToken: getOrCreateBotToken(), // на всякий случай: пригодится для webhook-сценария
+      botToken: getOrCreateBotToken(),
       properties: { name: BOT_NAME, workPosition: 'Система уведомлений по закупкам' }
     }
   }, function (r) {
     const res = mkRes(r);
     if (res.error()) {
-      const errStr = describeError(res);
-      logAction('Ошибка регистрации (v2): ' + errStr, 'error');
+      logAction('Ошибка регистрации (v2): ' + describeError(res), 'error');
       const hint = scopeHint(r.error);
       if (hint) logAction(hint, 'error');
-      registerBotV1(cb); // старый SDK для v1-методов работает корректно
+      registerBotV1(cb);
       return;
     }
     const botId = extractBotId(res.data());
@@ -236,6 +243,7 @@ function registerBotNew(cb) {
     settings.botId = String(botId);
     saveSettingsToBoth();
     logAction('Бот зарегистрирован (v2), ID: ' + botId, 'success');
+    ensureBotName(botId);
     cb(botId);
   });
 }
@@ -244,7 +252,7 @@ function registerBotV1(cb) {
   logAction('Резервная регистрация (v1)...', 'info');
   BX24.callMethod('imbot.register', {
     CODE: BOT_CODE, TYPE: 'bot', NAME: BOT_NAME,
-    FIRST_NAME: 'Альтернатива', LAST_NAME: 'Бот', EVENT_HANDLER: getBotHandlerUrl()
+    FIRST_NAME: 'ALT', LAST_NAME: 'Закупки', EVENT_HANDLER: getBotHandlerUrl()
   }, (resV1) => {
     if (resV1.error()) { logAction('Ошибка регистрации (v1): ' + describeError(resV1), 'error'); cb(null); return; }
     const botIdV1 = resV1.data().user_id;
@@ -274,9 +282,12 @@ function findBotViaList(done) {
 
 function getBotId(cb) {
   const manual = (settings.botId || '').trim();
-  if (manual) { const id = parseInt(manual); if (id) { localStorage.setItem('b24_bot_id', id); logAction('Использую ручной ID бота из настроек: ' + id, 'info'); return cb(id); } }
+  if (manual) {
+    const id = parseInt(manual);
+    if (id) { localStorage.setItem('b24_bot_id', id); logAction('Использую ручной ID бота из настроек: ' + id, 'info'); ensureBotName(id); return cb(id); }
+  }
   const cachedBotId = localStorage.getItem('b24_bot_id');
-  if (cachedBotId) return cb(parseInt(cachedBotId));
+  if (cachedBotId) { const id = parseInt(cachedBotId); ensureBotName(id); return cb(id); }
 
   if (botInFlight) { logAction('Бот уже создаётся — в очередь', 'info'); botQueue.push(cb); return; }
   botInFlight = true;
@@ -287,7 +298,7 @@ function getBotId(cb) {
       settings.botId = String(id);
       saveSettingsToBoth();
       logAction('Найден бот через imbot.v2.Bot.list, ID: ' + id, 'success');
-      botInFlight = false; cb(id); drainBotQueue(id); return;
+      botInFlight = false; ensureBotName(id); cb(id); drainBotQueue(id); return;
     }
     registerBotNew(function (newId) {
       botInFlight = false;
@@ -308,18 +319,20 @@ function forceCreateBot(cb) {
   });
 }
 
-/* ================= МЬЮТЕКС СОЗДАНИЯ ЧАТА ================= */
+/* ================= ГРУППОВОЙ ЧАТ «ALT · Закупки» ================= */
 let chatInFlight = false;
 let chatQueue = [];
 function drainChatQueue(id) { const q = chatQueue.slice(); chatQueue = []; q.forEach(function (cb) { cb(id); }); }
 
-// Чат создаётся ПУСТЫМ (userIds: []), бот — владелец диалога,
-// пользователь добавляется отдельно через Chat.user.add.
-function createGroupChat(botId, cb) {
-  logAction('Создание группового чата (пустой, userIds=[])...', 'info');
+// ✅ Чат создаётся СРАЗУ с получателем (fields.userIds) — бот автоматически
+// становится владельцем/участником, человек — участником.
+function createGroupChat(botId, seedUserId, cb) {
+  const userIds = [];
+  if (seedUserId) userIds.push(parseInt(seedUserId));
+  logAction('Создание группового чата «' + GROUP_CHAT_TITLE + '» (userIds=[' + userIds.join(',') + '])...', 'info');
   restImbotCall('imbot.v2.Chat.add', {
     botId: botId,
-    fields: { title: GROUP_CHAT_TITLE, userIds: [] }
+    fields: { title: GROUP_CHAT_TITLE, userIds: userIds }
   }, function (r) {
     const res = mkRes(r);
     if (res.error()) {
@@ -329,110 +342,168 @@ function createGroupChat(botId, cb) {
     }
     const chatId = extractDialogId(res.data());
     if (!chatId) { logAction('Не удалось извлечь ID чата: ' + JSON.stringify(res.data()), 'error'); return cb(null); }
-    localStorage.setItem('b24_group_chat_id', chatId);
-    settings.chatId = chatId;
+    const cid = normalizeDialogId(chatId);
+    localStorage.setItem('b24_group_chat_id', cid);
+    settings.chatId = cid;
     saveSettingsToBoth();
-    lastBotStatus.chatId = chatId;
-    logAction('Групповой чат создан (ботом), ID: ' + chatId, 'success');
-    cb(chatId);
+    lastBotStatus.chatId = cid;
+    logAction('Групповой чат создан, ID: ' + cid, 'success');
+    cb(cid);
   });
 }
 
-function getGroupChatId(botId, cb) {
-  if (settings.chatId) {
-    const cid = normalizeGroupDialogId(settings.chatId);
-    logAction('Использую чат ID (настроенный/сохранённый): ' + cid, 'info');
-    return cb(cid);
-  }
+function getGroupChatId(botId, seedUserId, cb) {
+  if (settings.chatId) { const cid = normalizeDialogId(settings.chatId); logAction('Использую групповой чат: ' + cid, 'info'); return cb(cid); }
   const cached = localStorage.getItem('b24_group_chat_id');
-  if (cached) { const cid = normalizeGroupDialogId(cached); logAction('Использую чат ID из localStorage: ' + cid, 'info'); settings.chatId = cid; return cb(cid); }
+  if (cached) { const cid = normalizeDialogId(cached); logAction('Использую групповой чат из localStorage: ' + cid, 'info'); settings.chatId = cid; return cb(cid); }
 
   if (chatInFlight) { logAction('Чат уже создаётся — в очередь', 'info'); chatQueue.push(cb); return; }
   chatInFlight = true;
-  createGroupChat(botId, function (chatId) {
+  createGroupChat(botId, seedUserId, function (chatId) {
     chatInFlight = false;
     cb(chatId);
     drainChatQueue(chatId);
   });
 }
 
-function addUserToGroupChat(botId, chatId, userId, cb) {
+// ✅ Правильное имя метода: imbot.v2.Chat.User.add (заглавная U).
+// Идемпотентен: уже состоящих и несуществующих пропускает без ошибки.
+function addUserToChat(botId, chatId, userId, cb) {
   cb = cb || function () {};
   if (!chatId || !userId) return cb();
-  restImbotCall('imbot.v2.Chat.user.add', {
+  restImbotCall('imbot.v2.Chat.User.add', {
     botId: botId,
-    dialogId: normalizeGroupDialogId(chatId),
+    dialogId: normalizeDialogId(chatId),
     userIds: [parseInt(userId)]
   }, function (r) {
     const res = mkRes(r);
     if (res.error()) {
-      logAction('Добавление пользователя ' + userId + ' в чат ' + chatId + ': ' + describeError(res) + ' (продолжаем)', 'info');
+      logAction('Chat.User.add (' + userId + ' → ' + chatId + '): ' + describeError(res) + ' (продолжаем)', 'info');
     } else {
-      logAction('Пользователь ' + userId + ' добавлен в чат ' + chatId, 'success');
+      logAction('Пользователь ' + userId + ' в чате ' + chatId, 'success');
     }
     cb();
   });
 }
 
-function buildKeyboard(links) {
-  const btns = (links || []).filter(function (l) { return l && l.url; }).map(function (l) {
-    return { TEXT: l.text, LINK: l.url, BG_COLOR_TOKEN: 'primary' };
+/* ================= ОТПРАВКА СООБЩЕНИЙ ================= */
+
+// ✅ Формат клавиатуры imbot.v2: {BOT_ID, BUTTONS:[...]} с полями в ВЕРХНЕМ
+// регистре; кнопки на отдельных строках через {TYPE:'NEWLINE'}.
+function buildKeyboard(botId, links) {
+  const btns = [];
+  (links || []).forEach(function (l) {
+    if (!l || !l.url) return;
+    if (btns.length) btns.push({ TYPE: 'NEWLINE' });
+    btns.push({ TEXT: l.text, LINK: l.url, BG_COLOR_TOKEN: 'primary' });
   });
-  return btns.length ? [btns] : [];
+  return btns.length ? { BOT_ID: parseInt(botId), BUTTONS: btns } : null;
 }
 
-// ✅ Главный исправленный вызов: JSON-transport + диагностика кодов ошибок.
-// ok=false передаётся наружу, но с честным кодом ошибки вместо UNKNOWN.
-function botSendToGroup(botId, chatId, title, message, links, cb, onAuthProblem) {
+// ok=false + reason: 'keyboard' | 'chat' | 'auth' | 'other'
+function botSendOnce(botId, dialogId, title, message, links, withKeyboard, cb) {
+  const fields = { message: '[B]' + title + '[/B]\n' + message };
+  if (withKeyboard) {
+    const kb = buildKeyboard(botId, links);
+    if (kb) fields.keyboard = kb;
+  }
   restImbotCall('imbot.v2.Chat.Message.send', {
     botId: botId,
-    dialogId: normalizeGroupDialogId(chatId),
-    fields: { message: '[B]' + title + '[/B]\n' + message, keyboard: buildKeyboard(links) }
+    dialogId: normalizeDialogId(dialogId),
+    fields: fields
   }, function (r) {
-    const res = mkRes(r);
-    if (res.error()) {
-      logAction('Ошибка отправки в чат ' + chatId + ': ' + describeError(res), 'error');
-      const hint = scopeHint(r.error);
-      if (hint) logAction(hint, 'error');
-      const authProblem = /NO_AUTH_FOUND|insufficient_scope|BOT_OWNERSHIP_ERROR|NETWORK|NO_DOMAIN/.test(String(r.error || ''));
-      if (authProblem && onAuthProblem) { onAuthProblem(r.error); if (cb) cb(false); return; }
-      if (cb) cb(false);
-      return;
+    if (r.ok) {
+      logAction('Сообщение отправлено в ' + dialogId + (withKeyboard ? '' : ' (без кнопок)'), 'success');
+      return cb({ ok: true });
     }
-    logAction('Сообщение отправлено в чат ' + chatId, 'success');
-    lastBotStatus.result = 'ok @ ' + chatId; lastBotStatus.ts = Date.now();
-    if (cb) cb(true);
+    const code = String(r.error || '');
+    logAction('Ошибка отправки в ' + dialogId + ': ' + describeError(mkRes(r)), 'error');
+    const hint = scopeHint(code);
+    if (hint) logAction(hint, 'error');
+
+    if (code === 'PARAM_KEYBOARD_ERROR' && withKeyboard) {
+      // ✅ Повтор без клавиатуры — текст дойдёт в любом случае
+      logAction('Повторяю отправку без клавиатуры...', 'info');
+      return botSendOnce(botId, dialogId, title, message, links, false, cb);
+    }
+    let reason = 'other';
+    if (/CHAT_NOT_FOUND|ACCESS_DENIED|PARAM_DIALOG|NOT_FOUND/i.test(code)) reason = 'chat';
+    else if (/NO_AUTH|insufficient_scope|BOT_OWNERSHIP|NETWORK|NO_DOMAIN|expired_token/i.test(code)) reason = 'auth';
+    cb({ ok: false, reason: reason, code: code });
   });
 }
 
-// Личной чат тоже создаётся пустым + user.add
-function sendToPersonalChat(botId, userId, title, message, links, cb) {
+/* ================= ЛИЧНАЯ ВЕТКА (чат бот + получатель) ================= */
+function ensurePersonalChat(botId, userId, cb) {
   const key = 'b24_bot_chat_' + userId;
-  let dialogId = localStorage.getItem(key);
-  function sendMsg(dId) { botSendToGroup(botId, dId, title, message, links, cb); }
-  if (dialogId) return sendMsg(dialogId);
+  const cached = localStorage.getItem(key);
+  if (cached) return cb(normalizeDialogId(cached));
+  const name = (typeof userNames !== 'undefined' && userNames[userId]) ? userNames[userId] : ('ID ' + userId);
+  logAction('Создание личного чата с ' + name + '...', 'info');
   restImbotCall('imbot.v2.Chat.add', {
-    botId: botId, fields: { title: 'Закупки · ' + (userNames[userId] || userId), userIds: [] }
+    botId: botId,
+    fields: { title: 'ALT · Закупки: ' + name, userIds: [parseInt(userId)] }
   }, function (r) {
     const res = mkRes(r);
-    if (res.error()) { logAction('Ошибка создания личного чата: ' + describeError(res), 'error'); if (cb) cb(false); return; }
+    if (res.error()) { logAction('Ошибка создания личного чата: ' + describeError(res), 'error'); return cb(null); }
     const dId = extractDialogId(res.data());
-    if (!dId) { logAction('Не удалось извлечь ID личного чата', 'error'); if (cb) cb(false); return; }
-    localStorage.setItem(key, dId);
-    addUserToGroupChat(botId, dId, userId, function () { sendMsg(dId); });
+    if (!dId) { logAction('Не удалось извлечь ID личного чата', 'error'); return cb(null); }
+    const cid = normalizeDialogId(dId);
+    localStorage.setItem(key, cid);
+    logAction('Личный чат создан: ' + cid, 'success');
+    cb(cid);
   });
 }
 
-// Сбрасывает сохранённый/ручной chatId (localStorage + settings + app.option)
+// Личная доставка с одним пересозданием чата при проблеме
+function deliverPersonal(botId, userId, title, message, links, cb) {
+  function attempt(recreated) {
+    ensurePersonalChat(botId, userId, function (cid) {
+      if (!cid) return cb(false);
+      botSendOnce(botId, cid, title, message, links, true, function (r) {
+        if (r.ok) return cb(true);
+        if (r.reason === 'chat' && !recreated) {
+          logAction('⚠ Личный чат ' + cid + ' битый — пересоздаю...', 'error');
+          localStorage.removeItem('b24_bot_chat_' + userId);
+          return attempt(true);
+        }
+        cb(false);
+      });
+    });
+  }
+  attempt(false);
+}
+
+// Сбрасывает сохранённый/ручной chatId группового чата
 function resetAutoChat() {
   localStorage.removeItem('b24_group_chat_id');
   settings.chatId = '';
   saveSettingsToBoth();
 }
 
-// ✅ Резервная доставка: im.notify (работает через обычный access_token
-// приложения, старые методы старым SDK не ломаются). Используется только
-// когда imbot.v2 принципиально недоступен (нет scope / чужой бот / сеть).
+// Групповая доставка: добавить недостающего → отправить; при проблеме чата —
+// одно пересоздание чата (с этим же получателем) и повтор.
+function deliverGroup(botId, userId, title, message, links, cb) {
+  function attempt(recreated) {
+    getGroupChatId(botId, recreated ? userId : null, function (cid) {
+      if (!cid) return cb(false);
+      addUserToChat(botId, cid, userId, function () {
+        botSendOnce(botId, cid, title, message, links, true, function (r) {
+          if (r.ok) { lastBotStatus.chatId = cid; return cb(true); }
+          if ((r.reason === 'chat' || r.reason === 'auth') && !recreated) {
+            logAction('⚠ Групповой чат ' + cid + ' не принимает сообщения — пересоздаю...', 'error');
+            resetAutoChat();
+            return attempt(true);
+          }
+          cb(false);
+        });
+      });
+    });
+  }
+  attempt(false);
+}
+
+/* ================= РЕЗЕРВНАЯ ДОСТАВКА (im.notify) ================= */
 function notifyViaImFallback(userId, title, message, links, cb) {
   logAction('Резервная доставка через im.notify пользователю ' + userId + '...', 'info');
   let text = '[B]' + title + '[/B]\n' + message;
@@ -440,7 +511,7 @@ function notifyViaImFallback(userId, title, message, links, cb) {
   if (firstLink) text += '\n[URL=' + firstLink.url + ']' + firstLink.text + '[/URL]';
   BX24.callMethod('im.notify', { USER_ID: parseInt(userId), MESSAGE: text }, function (res) {
     if (res.error()) {
-      logAction('im.notify тоже не прошёл: ' + describeError(res) + ' — проверьте scope "im" и "imbot" в карточке интеграции', 'error');
+      logAction('im.notify тоже не прошёл: ' + describeError(res) + ' — проверьте scope "im" в карточке интеграции', 'error');
       lastBotStatus.result = 'send fail (fallback too)'; lastBotStatus.ts = Date.now();
       if (cb) cb(false);
       return;
@@ -451,91 +522,44 @@ function notifyViaImFallback(userId, title, message, links, cb) {
   });
 }
 
-// ✅ Основной поток. При проблемах с авторизацией imbot.v2 — один раз
-// перерегистрируем бота, при проблемах с чатом — пересоздаём чат,
-// при полном провале — im.notify.
+/* ================= ОСНОВНОЙ ПОТОК (В1-c: личная + групповая) ================= */
 function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
   if (dedupePass(fullKey)) { if (cb) cb(true); return; }
+
   getBotId(function (botId) {
     if (!botId) {
-      logAction('Не удалось получить ID бота — уведомление пропущено', 'error');
+      logAction('Не удалось получить ID бота — резервная доставка', 'error');
       lastBotStatus.result = 'no bot'; lastBotStatus.ts = Date.now();
       notifyViaImFallback(userId, title, message, links, cb);
       return;
     }
-    getGroupChatId(botId, function (chatId) {
-      if (!chatId) {
-        logAction('Не удалось получить/создать чат', 'error');
-        lastBotStatus.result = 'no chat'; lastBotStatus.ts = Date.now();
+    lastBotStatus.botId = botId;
+
+    let personalOk = false, groupOk = false, finished = false, pending = 2;
+
+    const finish = function () {
+      if (finished) return;
+      finished = true;
+      const both = personalOk && groupOk;
+      const any = personalOk || groupOk;
+      lastBotStatus.result = any ? ('ok' + (both ? ' (личн+общ) ' : ' (частично) ')) : 'fail';
+      lastBotStatus.ts = Date.now();
+      if (any) {
+        if (!both) logAction('⚠ Доставка неполная: личная=' + personalOk + ', групповая=' + groupOk, 'info');
+        if (cb) cb(true);
+      } else {
+        logAction('❌ Бот не доставил ни в личную, ни в групповую ветку — im.notify', 'error');
         notifyViaImFallback(userId, title, message, links, cb);
-        return;
       }
+    };
 
-      let ownershipRetried = false;
+    const onBranch = function (setter) {
+      return function (ok) { setter(ok); if (--pending > 0) return; finish(); };
+    };
 
-      const attempt = function (cid, isRetry) {
-        addUserToGroupChat(botId, cid, userId, function () {
-          botSendToGroup(botId, cid, title, message, links, function (ok) {
-            if (ok) { if (cb) cb(true); return; }
-
-            // Проблемы авторизации/владения ботом — перерегистрация бота один раз
-            if (!ownershipRetried) {
-              ownershipRetried = true;
-              logAction('⚠ Проблемы с ботом/авторизацией imbot.v2. Пробую перерегистрировать бота текущим приложением...', 'error');
-              localStorage.removeItem('b24_bot_id');
-              settings.botId = '';
-              saveSettingsToBoth();
-              registerBotNew(function (newBotId) {
-                if (!newBotId) { notifyViaImFallback(userId, title, message, links, cb); return; }
-                createGroupChat(newBotId, function (newChatId) {
-                  if (!newChatId) { notifyViaImFallback(userId, title, message, links, cb); return; }
-                  const oldCb = cb;
-                  notifyUserViaBotFresh(newBotId, newChatId, userId, title, message, links, oldCb);
-                });
-              });
-              return;
-            }
-
-            // Битый/чужой чат — пересоздаём пустой чат и повторяем один раз
-            if (!isRetry) {
-              logAction('⚠ Чат ' + cid + ' не принимает imbot-сообщения (битый/чужой). Пересоздаю пустой чат ботом...', 'error');
-              resetAutoChat();
-              createGroupChat(botId, function (newId) {
-                if (!newId) {
-                  logAction('Не удалось пересоздать чат', 'error');
-                  lastBotStatus.result = 'chat recreate fail'; lastBotStatus.ts = Date.now();
-                  notifyViaImFallback(userId, title, message, links, cb);
-                  return;
-                }
-                logAction('Создан новый чат ' + newId + ', повторяю отправку', 'info');
-                attempt(newId, true);
-              });
-              return;
-            }
-
-            logAction('❌ Не удалось доставить сообщение ботом — включаю резервную доставку im.notify.', 'error');
-            lastBotStatus.result = 'send fail'; lastBotStatus.ts = Date.now();
-            notifyViaImFallback(userId, title, message, links, cb);
-          }, function (errCode) {
-            // onAuthProblem: NO_AUTH_FOUND / insufficient_scope и т.п.
-            lastBotStatus.result = 'auth: ' + errCode; lastBotStatus.ts = Date.now();
-          });
-        });
-      };
-
-      // Повторная доставка уже с новым ботом/чатом (без рекурсивной перерегистрации)
-      function notifyUserViaBotFresh(nb, nc, uid, t, m, l, cb2) {
-        addUserToGroupChat(nb, nc, uid, function () {
-          botSendToGroup(nb, nc, t, m, l, function (ok2) {
-            if (ok2) { if (cb2) cb2(true); return; }
-            notifyViaImFallback(uid, t, m, l, cb2);
-          });
-        });
-      }
-
-      attempt(chatId, false);
-    });
+    deliverPersonal(botId, userId, title, message, links, onBranch(function (ok) { personalOk = ok; }));
+    deliverGroup(botId, userId, title, message, links, onBranch(function (ok) { groupOk = ok; }));
   });
 }
 
