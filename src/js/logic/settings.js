@@ -4,25 +4,12 @@ var adminActiveTab = 'main';
 
 function switchAdminTab(tab) {
   adminActiveTab = tab;
-  // Переключаем класс active у кнопок вкладок
   document.querySelectorAll('.admin-tab').forEach(function (b) {
-    if (b.getAttribute('data-tab') === tab) {
-      b.classList.add('active');
-    } else {
-      b.classList.remove('active');
-    }
+    b.classList.toggle('active', b.getAttribute('data-tab') === tab);
   });
-  // Переключаем отображение панелей
   document.querySelectorAll('.admin-panel').forEach(function (p) {
-    if (p.getAttribute('data-panel') === tab) {
-      p.classList.add('active');
-      p.style.display = 'block';
-    } else {
-      p.classList.remove('active');
-      p.style.display = 'none';
-    }
+    p.classList.toggle('active', p.getAttribute('data-panel') === tab);
   });
-  
   if (tab === 'bot') renderBotStatus();
   if (tab === 'absence') renderUnavailableUsers();
 }

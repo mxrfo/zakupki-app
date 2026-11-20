@@ -89,8 +89,6 @@
 <button class="fab-btn" onclick="openCreateModal()" title="Создать запрос">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
-
-<!-- МОДАЛКИ -->
 <div id="modal-view" class="modal-overlay">
 <div class="modal" id="view-modal-content" style="max-width: 1000px;">
 <div class="modal-header"><h2 id="view-title">Детали закупки</h2><button onclick="closeModal('modal-view')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -98,7 +96,6 @@
 <div class="modal-footer"><button class="btn" onclick="closeModal('modal-view')">Закрыть</button></div>
 </div>
 </div>
-
 <div id="modal-create" class="modal-overlay">
 <div class="modal" id="create-modal-content" style="max-width: 1000px;">
 <div class="modal-header"><h2 id="create-modal-title">Создать запрос на закупку</h2><button onclick="closeModal('modal-create')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -121,18 +118,8 @@
 <summary style="font-weight:600; color:var(--brand-blue);">Детализация закупки (нажмите, чтобы развернуть)</summary>
 <div class="section-content" style="background:#fff;">
 <div class="detail-table-wrapper">
-<!-- ✅ Обновлённый порядок столбцов -->
 <table class="detail-table" id="detail-table">
-<thead><tr>
-  <th style="width: 22%;">Наименование</th>
-  <th style="width: 16%;">Цель использования</th>
-  <th style="width: 18%;">Цена с НДС за 1 шт. без учета доставки</th>
-  <th style="width: 9%;">Количество</th>
-  <th style="width: 12%;">Всего</th>
-  <th style="width: 13%;">Поставщик</th>
-  <th style="width: 10%;">Ссылка</th>
-  <th style="width: 40px;"></th>
-</tr></thead>
+<thead><tr><th style="width: 22%;">Наименование</th><th style="width: 16%;">Цель использования</th><th style="width: 18%;">Цена с НДС за 1 шт. без учета доставки</th><th style="width: 9%;">Количество</th><th style="width: 12%;">Всего</th><th style="width: 13%;">Поставщик</th><th style="width: 10%;">Ссылка</th><th style="width: 40px;"></th></tr></thead>
 <tbody id="detail-tbody"></tbody>
 </table>
 </div>
@@ -152,7 +139,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-data" class="modal-overlay">
 <div class="modal" style="max-width: 1000px;">
 <div class="modal-header"><h2 id="data-modal-title">Сбор данных и расчет</h2><button onclick="closeModal('modal-data')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -174,18 +160,8 @@
 <summary>Детализация закупки (нажмите, чтобы развернуть и редактировать)</summary>
 <div class="section-content" style="background:#fff;">
 <div class="detail-table-wrapper">
-<!-- ✅ Обновлённый порядок столбцов -->
 <table class="detail-table" id="data-detail-table">
-<thead><tr>
-  <th style="width: 22%;">Наименование</th>
-  <th style="width: 16%;">Цель использования</th>
-  <th style="width: 18%;">Цена с НДС за 1 шт. без учета доставки</th>
-  <th style="width: 9%;">Количество</th>
-  <th style="width: 12%;">Всего</th>
-  <th style="width: 13%;">Поставщик</th>
-  <th style="width: 10%;">Ссылка</th>
-  <th style="width: 40px;"></th>
-</tr></thead>
+<thead><tr><th style="width: 22%;">Наименование</th><th style="width: 16%;">Цель использования</th><th style="width: 18%;">Цена с НДС за 1 шт. без учета доставки</th><th style="width: 9%;">Количество</th><th style="width: 12%;">Всего</th><th style="width: 13%;">Поставщик</th><th style="width: 10%;">Ссылка</th><th style="width: 40px;"></th></tr></thead>
 <tbody id="data-detail-tbody"></tbody>
 </table>
 </div>
@@ -200,7 +176,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-edit-amount" class="modal-overlay">
 <div class="modal" style="max-width: 400px;">
 <div class="modal-header"><h2>Изменить сумму</h2><button onclick="closeModal('modal-edit-amount')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -216,7 +191,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-upload" class="modal-overlay">
 <div class="modal">
 <div class="modal-header"><h2>Загрузка входящего счета</h2><button onclick="closeModal('modal-upload')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -233,7 +207,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-action" class="modal-overlay">
 <div class="modal">
 <div class="modal-header"><h2 id="action-title">Действие</h2><button onclick="closeModal('modal-action')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -248,7 +221,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-delegate" class="modal-overlay">
 <div class="modal" style="max-width: 500px;">
 <div class="modal-header"><h2 id="delegate-title">Делегировать закупку</h2><button onclick="closeModal('modal-delegate')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -268,7 +240,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-executor" class="modal-overlay">
 <div class="modal" style="max-width: 500px;">
 <div class="modal-header"><h2 id="executor-title">Выбор исполнителя</h2><button onclick="closeModal('modal-executor')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -287,7 +258,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-settings" class="modal-overlay">
 <div class="modal" style="max-width: 1000px;">
 <div class="modal-header"><h2>Настройки приложения</h2><button onclick="closeModal('modal-settings')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -358,7 +328,7 @@
 <div style="display:flex; gap:8px; margin:12px 0; flex-wrap:wrap;">
 <button type="button" class="btn btn-sm btn-primary" onclick="forceCreateBot()">Создать бота сейчас</button>
 <button type="button" class="btn btn-sm" onclick="testBotSend()">Тестовое сообщение себе</button>
-<button type="button" class="btn btn-sm" style="background:#fec7c7;color:#dd2d21d5;border-color:#fc4d4d;" onclick="resetBotChat()">Сбросить чат бота</button>
+<button type="button" class="btn btn-sm" style="background:#fef3c7;color:#b45309;border-color:#fcd34d;" onclick="resetBotChat()">Сбросить чат бота</button>
 <button type="button" class="btn btn-sm" onclick="window.open('https://dev.bitrix24.ru/rest_bot.php', '_blank')">Открыть карточку ботов</button>
 </div>
 <div class="form-group"><label>ID чат-бота (если авто-поиск не сработал)</label><input type="number" id="set-botid" placeholder="например 345"><div style="font-size:11px; color:#64748b; margin-top:4px;">Число из URL карточки бота. Приоритет над авто-поиском. Переживает обновления архива.</div></div>
@@ -372,7 +342,6 @@
 <div class="modal-footer"><button class="btn btn-primary" onclick="saveSettings()">Сохранить</button></div>
 </div>
 </div>
-
 <div class="log-panel" id="log-panel">
 <div class="log-header" onclick="toggleLogPanel()"><span>Консоль логов</span><div class="log-header-actions"><button type="button" class="log-clear-btn" onclick="event.stopPropagation(); clearLogPanel()">Очистить</button><button type="button" class="log-close-btn" onclick="event.stopPropagation(); toggleLogPanel(false)" title="Закрыть">✕</button></div></div>
 <div class="log-content" id="log-content"></div>
@@ -381,7 +350,6 @@
 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
 </button>
 <div id="toast" class="toast"></div>
-
 <script src="js/core/config.js"></script>
 <script src="js/core/state.js"></script>
 <script src="js/core/utils.js"></script>

@@ -159,7 +159,7 @@ function openViewModal(id) {
 
   let html = `${isPostponed ? `<div class="note-badge postponed" style="margin-bottom:15px;">Отложено до: ${new Date(postponeDate).toLocaleDateString('ru-RU')}</div>` : ''}
     <div class="view-meta-block">
-      <div class="view-dates-row" style="background:#fff; padding:12px; border-radius:8px; border:1px solid var(--border-color); margin-bottom:12px;">
+      <div class="view-dates-row">
         <div class="view-date-item"><div class="view-date-label">Дата создания</div><div class="view-date-value">${createdDate}</div></div>
         <div class="view-date-item"><div class="view-date-label">Крайний срок</div><div class="view-date-value">${deadlineDisplay}</div></div>
       </div>
@@ -190,11 +190,11 @@ function openViewModal(id) {
     html += `<div class="view-details-divider"><div class="view-details-label">Детализация:</div><div class="detail-table-wrapper"><table class="detail-table"><thead><tr>` +
       `<th style="width: 22%;">Наименование</th>` +
       `<th style="width: 16%;">Цель</th>` +
-      `<th style="width: 16%;">Цена с НДС за 1 шт. без учета доставки</th>` +
-      `<th style="width: 8%;">Кол-во</th>` +
+      `<th style="width: 18%;">Цена с НДС за 1 шт. без учета доставки</th>` +
+      `<th style="width: 9%;">Кол-во</th>` +
       `<th style="width: 12%;">Всего</th>` +
-      `<th style="width: 14%;">Поставщик</th>` +
-      `<th style="width: 12%;">Ссылка</th>` +
+      `<th style="width: 13%;">Поставщик</th>` +
+      `<th style="width: 10%;">Ссылка</th>` +
       `</tr></thead><tbody>`;
     const arrN = Array.isArray(names) ? names : [names];
     const arrP = Array.isArray(purposes) ? purposes : [purposes];
@@ -207,22 +207,14 @@ function openViewModal(id) {
       const rowPrice = parseAmount(arrPr[i]) || 0;
       const rowQty = parseAmount(arrQ[i]) || 0;
       const rowTotal = rowPrice * rowQty;
-      html += `<tr>` +
-        `<td>${arrN[i] || ''}</td>` +
-        `<td>${arrP[i] || ''}</td>` +
-        `<td>${rowPrice > 0 ? rowPrice.toFixed(2) : ''}</td>` +
-        `<td>${arrQ[i] || ''}</td>` +
-        `<td>${rowTotal > 0 ? rowTotal.toFixed(2) : ''}</td>` +
-        `<td>${arrS[i] || ''}</td>` +
-        `<td>${arrL[i] ? `<a href="${arrL[i]}" target="_blank">Ссылка</a>` : ''}</td>` +
-        `</tr>`;
+      html += `<tr><td>${arrN[i] || ''}</td><td>${arrP[i] || ''}</td><td>${rowPrice > 0 ? rowPrice.toFixed(2) : ''}</td><td>${arrQ[i] || ''}</td><td>${rowTotal > 0 ? rowTotal.toFixed(2) : ''}</td><td>${arrS[i] || ''}</td><td>${arrL[i] ? `<a href="${arrL[i]}" target="_blank">Ссылка</a>` : ''}</td></tr>`;
     }
     html += `</tbody></table></div></div>`;
   } else html += `<div class="view-details-divider"><p style="color:#64748b; font-style: italic;">Детализация не заполнена.</p></div>`;
   html += `</div>`;
 
   const fileInfo = getFileInfo(item, actualFields.fileInvoice);
-  if (fileInfo && fileInfo.url && canSeeInvoice) html += `<h3 style="font-size:14px; margin-top:20px;">Файлы:</h3><a href="${fileInfo.url}" target="_blank">${fileInfo.name}</a>`;
+  if (fileInfo && fileInfo.url && canSeeInvoice) html += `<h3 style="font-size:14px; margin-top:20px;">Файлы:</h3><a class="file-attachment" href="${fileInfo.url}" target="_blank">${fileInfo.name}</a>`;
   if (econComment) html += `<div class="note-comment-box" style="margin-top:20px;"><b>Комментарий (${commentAuthorName}):</b> ${econComment}</div>`;
   const histField = actualFields.delegateHistory;
   const hist = (histField && item[histField]) ? String(item[histField]) : '';
@@ -231,8 +223,7 @@ function openViewModal(id) {
   document.getElementById('view-body').innerHTML = html;
   const stage = spStages[item.stageId];
   const stageColor = stage ? stage.color : '#64748b';
-  // ✅ Динамический стиль оставлен, так как зависит от данных CRM
-  document.getElementById('view-modal-content').style.borderTop = `6px solid ${stageColor}`;
+  document.getElementById('view-modal-content').style.borderTop = `6px solid ${stageColor}`; // динамический — по стадии
   document.getElementById('modal-view').style.display = 'flex';
 }
 
@@ -284,7 +275,7 @@ function openEditModal(id) {
   calculateAllTotals();
   syncSupplierColumns();
   const stage = spStages[item.stageId];
-  document.getElementById('create-modal-content').classList.add('modal-no-border-top');
+  document.getElementById('create-modal-content').style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`; // динамический
   document.getElementById('modal-create').style.display = 'flex';
   setTimeout(function () { initResizableTable('detail-table'); }, 50);
 }
@@ -342,9 +333,8 @@ function openDataModal(id) {
 
   const modalTitle = document.querySelector('#modal-data .modal-header h2');
   const submitBtn = document.querySelector('#form-data button[type="submit"]');
-  
-  // ✅ Сброс и применение классов вместо инлайн-стилей
-  submitBtn.classList.remove('btn-approval-submit');
+  // ✅ Класс вместо инлайн-стилей
+  if (submitBtn) submitBtn.classList.remove('btn-approval-submit');
   if (allowApprovalEdit) {
     if (modalTitle) modalTitle.innerText = 'Редактирование данных (согласование)';
     if (submitBtn) { submitBtn.innerText = 'Сохранить изменения'; submitBtn.classList.add('btn-approval-submit'); }
@@ -357,7 +347,7 @@ function openDataModal(id) {
   }
 
   const modal = document.querySelector('#modal-data .modal');
-  if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`; // Динамический стиль
+  if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`; // динамический
   syncSupplierColumns();
   document.getElementById('modal-data').style.display = 'flex';
   setTimeout(function () { initResizableTable('data-detail-table'); }, 50);
@@ -395,7 +385,7 @@ function openUploadModal(id) {
     fileInput.required = true;
   }
   const modal = document.querySelector('#modal-upload .modal');
-  if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`; // Динамический стиль
+  if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`; // динамический
   if (item[actualFields.deadlinePay]) document.getElementById('upload-deadline').value = String(item[actualFields.deadlinePay]).split('T')[0];
   document.getElementById('modal-upload').style.display = 'flex';
 }
