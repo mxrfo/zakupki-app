@@ -381,33 +381,9 @@ body {
 .btn-logs { position: fixed; bottom: 24px; left: 284px; z-index: 10001; background: #1e293b; color: #fff; border: none; border-radius: 50%; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: transform .2s var(--ease), background .2s var(--ease); }
 .btn-logs:hover { transform: scale(1.05); background: #0f172a; }
 
-/* === Адаптив === */
-@media (max-width: 900px) {
-  .app-layout { flex-direction: column; }
-  .sidebar { width: 100%; flex-direction: row; overflow-x: auto; padding: 0; border-right: none; border-bottom: 1px solid var(--border-color); }
-  .brand-text { padding: 16px; border-bottom: none; border-right: 2px solid var(--brand-blue); }
-  .nav-tabs { flex-direction: row; padding: 8px; }
-  .tab-btn { padding: 8px 12px; }
-  .topbar { padding: 0 12px; }
-  .search-bar { max-width: 150px; }
-  .btn-logs { left: 24px; }
-  .view-meta-cards { flex-direction: column; }
-  .fab-btn { bottom: 20px; right: 20px; width: 50px; height: 50px; }
-  .fab-btn svg { width: 24px; height: 24px; }
-  .form-grid-2x2 { grid-template-columns: 1fr; }
-  .form-grid-2x2::before { display: none; }
-  .pos-grid { grid-template-columns: 1fr 1fr; }
-  .pg-name, .pg-price, .pg-qty, .pg-total, .pg-purpose, .pg-supplier, .pg-link { grid-column: span 2; }
-  .review-grid { grid-template-columns: 1fr; }
-}
-
 /* === Блоки в формах === */
 .form-section-block { background: #fff; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
 .form-section-title { font-size: 14px; font-weight: 700; color: var(--brand-blue); margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 2px solid var(--border-color); }
-
-@media (prefers-reduced-motion: reduce) {
-  *, .note-card, .modal, .modal-overlay, .admin-panel, .tab-btn, .btn, .fab-btn, .action-icon-btn, .step-panel.active { animation: none !important; transition: none !important; }
-}
 
 /* ============================================================
    МАСТЕР СОЗДАНИЯ ЗАПРОСА (stepper)
@@ -432,7 +408,6 @@ body {
 .cs-step.done .cs-num::after { content: '✓'; font-size: 14px; }
 .cs-step.done .cs-label { color: var(--brand-blue); }
 
-/* Панели шагов с анимацией перелистывания */
 .step-panel { display: none; }
 .step-panel.active { display: block; }
 .step-panel.active.from-right { animation: slideInRight .3s var(--ease); }
@@ -440,14 +415,21 @@ body {
 @keyframes slideInRight { from { opacity: 0; transform: translateX(32px); } to { opacity: 1; transform: none; } }
 @keyframes slideInLeft { from { opacity: 0; transform: translateX(-32px); } to { opacity: 1; transform: none; } }
 
-/* Сетка 2x2 с вертикальным разграничителем колонок */
-.form-grid-2x2 { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 16px 36px; }
-.form-grid-2x2::before { content: ''; position: absolute; left: 50%; top: 4px; bottom: 4px; width: 1px; background: var(--border-color); }
+/* Шаг 1: новый порядок полей (отдел / раздел+направление / срок) */
+.form-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 36px; }
 .form-grid-2x2 .form-group { margin-bottom: 0; }
-.form-grid-2x2 .form-group:nth-child(odd) { padding-right: 8px; }
-.form-grid-2x2 .form-group:nth-child(even) { padding-left: 8px; }
+.fg-full { grid-column: 1 / -1; max-width: 520px; }
+.fg-pair { grid-column: 1 / -1; display: flex; gap: 36px; }
+.fg-pair .form-group { flex: 1; min-width: 0; }
+.fg-pair .form-group + .form-group { border-left: 1px solid var(--border-color); padding-left: 36px; margin-left: -36px; }
 
-/* Сворачиваемые карточки позиций */
+/* Сворачиваемые карточки позиций (необязательные) */
+.pos-empty {
+  border: 1px dashed var(--border-color); border-radius: 10px; padding: 22px;
+  text-align: center; color: var(--text-muted); font-size: 13px; background: #f8fafc; margin-bottom: 10px;
+}
+.pos-empty b { color: var(--text-main); display: block; margin-bottom: 4px; font-size: 14px; }
+
 .pos-card { border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 10px; background: #fff; overflow: hidden; transition: box-shadow .2s var(--ease), border-color .2s var(--ease); }
 .pos-card[open] { box-shadow: var(--shadow-sm); border-color: #cbd5e1; }
 .pos-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; list-style: none; background: #f8fafc; user-select: none; }
@@ -462,24 +444,42 @@ body {
 .pos-del:hover { background: #fee2e2; color: var(--danger); }
 .pos-body { padding: 14px; border-top: 1px solid var(--border-color); }
 .pos-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
-.pg-name { grid-column: span 5; }
+.pg-name { grid-column: span 6; position: relative; }
 .pg-price { grid-column: span 3; }
-.pg-qty { grid-column: span 2; }
-.pg-total { grid-column: span 2; }
+.pg-qty { grid-column: span 3; }
 .pg-purpose { grid-column: span 4; }
 .pg-supplier { grid-column: span 4; }
 .pg-link { grid-column: span 4; }
 .pos-grid .form-group { margin-bottom: 0; }
-.pos-total-value {
-  min-height: 42px; display: flex; align-items: center; justify-content: flex-end;
-  font-weight: 800; color: var(--brand-blue); font-size: 14px;
-  background: #f8fafc; border: 1px solid var(--border-color); border-radius: 6px; padding: 0 10px;
-}
+.pos-grid label { font-size: 12px; margin-bottom: 5px; }
 
 .link-input-wrapper { position: relative; }
 .link-input-wrapper svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94A3B8; width: 16px; height: 16px; pointer-events: none; }
 .link-input-wrapper input { padding-left: 32px; }
 
+/* Чипсы быстрых значений (цель / поставщик) */
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chip {
+  font-size: 11px; padding: 3px 9px; border-radius: 999px; cursor: pointer;
+  background: #eef2f7; border: 1px solid var(--border-color); color: #475569;
+  transition: all .15s var(--ease); white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+}
+.chip:hover { background: #e6f0fa; border-color: var(--brand-blue); color: var(--brand-blue); }
+
+/* Dropdown автоподсказок из кэша прошлых заявок */
+.suggest-dropdown {
+  position: fixed; z-index: 50; background: #fff; border: 1px solid var(--border-color);
+  border-radius: 8px; box-shadow: var(--shadow-md); max-height: 240px; overflow-y: auto; display: none;
+}
+.suggest-dropdown.open { display: block; }
+.suggest-item { padding: 9px 12px; cursor: pointer; border-bottom: 1px solid #f1f5f9; }
+.suggest-item:last-child { border-bottom: none; }
+.suggest-item:hover, .suggest-item.active { background: #f0f7ff; }
+.suggest-name { font-size: 13px; font-weight: 600; color: var(--text-main); }
+.suggest-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.suggest-meta .s-price { color: var(--brand-blue); font-weight: 700; }
+
+/* Итоговая панель суммы */
 .purchase-summary-bar { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; margin-top: 16px; }
 .purchase-summary-label { font-size: 14px; font-weight: 600; color: #475569; }
 .purchase-summary-value { font-size: 18px; font-weight: 800; color: var(--brand-blue); }
@@ -495,3 +495,50 @@ body {
 
 .btn-approval-submit { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; }
 .btn-approval-submit:hover { background: var(--brand-blue-hover); border-color: var(--brand-blue-hover); }
+
+/* ============================================================
+   МОДАЛКА "ВЫБРАТЬ ИЗ ПРОШЛЫХ"
+   ============================================================ */
+.past-toolbar { display: flex; gap: 10px; margin-bottom: 12px; }
+.past-toolbar .search-bar { width: 100%; }
+.past-list { max-height: 420px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; }
+.past-row { display: flex; align-items: flex-start; gap: 10px; padding: 11px 14px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
+.past-row:last-child { border-bottom: none; }
+.past-row:hover { background: #f8fafc; }
+.past-row input[type="checkbox"] { margin-top: 2px; width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
+.past-info { flex: 1; min-width: 0; }
+.past-name { font-size: 13px; font-weight: 600; color: var(--text-main); }
+.past-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.past-meta .p-price { color: var(--brand-blue); font-weight: 700; }
+.past-count { font-size: 11px; color: var(--text-muted); background: #eef2f7; padding: 2px 8px; border-radius: 999px; flex-shrink: 0; }
+.past-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+/* === Адаптив === */
+@media (max-width: 900px) {
+  .app-layout { flex-direction: column; }
+  .sidebar { width: 100%; flex-direction: row; overflow-x: auto; padding: 0; border-right: none; border-bottom: 1px solid var(--border-color); }
+  .brand-text { padding: 16px; border-bottom: none; border-right: 2px solid var(--brand-blue); }
+  .nav-tabs { flex-direction: row; padding: 8px; }
+  .tab-btn { padding: 8px 12px; }
+  .topbar { padding: 0 12px; }
+  .search-bar { max-width: 150px; }
+  .btn-logs { left: 24px; }
+  .view-meta-cards { flex-direction: column; }
+  .fab-btn { bottom: 20px; right: 20px; width: 50px; height: 50px; }
+  .fab-btn svg { width: 24px; height: 24px; }
+
+  .form-grid-2x2 { grid-template-columns: 1fr; }
+  .fg-full { max-width: none; }
+  .fg-pair { flex-direction: column; gap: 16px; }
+  .fg-pair .form-group + .form-group { border-left: none; padding-left: 0; margin-left: 0; }
+
+  .pos-grid { grid-template-columns: 1fr 1fr; }
+  .pg-name, .pg-price, .pg-qty, .pg-purpose, .pg-supplier, .pg-link { grid-column: span 2; }
+
+  .review-grid { grid-template-columns: 1fr; }
+}
+
+/* === prefers-reduced-motion === */
+@media (prefers-reduced-motion: reduce) {
+  *, .note-card, .modal, .modal-overlay, .admin-panel, .tab-btn, .btn, .fab-btn, .action-icon-btn, .step-panel.active { animation: none !important; transition: none !important; }
+}
