@@ -40,7 +40,7 @@ function renderBotStatus() {
   const box = document.getElementById('bot-status-box');
   if (!box) return;
   const botId = (settings.botId || localStorage.getItem('b24_bot_id') || '—');
-  const chatId = (lastBotStatus.chatId || localStorage.getItem('b24_group_chat_id') || '—');
+  const chatId = (lastBotStatus.chatId || settings.chatId || localStorage.getItem('b24_group_chat_id') || '—');
   const res = lastBotStatus.result || 'нет данных';
   const ts = lastBotStatus.ts ? new Date(lastBotStatus.ts).toLocaleTimeString('ru-RU') : '—';
   const ok = /ok/.test(res);
@@ -49,6 +49,9 @@ function renderBotStatus() {
     <div class="bot-stat"><span class="bot-stat-label">Последний диалог</span><span class="bot-stat-value">${chatId}</span></div>
     <div class="bot-stat"><span class="bot-stat-label">Последняя доставка</span><span class="bot-stat-value" style="color:${ok ? '#10b981' : '#ef4444'}">${res} @ ${ts}</span></div>
     <div class="bot-stat"><span class="bot-stat-label">Handler</span><span class="bot-stat-value" style="word-break:break-all;">${getBotHandlerUrl() || '—'}</span></div>
+    <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+      <button type="button" class="btn btn-sm btn-primary" onclick="forceCreateGroupChat()">Проверить групповой чат</button>
+    </div>
   `;
 }
 
@@ -63,14 +66,22 @@ function resetBotChat() {
   setTimeout(function () { location.reload(); }, 800);
 }
 
+// ✅ Тест теперь проверяет ОБЕ ветки: личную и групповую
 function testBotSend() {
   const uid = parseInt(currentUser.ID);
-  logAction('Тестовая отправка ботом пользователю ' + uid + '...', 'info');
-  notifyUserViaBot(uid, 'Тестовое сообщение', 'Проверка работы чат-бота приложения «Закупки». Если вы видите это сообщение — бот работает.', [{ text: '📋 Открыть приложение', url: buildAppLink('view', 0, 'my_requests') }], function (ok) {
+  logAction('Тестовая отправка (личная) пользователю ' + uid + '...', 'info');
+  notifyUserViaBot(uid, 'Тестовое сообщение', 'Проверка ЛИЧНОЙ ветки чат-бота «' + BOT_NAME + '». Если вы видите это в личном чате с ботом — личная доставка работает.', [{ text: '📋 Открыть приложение', url: buildAppLink('view', 0, 'my_requests') }], function (ok) {
     renderBotStatus();
-    if (ok) showToast('Тестовое сообщение отправлено', 'success');
-    else showToast('Не удалось отправить — см. логи', 'error');
+    if (ok) showToast('Личное тестовое сообщение отправлено', 'success');
+    else showToast('Личная доставка не удалась — см. логи', 'error');
   }, 'test_' + uid + '_' + Date.now());
+
+  logAction('Тестовая отправка (групповой статус)...', 'info');
+  notifyGroupStatus('Тест группового чата', 'Проверка СТАТУСНОЙ доставки в общий чат «' + GROUP_CHAT_TITLE + '». Если видите это здесь — групповая доставка работает.', [uid], function (okG) {
+    renderBotStatus();
+    if (okG) showToast('Групповой тестовый статус отправлен', 'success');
+    else showToast('Групповая доставка не удалась — см. логи', 'error');
+  }, 'test_group_' + uid + '_' + Date.now());
 }
 
 function renderFieldsStatus() {

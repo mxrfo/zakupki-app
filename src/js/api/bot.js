@@ -1,10 +1,11 @@
 // ============================================================
 // МОДУЛЬ: bot.js — Чат-бот уведомлений (imbot.v2)
 // ============================================================
-// ЛИЧНЫЕ уведомления (notifyUserViaBot) — только личная ветка (чат бот+человек),
+// ЛИЧНЫЕ уведомления (notifyUserViaBot) — личная ветка (чат бот+человек),
 // при провале — резерв im.notify.
-// ГРУППОВОЙ чат «ALT · Закупки» — только статусные уведомления
-// (notifyGroupStatus), без кнопок, с @автором запроса.
+// ГРУППОВОЙ чат «ALT · Закупки» — статусные уведомления (notifyGroupStatus),
+// без кнопок, с @автором запроса. Создаётся лениво при первом статусе,
+// либо принудительно через forceCreateGroupChat (кнопка в админке).
 // Форматы: imbot.v2.Chat.User.add (заглавная U), keyboard {BOT_ID,BUTTONS},
 // JSON-rest транспорт (фикс NO_AUTH_FOUND).
 // ============================================================
@@ -473,7 +474,7 @@ function notifyViaImFallback(userId, title, message, links, cb) {
   });
 }
 
-/* ================= ЛИЧНОЕ УВЕДОМЛЕНИЕ (без групповой ветки) ================= */
+/* ================= ЛИЧНОЕ УВЕДОМЛЕНИЕ ================= */
 function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
   if (dedupePass(fullKey)) { if (cb) cb(true); return; }
@@ -530,6 +531,64 @@ function notifyGroupStatus(title, message, userIds, cb, dedupeBase) {
       });
     }
     attempt(false);
+  });
+}
+
+// ✅ Принудительно создать/проверить групповой чат (кнопка в админке).
+// Если чат уже сохранён — просто шлёт в него тест-статус; если битый/удалён —
+// пересоздаёт и шлёт.
+function forceCreateGroupChat(cb) {
+  cb = cb || function () {};
+  const uid = (typeof currentUser !== 'undefined' && currentUser) ? parseInt(currentUser.ID) : null;
+  logAction('Принудительная проверка/создание группового чата...', 'info');
+  getBotId(function (botId) {
+    if (!botId) { showToast('Нет бота — сначала создайте бота', 'error'); return cb(false); }
+    const existing = settings.chatId || localStorage.getItem('b24_group_chat_id');
+    const proceed = function (cid) {
+      addUsersToChat(botId, cid, uid ? [uid] : [], function () {
+        botSendOnce(botId, cid, 'Проверка группового чата', 'Это тестовое статусное сообщение. Если вы видите его в чате «' + GROUP_CHAT_TITLE + '» — групповая доставка работает.', [], true, function (r) {
+          if (r.ok) {
+            lastBotStatus.chatId = cid;
+            lastBotStatus.result = 'ok group @ ' + cid; lastBotStatus.ts = Date.now();
+            showToast('Групповой чат работает: ' + cid, 'success');
+            logAction('Групповой чат подтверждён: ' + cid, 'success');
+          } else {
+            showToast('Чат ' + cid + ', но отправка не прошла — см. логи', 'error');
+          }
+          cb(r.ok);
+        });
+      });
+    };
+    if (existing) {
+      // Пробуем существующий; при ошибке чата — пересоздаём один раз
+      const cid = normalizeDialogId(existing);
+      addUsersToChat(botId, cid, uid ? [uid] : [], function () {
+        botSendOnce(botId, cid, 'Проверка группового чата', 'Тестовое статусное сообщение.', [], true, function (r) {
+          if (r.ok) {
+            lastBotStatus.chatId = cid;
+            lastBotStatus.result = 'ok group @ ' + cid; lastBotStatus.ts = Date.now();
+            showToast('Групповой чат работает: ' + cid, 'success');
+            return cb(true);
+          }
+          if (r.reason === 'chat' || r.reason === 'auth') {
+            logAction('⚠ Сохранённый чат ' + cid + ' недоступен — пересоздаю...', 'error');
+            resetAutoChat();
+            createGroupChat(botId, uid ? [uid] : [], function (newId) {
+              if (!newId) { showToast('Не удалось пересоздать групповой чат — см. логи', 'error'); return cb(false); }
+              proceed(newId);
+            });
+            return;
+          }
+          showToast('Отправка не прошла (' + r.code + ') — см. логи', 'error');
+          cb(false);
+        });
+      });
+    } else {
+      createGroupChat(botId, uid ? [uid] : [], function (newId) {
+        if (!newId) { showToast('Не удалось создать групповой чат — см. логи', 'error'); return cb(false); }
+        proceed(newId);
+      });
+    }
   });
 }
 
