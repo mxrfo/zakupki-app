@@ -156,7 +156,6 @@ function openViewModal(id) {
   const deliveryAmount = parseAmount(item[actualFields.amountDelivery]) || 0;
   const combinedDirText = resolveCombinedDir(item) || '—';
   const canSeeInvoice = !(activeTab === 'all' && currentRole !== 'admin' && currentRole !== 'econ');
-  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
 
   let html = `${isPostponed ? `<div class="note-badge postponed" style="margin-bottom:15px;">Отложено до: ${new Date(postponeDate).toLocaleDateString('ru-RU')}</div>` : ''}
     <div class="view-meta-block">
@@ -188,19 +187,35 @@ function openViewModal(id) {
   const hasDetails = names.some(n => n && n.trim() !== '');
 
   if (hasDetails) {
-    html += `<div class="view-details-divider"><div class="view-details-label">Детализация:</div><div class="detail-table-wrapper"><table class="detail-table"><thead><tr><th style="width: 22%;">Наименование</th><th style="width: 16%;">Цель</th>${hasSupplier ? '<th style="width: 14%;">Поставщик</th>' : ''}<th style="width: 13%;">Цена за 1 шт.</th><th style="width: 8%;">Кол-во</th><th style="width: 13%;">Всего</th><th style="width: 14%;">Ссылка</th></tr></thead><tbody>`;
+    html += `<div class="view-details-divider"><div class="view-details-label">Детализация:</div><div class="detail-table-wrapper"><table class="detail-table"><thead><tr>` +
+      `<th style="width: 22%;">Наименование</th>` +
+      `<th style="width: 16%;">Цель</th>` +
+      `<th style="width: 16%;">Цена с НДС за 1 шт. без учета доставки</th>` +
+      `<th style="width: 8%;">Кол-во</th>` +
+      `<th style="width: 12%;">Всего</th>` +
+      `<th style="width: 14%;">Поставщик</th>` +
+      `<th style="width: 12%;">Ссылка</th>` +
+      `</tr></thead><tbody>`;
     const arrN = Array.isArray(names) ? names : [names];
     const arrP = Array.isArray(purposes) ? purposes : [purposes];
     const arrPr = Array.isArray(prices) ? prices : [prices];
     const arrQ = Array.isArray(qtys) ? qtys : [qtys];
     const arrL = Array.isArray(links) ? links : [links];
     const arrS = Array.isArray(suppliers) ? suppliers : [suppliers];
-    const maxLen = Math.max(arrN.length, arrP.length, arrQ.length, arrL.length, arrPr.length);
+    const maxLen = Math.max(arrN.length, arrP.length, arrQ.length, arrL.length, arrPr.length, arrS.length);
     for (let i = 0; i < maxLen; i++) {
       const rowPrice = parseAmount(arrPr[i]) || 0;
       const rowQty = parseAmount(arrQ[i]) || 0;
       const rowTotal = rowPrice * rowQty;
-      html += `<tr><td>${arrN[i] || ''}</td><td>${arrP[i] || ''}</td>${hasSupplier ? `<td>${arrS[i] || ''}</td>` : ''}<td>${rowPrice > 0 ? rowPrice.toFixed(2) : ''}</td><td>${arrQ[i] || ''}</td><td>${rowTotal > 0 ? rowTotal.toFixed(2) : ''}</td><td>${arrL[i] ? `<a href="${arrL[i]}" target="_blank">Ссылка</a>` : ''}</td></tr>`;
+      html += `<tr>` +
+        `<td>${arrN[i] || ''}</td>` +
+        `<td>${arrP[i] || ''}</td>` +
+        `<td>${rowPrice > 0 ? rowPrice.toFixed(2) : ''}</td>` +
+        `<td>${arrQ[i] || ''}</td>` +
+        `<td>${rowTotal > 0 ? rowTotal.toFixed(2) : ''}</td>` +
+        `<td>${arrS[i] || ''}</td>` +
+        `<td>${arrL[i] ? `<a href="${arrL[i]}" target="_blank">Ссылка</a>` : ''}</td>` +
+        `</tr>`;
     }
     html += `</tbody></table></div></div>`;
   } else html += `<div class="view-details-divider"><p style="color:#64748b; font-style: italic;">Детализация не заполнена.</p></div>`;
@@ -250,13 +265,20 @@ function openEditModal(id) {
   const arrL = Array.isArray(links) ? links : (links ? [links] : []);
   const arrS = Array.isArray(suppliers) ? suppliers : (suppliers ? [suppliers] : []);
   const maxLen = Math.max(arrN.length, 1);
-  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   for (let i = 0; i < maxLen; i++) {
     const tr = document.createElement('tr');
     const priceVal = parseAmount(arrPr[i]);
     const qtyVal = parseAmount(arrQ[i]);
     const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || '';
-    tr.innerHTML = `<td><input type="text" class="det-name" value="${arrN[i] || ''}" oninput="calculateAllTotals()"></td><td><input type="text" class="det-purpose" value="${arrP[i] || ''}"></td>${hasSupplier ? `<td><input type="text" class="det-supplier" value="${arrS[i] || ''}"></td>` : ''}<td><input type="number" class="det-price" step="0.01" value="${priceVal}" oninput="calculateRowTotal(this)"></td><td><input type="number" class="det-qty" step="1" value="${qtyVal}" oninput="calculateRowTotal(this)"></td><td><input type="text" class="det-total" value="${totalVal ? totalVal.toFixed(2) : ''}" readonly></td><td><input type="url" class="det-link" value="${arrL[i] || ''}"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove(); calculateAllTotals();">&times;</button></td>`;
+    // ✅ Новый порядок: Наименование, Цель, Цена с НДС, Кол-во, Всего, Поставщик, Ссылка
+    tr.innerHTML = `<td><input type="text" class="det-name" value="${arrN[i] || ''}" oninput="calculateAllTotals()"></td>` +
+      `<td><input type="text" class="det-purpose" value="${arrP[i] || ''}"></td>` +
+      `<td><input type="number" class="det-price" step="0.01" value="${priceVal}" oninput="calculateRowTotal(this)"></td>` +
+      `<td><input type="number" class="det-qty" step="1" value="${qtyVal}" oninput="calculateRowTotal(this)"></td>` +
+      `<td><input type="text" class="det-total" value="${totalVal ? totalVal.toFixed(2) : ''}" readonly></td>` +
+      `<td><input type="text" class="det-supplier" value="${arrS[i] || ''}"></td>` +
+      `<td><input type="url" class="det-link" value="${arrL[i] || ''}"></td>` +
+      `<td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove(); calculateAllTotals();">&times;</button></td>`;
     tbody.appendChild(tr);
   }
   calculateAllTotals();
@@ -264,6 +286,8 @@ function openEditModal(id) {
   const stage = spStages[item.stageId];
   document.getElementById('create-modal-content').style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
   document.getElementById('modal-create').style.display = 'flex';
+  // ✅ Resizable columns после рендера
+  setTimeout(function () { initResizableTable('detail-table'); }, 50);
 }
 
 function openDataModal(id) {
@@ -301,13 +325,20 @@ function openDataModal(id) {
   const arrL = Array.isArray(links) ? links : (links ? [links] : []);
   const arrS = Array.isArray(suppliers) ? suppliers : (suppliers ? [suppliers] : []);
   const maxLen = Math.max(arrN.length, 1);
-  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   for (let i = 0; i < maxLen; i++) {
     const tr = document.createElement('tr');
     const priceVal = parseAmount(arrPr[i]);
     const qtyVal = parseAmount(arrQ[i]);
     const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || '';
-    tr.innerHTML = `<td><input type="text" class="data-det-name" value="${arrN[i] || ''}"></td><td><input type="text" class="data-det-purpose" value="${arrP[i] || ''}"></td>${hasSupplier ? `<td><input type="text" class="data-det-supplier" value="${arrS[i] || ''}"></td>` : ''}<td><input type="number" class="data-det-price" step="0.01" value="${priceVal}" oninput="calculateDataRowTotal(this)"></td><td><input type="number" class="data-det-qty" step="1" value="${qtyVal}" oninput="calculateDataRowTotal(this)"></td><td><input type="text" class="data-det-total" value="${totalVal ? totalVal.toFixed(2) : ''}" readonly></td><td><input type="url" class="data-det-link" value="${arrL[i] || ''}"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
+    // ✅ Новый порядок: Наименование, Цель, Цена с НДС, Кол-во, Всего, Поставщик, Ссылка
+    tr.innerHTML = `<td><input type="text" class="data-det-name" value="${arrN[i] || ''}"></td>` +
+      `<td><input type="text" class="data-det-purpose" value="${arrP[i] || ''}"></td>` +
+      `<td><input type="number" class="data-det-price" step="0.01" value="${priceVal}" oninput="calculateDataRowTotal(this)"></td>` +
+      `<td><input type="number" class="data-det-qty" step="1" value="${qtyVal}" oninput="calculateDataRowTotal(this)"></td>` +
+      `<td><input type="text" class="data-det-total" value="${totalVal ? totalVal.toFixed(2) : ''}" readonly></td>` +
+      `<td><input type="text" class="data-det-supplier" value="${arrS[i] || ''}"></td>` +
+      `<td><input type="url" class="data-det-link" value="${arrL[i] || ''}"></td>` +
+      `<td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
     tbody.appendChild(tr);
   }
 
@@ -328,6 +359,8 @@ function openDataModal(id) {
   if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
   syncSupplierColumns();
   document.getElementById('modal-data').style.display = 'flex';
+  // ✅ Resizable columns после рендера
+  setTimeout(function () { initResizableTable('data-detail-table'); }, 50);
 }
 
 function openEditAmountModal(id) {
@@ -338,7 +371,6 @@ function openEditAmountModal(id) {
   document.getElementById('modal-edit-amount').style.display = 'flex';
 }
 
-// ✅ openUploadModal: блокировка после передачи экономисту (только стадия 'загрузка')
 function openUploadModal(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;

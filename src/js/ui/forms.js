@@ -1,24 +1,44 @@
 // js/forms.js — Обработка форм
 
-function syncSupplierColumns() {
-  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
-  ['detail-table', 'data-detail-table'].forEach(function (tid) {
-    const table = document.getElementById(tid);
-    if (!table) return;
-    const thead = table.querySelector('thead tr');
-    if (!thead) return;
-    const existing = thead.querySelector('.th-supplier');
-    if (hasSupplier && !existing) {
-      const th = document.createElement('th');
-      th.className = 'th-supplier';
-      th.style.width = '14%';
-      th.innerText = 'Поставщик';
-      const priceTh = thead.children[2];
-      thead.insertBefore(th, priceTh);
-    } else if (!hasSupplier && existing) {
-      existing.remove();
-    }
+/* ============================================================
+   RESIZABLE COLUMNS для таблиц детализации
+   ============================================================ */
+function initResizableTable(tableId) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const ths = table.querySelectorAll('thead th');
+  ths.forEach(function (th, idx) {
+    // Пропускаем последний столбец (кнопка удаления)
+    if (idx === ths.length - 1) return;
+    if (th.querySelector('.resize-handle')) return;
+    const handle = document.createElement('div');
+    handle.className = 'resize-handle';
+    th.appendChild(handle);
+    handle.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      handle.classList.add('active');
+      const startX = e.pageX;
+      const startWidth = th.offsetWidth;
+      function onMove(ev) {
+        const newWidth = Math.max(60, startWidth + (ev.pageX - startX));
+        th.style.width = newWidth + 'px';
+        th.style.minWidth = newWidth + 'px';
+      }
+      function onUp() {
+        handle.classList.remove('active');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
   });
+}
+
+// Поставщик теперь ВСЕГДА отображается — функция-заглушка для совместимости
+function syncSupplierColumns() {
+  // Поставщик всегда в таблице, динамическая вставка не нужна
 }
 
 function populateCreateSection() {
@@ -35,7 +55,7 @@ function updateDirectionsCreate(selectedDirId = null) {
   const secId = secSelect.value;
   const dirSelect = document.getElementById('create-direction');
   dirSelect.innerHTML = '<option value="">-- Выберите направление --</option>';
-  if (!secId) { dirSelect.innerHTML += '<option value="">-- Сначала выберите раздел --</option>'; return; }
+  if (!secId) { dirSelect.innerHTML = '<option value="">-- Сначала выберите раздел --</option>'; return; }
   const dirDef = fieldDefs[actualFields.direction];
   if (!dirDef || !dirDef.items) return;
   const allowedDirs = settings.listDependencies[secId] || [];
@@ -63,22 +83,36 @@ function openCreateModal() {
   document.getElementById('btn-save-create').innerText = 'Сохранить';
   document.getElementById('create-modal-content').style.borderTop = 'none';
   populateCreateSection();
-  syncSupplierColumns();
   addDetailRow();
+  // Resizable columns после рендера
+  setTimeout(function () { initResizableTable('detail-table'); }, 50);
   document.getElementById('modal-create').style.display = 'flex';
 }
 
+// ✅ Новый порядок: Наименование, Цель, Цена с НДС, Кол-во, Всего, Поставщик, Ссылка
 function addDetailRow() {
-  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   const tr = document.createElement('tr');
-  tr.innerHTML = `<td><input type="text" class="det-name" oninput="calculateAllTotals()"></td><td><input type="text" class="det-purpose"></td>${hasSupplier ? `<td><input type="text" class="det-supplier"></td>` : ''}<td><input type="number" class="det-price" step="0.01" oninput="calculateRowTotal(this)"></td><td><input type="number" class="det-qty" step="1" oninput="calculateRowTotal(this)"></td><td><input type="text" class="det-total" readonly></td><td><input type="url" class="det-link"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove(); calculateAllTotals();">&times;</button></td>`;
+  tr.innerHTML = `<td><input type="text" class="det-name" oninput="calculateAllTotals()"></td>` +
+    `<td><input type="text" class="det-purpose"></td>` +
+    `<td><input type="number" class="det-price" step="0.01" oninput="calculateRowTotal(this)"></td>` +
+    `<td><input type="number" class="det-qty" step="1" oninput="calculateRowTotal(this)"></td>` +
+    `<td><input type="text" class="det-total" readonly></td>` +
+    `<td><input type="text" class="det-supplier"></td>` +
+    `<td><input type="url" class="det-link"></td>` +
+    `<td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove(); calculateAllTotals();">&times;</button></td>`;
   document.getElementById('detail-tbody').appendChild(tr);
 }
 
 function addDataDetailRow() {
-  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   const tr = document.createElement('tr');
-  tr.innerHTML = `<td><input type="text" class="data-det-name"></td><td><input type="text" class="data-det-purpose"></td>${hasSupplier ? `<td><input type="text" class="data-det-supplier"></td>` : ''}<td><input type="number" class="data-det-price" step="0.01" oninput="calculateDataRowTotal(this)"></td><td><input type="number" class="data-det-qty" step="1" oninput="calculateDataRowTotal(this)"></td><td><input type="text" class="data-det-total" readonly></td><td><input type="url" class="data-det-link"></td><td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
+  tr.innerHTML = `<td><input type="text" class="data-det-name"></td>` +
+    `<td><input type="text" class="data-det-purpose"></td>` +
+    `<td><input type="number" class="data-det-price" step="0.01" oninput="calculateDataRowTotal(this)"></td>` +
+    `<td><input type="number" class="data-det-qty" step="1" oninput="calculateDataRowTotal(this)"></td>` +
+    `<td><input type="text" class="data-det-total" readonly></td>` +
+    `<td><input type="text" class="data-det-supplier"></td>` +
+    `<td><input type="url" class="data-det-link"></td>` +
+    `<td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
   document.getElementById('data-detail-tbody').appendChild(tr);
 }
 
@@ -159,7 +193,6 @@ function submitCreateRequest(e) {
   if (secText && dirText) combinedText = `${secText} / ${dirText}`;
   else if (secText) combinedText = secText;
 
-  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   const rows = document.querySelectorAll('#detail-tbody tr');
   const arrNames = [], arrPurposes = [], arrPrices = [], arrQtys = [], arrLinks = [], arrSuppliers = [];
   let hasDetails = false;
@@ -169,8 +202,8 @@ function submitCreateRequest(e) {
     const pr = tr.querySelector('.det-price').value.trim();
     const q = tr.querySelector('.det-qty').value.trim();
     const l = tr.querySelector('.det-link').value.trim();
-    const s = hasSupplier ? (tr.querySelector('.det-supplier').value.trim()) : '';
-    if (n || p || q || l || pr || s) { arrNames.push(n); arrPurposes.push(p); arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); arrQtys.push(q); arrLinks.push(l); if (hasSupplier) arrSuppliers.push(s); hasDetails = true; }
+    const s = tr.querySelector('.det-supplier').value.trim();
+    if (n || p || q || l || pr || s) { arrNames.push(n); arrPurposes.push(p); arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); arrQtys.push(q); arrLinks.push(l); arrSuppliers.push(s); hasDetails = true; }
   });
   const shortDept = settings.deptShortNames[deptId] || (departments.find(d => d.ID == deptId)?.NAME || 'Отдел');
   const dateStr = new Date().toLocaleDateString('ru-RU');
@@ -178,8 +211,21 @@ function submitCreateRequest(e) {
   if (section) fields[actualFields.section] = section;
   if (direction) fields[actualFields.direction] = direction;
   if (actualFields.combinedDir && combinedText) fields[actualFields.combinedDir] = combinedText;
-  if (hasDetails) { fields[actualFields.detailName] = arrNames; fields[actualFields.detailPurpose] = arrPurposes; fields[actualFields.detailPrice] = arrPrices; fields[actualFields.detailQty] = arrQtys; fields[actualFields.detailLink] = arrLinks; if (hasSupplier) fields[actualFields.detailSupplier] = arrSuppliers; }
-  else { fields[actualFields.detailName] = []; fields[actualFields.detailPurpose] = []; fields[actualFields.detailPrice] = []; fields[actualFields.detailQty] = []; fields[actualFields.detailLink] = []; if (hasSupplier) fields[actualFields.detailSupplier] = []; }
+  if (hasDetails) {
+    fields[actualFields.detailName] = arrNames;
+    fields[actualFields.detailPurpose] = arrPurposes;
+    fields[actualFields.detailPrice] = arrPrices;
+    fields[actualFields.detailQty] = arrQtys;
+    fields[actualFields.detailLink] = arrLinks;
+    if (actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier]) fields[actualFields.detailSupplier] = arrSuppliers;
+  } else {
+    fields[actualFields.detailName] = [];
+    fields[actualFields.detailPurpose] = [];
+    fields[actualFields.detailPrice] = [];
+    fields[actualFields.detailQty] = [];
+    fields[actualFields.detailLink] = [];
+    if (actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier]) fields[actualFields.detailSupplier] = [];
+  }
 
   if (editId) {
     const oldItem = items.find(i => i.id == editId);
@@ -216,7 +262,6 @@ function submitData(e) {
   const amountProduct = document.getElementById('data-amount-product').value;
   const amountDelivery = document.getElementById('data-amount-delivery').value;
 
-  const hasSupplier = actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier];
   const rows = document.querySelectorAll('#data-detail-tbody tr');
   const arrNames = [], arrPurposes = [], arrPrices = [], arrQtys = [], arrLinks = [], arrSuppliers = [];
   let hasDetails = false;
@@ -226,15 +271,28 @@ function submitData(e) {
     const pr = tr.querySelector('.data-det-price').value.trim();
     const q = tr.querySelector('.data-det-qty').value.trim();
     const l = tr.querySelector('.data-det-link').value.trim();
-    const s = hasSupplier ? (tr.querySelector('.data-det-supplier').value.trim()) : '';
-    if (n || p || q || l || pr || s) { arrNames.push(n); arrPurposes.push(p); arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); arrQtys.push(q); arrLinks.push(l); if (hasSupplier) arrSuppliers.push(s); hasDetails = true; }
+    const s = tr.querySelector('.data-det-supplier').value.trim();
+    if (n || p || q || l || pr || s) { arrNames.push(n); arrPurposes.push(p); arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); arrQtys.push(q); arrLinks.push(l); arrSuppliers.push(s); hasDetails = true; }
   });
 
   const targetStageId = getStageIdByName('согласование');
   const fields = { [actualFields.amountProduct]: amountProduct ? parseFloat(amountProduct) : 0 };
   if (amountDelivery) fields[actualFields.amountDelivery] = parseFloat(amountDelivery);
-  if (hasDetails) { fields[actualFields.detailName] = arrNames; fields[actualFields.detailPurpose] = arrPurposes; fields[actualFields.detailPrice] = arrPrices; fields[actualFields.detailQty] = arrQtys; fields[actualFields.detailLink] = arrLinks; if (hasSupplier) fields[actualFields.detailSupplier] = arrSuppliers; }
-  else { fields[actualFields.detailName] = []; fields[actualFields.detailPurpose] = []; fields[actualFields.detailPrice] = []; fields[actualFields.detailQty] = []; fields[actualFields.detailLink] = []; if (hasSupplier) fields[actualFields.detailSupplier] = []; }
+  if (hasDetails) {
+    fields[actualFields.detailName] = arrNames;
+    fields[actualFields.detailPurpose] = arrPurposes;
+    fields[actualFields.detailPrice] = arrPrices;
+    fields[actualFields.detailQty] = arrQtys;
+    fields[actualFields.detailLink] = arrLinks;
+    if (actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier]) fields[actualFields.detailSupplier] = arrSuppliers;
+  } else {
+    fields[actualFields.detailName] = [];
+    fields[actualFields.detailPurpose] = [];
+    fields[actualFields.detailPrice] = [];
+    fields[actualFields.detailQty] = [];
+    fields[actualFields.detailLink] = [];
+    if (actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier]) fields[actualFields.detailSupplier] = [];
+  }
 
   const curItem = items.find(i => i.id == id);
   const curStage = curItem ? spStages[curItem.stageId] : null;
@@ -268,7 +326,6 @@ function submitData(e) {
             else {
               logAction(`Уведомление о согласовании → ID ${headId}`, 'info');
               notifyApprovalNeeded(headId, item);
-              // ✅ Групповой статус: Отправлено на согласование
               groupStatusNotify(item, 'sent_to_approval');
             }
           } else logAction('Не удалось определить руководителя', 'error');
@@ -317,8 +374,6 @@ function submitUpload(e) {
         item[actualFields.deadlinePay] = deadline;
         if (targetStageId) item.stageId = targetStageId;
       }
-      // ✅ Перечитываем карточку: payload вида [[имя, base64]] не содержит url,
-      // а в уведомлении нужен «Файл для скачки» с реальной ссылкой.
       BX24.callMethod('crm.item.get', { entityTypeId: ENTITY_TYPE_ID, id: parseInt(id), select: ['*', 'UF_*'] }, function (gRes) {
         if (!gRes.error() && gRes.data() && gRes.data().item && item) {
           const fresh = gRes.data().item;
