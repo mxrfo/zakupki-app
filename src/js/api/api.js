@@ -99,7 +99,6 @@ function buildTitle(kind, item) {
   return kind + ' (Закупка отделом ' + getDeptShort(item) + ' №' + item.id + ' от ' + formatCreatedDate(item.createdTime) + ')';
 }
 
-// ✅ Личные сообщения: "Сумма за товар" → "Сумма (без доставки)"
 function buildBody(item, opts) {
   opts = opts || {};
   const lines = [];
@@ -141,7 +140,6 @@ function sendBotNotification(userId, title, message, links, cb, dedupeBase) {
   notifyUserViaBot(userId, title, message, links, cb, dedupeBase);
 }
 
-// ✅ + comment: если комментарий не успел попасть в item, подставляем явно
 function notifySelectExecutor(userId, item, taskId, comment) {
   userId = parseInt(userId);
   if (!userId || !item) return;
@@ -223,7 +221,6 @@ function notifyDataChangedOnApproval(econId, item) {
   notifyUserViaBot(econId, title, message, links, null, 'data_changed_' + item.id + '_' + Date.now());
 }
 
-// ✅ "Загружен счёт на оплату" — с полем "Файл для скачки" (file:true)
 function notifyInvoiceUploaded(econId, item) {
   econId = parseInt(econId);
   if (!econId || !item) return;
@@ -267,8 +264,7 @@ function notifyInvoiceEvent(item, kind) {
 }
 
 /* ============================================================
-   ГРУППОВЫЕ СТАТУСНЫЕ УВЕДОМЛЕНИЯ (только общий чат, без кнопок)
-   Отмечается автор запроса, а не исполнитель.
+   ГРУППОВЫЕ СТАТУСНЫЕ УВЕДОМЛЕНИЯ
    ============================================================ */
 function buildGroupBody(item, opts) {
   opts = opts || {};
@@ -311,10 +307,13 @@ function groupStatusNotify(item, kind, dedupeBase) {
     const userIds = [];
     if (c.id) userIds.push(parseInt(c.id));
     const m = getMgrInfo(item); if (m.id) userIds.push(parseInt(m.id));
-    const h = resolveDeptHeadId(item, false); if (h) userIds.push(parseInt(h));
+    // ✅ ИСПРАВЛЕНО: respectTestMode = true, чтобы в тест-режиме не добавлялся реальный руководитель
+    const h = resolveDeptHeadId(item, true); if (h) userIds.push(parseInt(h));
     const dd = dedupeBase || ('group_' + kind + '_' + item.id + '_' + (item.stageId || '') + '_' + (kind === 'assigned' ? (m.id || '') : ''));
     notifyGroupStatus(title, message, userIds, null, dd);
-  } catch (e) { logAction('Ошибка группового статуса "' + kind + '": ' + e.message, 'error'); }
+  } catch (e) { 
+    logAction('Ошибка группового статуса "' + kind + '": ' + e.message, 'error'); 
+  }
 }
 
 function isUserUnavailable(userId) {

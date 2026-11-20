@@ -1,18 +1,9 @@
 // ============================================================
 // МОДУЛЬ: bot.js — Чат-бот уведомлений (imbot.v2)
 // ============================================================
-// ЛИЧНЫЕ уведомления (notifyUserViaBot) — личная ветка (чат бот+человек),
-// при провале — резерв im.notify.
-// ГРУППОВОЙ чат «ALT · Закупки» — статусные уведомления (notifyGroupStatus),
-// без кнопок, с @автором запроса. Создаётся лениво при первом статусе,
-// либо принудительно через forceCreateGroupChat (кнопка в админке).
-// Форматы: imbot.v2.Chat.User.add (заглавная U), keyboard {BOT_ID,BUTTONS},
-// JSON-rest транспорт (фикс NO_AUTH_FOUND).
-// ============================================================
-
+const BOT_NAME = 'Закупки · Приложение';
+const GROUP_CHAT_TITLE = 'Закупки · Уведомления';
 const BOT_CODE = 'purchase_app_bot';
-const BOT_NAME = 'ALT · Закупки';
-const GROUP_CHAT_TITLE = 'ALT · Закупки';
 
 var lastBotStatus = { botId: '', chatId: '', result: '', ts: 0 };
 
@@ -54,14 +45,21 @@ function hashStr(s) {
   return 'h' + (h >>> 0);
 }
 
-function dedupePass(key) {
+// ✅ Дедупликация: проверяем, было ли УСПЕШНОЕ уведомление за последние 10 мин
+function checkDedup(key) {
   if (!key) return false;
-  const k = 'b24_dk_' + key;
-  const prev = parseInt(localStorage.getItem(k) || '0');
-  const now = Date.now();
-  if (now - prev < 10 * 60 * 1000) { logAction('Дубль уведомления ' + key + ' пропущен', 'info'); return true; }
-  localStorage.setItem(k, String(now));
+  const k = 'b24_dk_ok_' + key;
+  const ts = parseInt(localStorage.getItem(k) || '0');
+  if (Date.now() - ts < 10 * 60 * 1000) {
+    logAction('Дубль успешного уведомления ' + key + ' пропущен', 'info');
+    return true;
+  }
   return false;
+}
+
+// ✅ Дедупликация: ставим метку ТОЛЬКО после успешной отправки
+function markDedupSuccess(key) {
+  if (key) localStorage.setItem('b24_dk_ok_' + key, String(Date.now()));
 }
 
 function extractBotId(b) {
@@ -160,13 +158,13 @@ function mkRes(r) {
 }
 
 function scopeHint(code) {
-  if (code === 'insufficient_scope') return '❌ У токена приложения нет scope "imbot". Откройте карточку интеграции → права → добавьте "Чат-боты 2.0", пересохраните и обновите страницу.';
+  if (code === 'insufficient_scope') return '❌ У токена приложения нет scope "imbot". Карточка интеграции → права → "Чат-боты 2.0", пересохранить, обновить страницу.';
   if (code === 'NO_AUTH_FOUND') return '❌ Портал не принял авторизацию imbot.v2. Проверьте scope "imbot" и перезагрузите приложение.';
-  if (code === 'BOT_OWNERSHIP_ERROR') return '❌ Бот принадлежит другому приложению. Выполняю перерегистрацию бота текущим приложением...';
+  if (code === 'BOT_OWNERSHIP_ERROR') return '❌ Бот принадлежит другому приложению. Перерегистрирую бота текущим приложением...';
   return '';
 }
 
-/* ================= БОТ: регистрация / поиск / имя ================= */
+/* ================= БОТ ================= */
 let botInFlight = false;
 let botQueue = [];
 function drainBotQueue(id) {
@@ -195,6 +193,18 @@ function ensureBotName(botId) {
     } else {
       logAction('Bot.update (имя): ' + (r.error || '') + ' — не критично', 'info');
     }
+  });
+}
+
+// ✅ Попытка переименовать существующий чат под новые стандарты
+function tryRenameChat(botId, dialogId, newTitle) {
+  if (!botId || !dialogId) return;
+  restImbotCall('imbot.v2.Chat.update', {
+    botId: botId,
+    dialogId: normalizeDialogId(dialogId),
+    fields: { title: newTitle }
+  }, function (r) {
+    if (r.ok) logAction('Чат ' + dialogId + ' переименован в "' + newTitle + '"', 'success');
   });
 }
 
@@ -234,7 +244,7 @@ function registerBotV1(cb) {
   logAction('Резервная регистрация (v1)...', 'info');
   BX24.callMethod('imbot.register', {
     CODE: BOT_CODE, TYPE: 'bot', NAME: BOT_NAME,
-    FIRST_NAME: 'ALT', LAST_NAME: 'Закупки', EVENT_HANDLER: getBotHandlerUrl()
+    FIRST_NAME: 'Закупки', LAST_NAME: 'Приложение', EVENT_HANDLER: getBotHandlerUrl()
   }, (resV1) => {
     if (resV1.error()) { logAction('Ошибка регистрации (v1): ' + describeError(resV1), 'error'); cb(null); return; }
     const botIdV1 = resV1.data().user_id;
@@ -301,7 +311,7 @@ function forceCreateBot(cb) {
   });
 }
 
-/* ================= ГРУППОВОЙ ЧАТ «ALT · Закупки» ================= */
+/* ================= ГРУППОВОЙ ЧАТ ================= */
 let chatInFlight = false;
 let chatQueue = [];
 function drainChatQueue(id) { const q = chatQueue.slice(); chatQueue = []; q.forEach(function (cb) { cb(id); }); }
@@ -327,14 +337,26 @@ function createGroupChat(botId, seedUserIds, cb) {
     saveSettingsToBoth();
     lastBotStatus.chatId = cid;
     logAction('Групповой чат создан, ID: ' + cid, 'success');
+    tryRenameChat(botId, cid, GROUP_CHAT_TITLE);
     cb(cid);
   });
 }
 
 function getGroupChatId(botId, seedUserIds, cb) {
-  if (settings.chatId) { const cid = normalizeDialogId(settings.chatId); logAction('Использую групповой чат: ' + cid, 'info'); return cb(cid); }
+  if (settings.chatId) { 
+    const cid = normalizeDialogId(settings.chatId); 
+    tryRenameChat(botId, cid, GROUP_CHAT_TITLE);
+    logAction('Использую групповой чат: ' + cid, 'info'); 
+    return cb(cid); 
+  }
   const cached = localStorage.getItem('b24_group_chat_id');
-  if (cached) { const cid = normalizeDialogId(cached); logAction('Использую групповой чат из localStorage: ' + cid, 'info'); settings.chatId = cid; return cb(cid); }
+  if (cached) { 
+    const cid = normalizeDialogId(cached); 
+    tryRenameChat(botId, cid, GROUP_CHAT_TITLE);
+    logAction('Использую групповой чат из localStorage: ' + cid, 'info'); 
+    settings.chatId = cid; 
+    return cb(cid); 
+  }
 
   if (chatInFlight) { logAction('Чат уже создаётся — в очередь', 'info'); chatQueue.push(cb); return; }
   chatInFlight = true;
@@ -345,7 +367,6 @@ function getGroupChatId(botId, seedUserIds, cb) {
   });
 }
 
-// ✅ imbot.v2.Chat.User.add (заглавная U), идемпотентен, принимает массив
 function addUsersToChat(botId, chatId, userIds, cb) {
   cb = cb || function () {};
   const ids = [...new Set((userIds || []).map(function (x) { return parseInt(x); }).filter(Boolean))];
@@ -366,15 +387,13 @@ function addUsersToChat(botId, chatId, userIds, cb) {
 }
 
 /* ================= ОТПРАВКА СООБЩЕНИЙ ================= */
-
-// ✅ Формат клавиатуры imbot.v2: {BOT_ID, BUTTONS:[...]}
 function buildKeyboard(botId, links) {
   const btns = [];
   (links || []).forEach(function (l) {
     if (!l || !l.url) return;
     if (btns.length) btns.push({ TYPE: 'NEWLINE' });
     btns.push({ TEXT: l.text, LINK: l.url, BG_COLOR_TOKEN: 'primary' });
-  });
+    });
   return btns.length ? { BOT_ID: parseInt(botId), BUTTONS: btns } : null;
 }
 
@@ -409,16 +428,20 @@ function botSendOnce(botId, dialogId, title, message, links, withKeyboard, cb) {
   });
 }
 
-/* ================= ЛИЧНАЯ ВЕТКА (чат бот + получатель) ================= */
+/* ================= ЛИЧНАЯ ВЕТКА ================= */
 function ensurePersonalChat(botId, userId, cb) {
   const key = 'b24_bot_chat_' + userId;
   const cached = localStorage.getItem(key);
-  if (cached) return cb(normalizeDialogId(cached));
+  if (cached) {
+    const cid = normalizeDialogId(cached);
+    tryRenameChat(botId, cid, BOT_NAME + ': ' + ((typeof userNames !== 'undefined' && userNames[userId]) ? userNames[userId] : ('ID ' + userId)));
+    return cb(cid);
+  }
   const name = (typeof userNames !== 'undefined' && userNames[userId]) ? userNames[userId] : ('ID ' + userId);
   logAction('Создание личного чата с ' + name + '...', 'info');
   restImbotCall('imbot.v2.Chat.add', {
     botId: botId,
-    fields: { title: 'ALT · Закупки: ' + name, userIds: [parseInt(userId)] }
+    fields: { title: BOT_NAME + ': ' + name, userIds: [parseInt(userId)] }
   }, function (r) {
     const res = mkRes(r);
     if (res.error()) { logAction('Ошибка создания личного чата: ' + describeError(res), 'error'); return cb(null); }
@@ -463,7 +486,7 @@ function notifyViaImFallback(userId, title, message, links, cb) {
   if (firstLink) text += '\n[URL=' + firstLink.url + ']' + firstLink.text + '[/URL]';
   BX24.callMethod('im.notify', { USER_ID: parseInt(userId), MESSAGE: text }, function (res) {
     if (res.error()) {
-      logAction('im.notify тоже не прошёл: ' + describeError(res) + ' — проверьте scope "im" в карточке интеграции', 'error');
+      logAction('im.notify тоже не прошёл: ' + describeError(res) + ' — проверьте scope "im"', 'error');
       lastBotStatus.result = 'send fail (fallback too)'; lastBotStatus.ts = Date.now();
       if (cb) cb(false);
       return;
@@ -477,7 +500,7 @@ function notifyViaImFallback(userId, title, message, links, cb) {
 /* ================= ЛИЧНОЕ УВЕДОМЛЕНИЕ ================= */
 function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
   const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
-  if (dedupePass(fullKey)) { if (cb) cb(true); return; }
+  if (checkDedup(fullKey)) { if (cb) cb(true); return; }
 
   getBotId(function (botId) {
     if (!botId) {
@@ -489,20 +512,24 @@ function notifyUserViaBot(userId, title, message, links, cb, dedupeBase) {
     lastBotStatus.botId = botId;
     deliverPersonal(botId, userId, title, message, links, function (ok) {
       if (ok) {
+        markDedupSuccess(fullKey); // ✅ Только после успеха
         lastBotStatus.result = 'ok personal'; lastBotStatus.ts = Date.now();
         if (cb) cb(true);
       } else {
         logAction('❌ Личная доставка ботом не удалась — im.notify', 'error');
-        notifyViaImFallback(userId, title, message, links, cb);
+        notifyViaImFallback(userId, title, message, links, function(fallbackOk) {
+           if (fallbackOk) markDedupSuccess(fullKey);
+           if (cb) cb(fallbackOk);
+        });
       }
     });
   });
 }
 
-/* ================= ГРУППОВОЙ СТАТУС (только общий чат, без кнопок) ================= */
+/* ================= ГРУППОВОЙ СТАТУС ================= */
 function notifyGroupStatus(title, message, userIds, cb, dedupeBase) {
   const fullKey = dedupeBase ? (dedupeBase + '_' + hashStr(message)) : '';
-  if (dedupePass(fullKey)) { if (cb) cb(true); return; }
+  if (checkDedup(fullKey)) { if (cb) cb(true); return; }
 
   getBotId(function (botId) {
     if (!botId) { logAction('Групповой статус пропущен: нет бота', 'error'); if (cb) cb(false); return; }
@@ -514,17 +541,19 @@ function notifyGroupStatus(title, message, userIds, cb, dedupeBase) {
         addUsersToChat(botId, cid, ids, function () {
           botSendOnce(botId, cid, title, message, [], true, function (r) {
             if (r.ok) {
+              markDedupSuccess(fullKey); // ✅ Только после успеха
               lastBotStatus.chatId = cid;
               lastBotStatus.result = 'ok group @ ' + cid; lastBotStatus.ts = Date.now();
               if (cb) cb(true);
               return;
             }
-            if ((r.reason === 'chat' || r.reason === 'auth') && !recreated) {
-              logAction('⚠ Групповой чат ' + cid + ' не принимает статусы — пересоздаю...', 'error');
+            // ✅ Пересоздаём ТОЛЬКО если чат реально не найден, а не при auth-ошибках
+            if (r.code === 'CHAT_NOT_FOUND' && !recreated) {
+              logAction('⚠ Групповой чат ' + cid + ' не найден — пересоздаю...', 'error');
               resetAutoChat();
               return attempt(true);
             }
-            lastBotStatus.result = 'group fail'; lastBotStatus.ts = Date.now();
+            lastBotStatus.result = 'group fail (' + r.code + ')'; lastBotStatus.ts = Date.now();
             if (cb) cb(false);
           });
         });
@@ -534,9 +563,6 @@ function notifyGroupStatus(title, message, userIds, cb, dedupeBase) {
   });
 }
 
-// ✅ Принудительно создать/проверить групповой чат (кнопка в админке).
-// Если чат уже сохранён — просто шлёт в него тест-статус; если битый/удалён —
-// пересоздаёт и шлёт.
 function forceCreateGroupChat(cb) {
   cb = cb || function () {};
   const uid = (typeof currentUser !== 'undefined' && currentUser) ? parseInt(currentUser.ID) : null;
@@ -560,7 +586,6 @@ function forceCreateGroupChat(cb) {
       });
     };
     if (existing) {
-      // Пробуем существующий; при ошибке чата — пересоздаём один раз
       const cid = normalizeDialogId(existing);
       addUsersToChat(botId, cid, uid ? [uid] : [], function () {
         botSendOnce(botId, cid, 'Проверка группового чата', 'Тестовое статусное сообщение.', [], true, function (r) {
@@ -570,8 +595,8 @@ function forceCreateGroupChat(cb) {
             showToast('Групповой чат работает: ' + cid, 'success');
             return cb(true);
           }
-          if (r.reason === 'chat' || r.reason === 'auth') {
-            logAction('⚠ Сохранённый чат ' + cid + ' недоступен — пересоздаю...', 'error');
+          if (r.code === 'CHAT_NOT_FOUND') {
+            logAction('⚠ Сохранённый чат ' + cid + ' не найден — пересоздаю...', 'error');
             resetAutoChat();
             createGroupChat(botId, uid ? [uid] : [], function (newId) {
               if (!newId) { showToast('Не удалось пересоздать групповой чат — см. логи', 'error'); return cb(false); }
@@ -592,7 +617,6 @@ function forceCreateGroupChat(cb) {
   });
 }
 
-// НЕ удаляем b24_bot_id / b24_group_chat_id — они живут на портале и в app.option
 function clearBotCache() {
   Object.keys(localStorage).filter(function (k) { return k.indexOf('b24_bot_chat_') === 0 || k.indexOf('b24_dk_') === 0; }).forEach(function (k) { localStorage.removeItem(k); });
   logAction('Кэш личных чатов и дедупа сброшен (ID бота и группового чата сохранены)', 'info');
