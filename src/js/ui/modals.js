@@ -494,3 +494,10 @@ function openActionModal(id, type) {
   footer.innerHTML = btnHtml;
   document.getElementById('modal-action').style.display = 'flex';
 }
+
+// глобальный обработчик: скрывать dropdown подсказок при прокрутке/ресайзе
+window.addEventListener('scroll', function () { hideSuggestions(); }, true);
+window.addEventListener('resize', function () { hideSuggestions(); });
+document.addEventListener('click', function (e) {
+  if (_suggestEl && !e.target.closest('.pg-name')) hideSuggestions();
+});
