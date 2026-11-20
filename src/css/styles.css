@@ -4,15 +4,15 @@
   --text-main: #1f2937;
   --text-muted: #64748b;
   --border-color: #e2e8f0;
-  --brand-blue: #034694;
-  --brand-blue-hover: #022c60;
+  --brand-blue: #1A65D6; /* Royal blue */
+  --brand-blue-hover: #1450aa;
   --danger: #ef4444;
   --success: #10b981;
   --warning: #f59e0b;
   --font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
   --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
-  --shadow-lg: 0 10px 24px -6px rgba(3,70,148,0.18);
+  --shadow-lg: 0 10px 24px -6px rgba(26,101,214,0.18);
   --radius: 12px;
   --ease: cubic-bezier(.22,.61,.36,1);
 }
@@ -105,7 +105,7 @@ body {
   outline: none;
   transition: border .2s var(--ease), box-shadow .2s var(--ease);
 }
-.search-bar input:focus { border-color: var(--brand-blue); box-shadow: 0 0 0 3px rgba(3,70,148,.1); }
+.search-bar input:focus { border-color: var(--brand-blue); box-shadow: 0 0 0 3px rgba(26,101,214,.1); }
 .search-bar svg { position: absolute; left: 12px; top: 9px; color: var(--text-muted); }
 
 .user-info { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text-main); }
@@ -151,7 +151,7 @@ body {
 }
 .btn:hover { background: #f8fafc; border-color: #cbd5e1; }
 .btn:active { transform: translateY(1px); }
-.btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(3,70,148,.25); }
+.btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(26,101,214,.25); }
 .btn-primary { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; }
 .btn-primary:hover { background: var(--brand-blue-hover); border-color: var(--brand-blue-hover); }
 .btn-success { background: var(--success); border-color: var(--success); color: #fff; }
@@ -167,13 +167,13 @@ body {
   background-color: var(--brand-blue); color: white;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 12px rgba(3,70,148,0.4);
+  box-shadow: 0 4px 12px rgba(26,101,214,0.4);
   cursor: pointer; z-index: 9999;
   pointer-events: auto !important;
   transition: transform .2s var(--ease), background-color .2s var(--ease), box-shadow .2s var(--ease);
   border: none;
 }
-.fab-btn:hover { transform: scale(1.06) translateY(-2px); background-color: var(--brand-blue-hover); box-shadow: 0 8px 20px rgba(3,70,148,.45); }
+.fab-btn:hover { transform: scale(1.06) translateY(-2px); background-color: var(--brand-blue-hover); box-shadow: 0 8px 20px rgba(26,101,214,.45); }
 .fab-btn svg { width: 30px; height: 30px; }
 
 /* === Иконки действий === */
@@ -200,7 +200,7 @@ body {
   font-size: 13px; background: #fff; outline: none; cursor: pointer;
   transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
 }
-.sort-select:focus { border-color: var(--brand-blue); box-shadow: 0 0 0 3px rgba(3,70,148,.1); }
+.sort-select:focus { border-color: var(--brand-blue); box-shadow: 0 0 0 3px rgba(26,101,214,.1); }
 
 .view-toggle { display: flex; background: #fff; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; }
 .view-btn {
@@ -303,7 +303,7 @@ body {
 @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
 
 .modal {
-  background: #fff; border-radius: var(--radius); width: 100%; max-width: 900px;
+  background: #fff; border-radius: var(--radius); width: 100%; max-width: 920px; /* Увеличено до 920px */
   box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); max-height: 90vh;
   display: flex; flex-direction: column; animation: modalIn .25s var(--ease); overflow: hidden;
 }
@@ -400,12 +400,13 @@ body {
   transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
   color: #0f172a; background-color: #fff;
 }
-.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--brand-blue); box-shadow: 0 0 0 3px rgba(3, 70, 148, 0.1); }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--brand-blue); box-shadow: 0 0 0 3px rgba(26, 101, 214, 0.1); }
 .form-group input[readonly] { background-color: #f8fafc; color: #64748b; cursor: not-allowed; }
 .form-group select {
   appearance: none;
   background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
   background-repeat: no-repeat; background-position: right 12px center; background-size: 16px; padding-right: 36px;
+  cursor: pointer; /* ✅ Курсор-указатель для списков */
 }
 .form-group input[type="date"] { position: relative; cursor: text; }
 .form-group input[type="date"]::-webkit-calendar-picker-indicator { background: transparent; bottom: 0; color: transparent; cursor: pointer; height: auto; left: 0; position: absolute; right: 0; top: 0; width: auto; }
@@ -425,7 +426,7 @@ body {
 .detail-table th:last-child, .detail-table td:last-child { border-right: none; }
 .detail-table th { background: #f8fafc; font-size: 12px; color: var(--text-muted); text-align: left; }
 .detail-table td input { border: 1px solid #cbd5e1; padding: 6px; font-size: 13px; width: 100%; border-radius: 4px; transition: border-color .2s var(--ease), box-shadow .2s var(--ease); }
-.detail-table td input:focus { border-color: var(--brand-blue); box-shadow: 0 0 0 2px rgba(3,70,148,.12); }
+.detail-table td input:focus { border-color: var(--brand-blue); box-shadow: 0 0 0 2px rgba(26,101,214,.12); }
 .detail-table td input[readonly] { background-color: #f8fafc; color: #64748b; cursor: not-allowed; }
 .detail-table td { font-size: 13px; }
 .btn-remove-row { color: var(--danger); background: none; border: none; cursor: pointer; font-size: 18px; padding: 0 8px; }
@@ -500,45 +501,81 @@ body {
 }
 
 /* ============================================================
-   ДОБАВКА (поверх оригинала): скролл форм, resizable-столбцы,
-   хелпер-классы вместо инлайн-стилей в JS
+   ДОБАВКА: Оптимизация модалки создания запроса
    ============================================================ */
-
-/* Фикс: модалки с <form> внутри не скроллились, т.к. form не был
-   flex-ребёнком. Теперь modal-body корректно получает свою высоту. */
 .modal > form {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  display: flex; flex-direction: column; flex: 1; min-height: 0;
 }
 
-/* Resizable-столбцы в таблицах детализации */
-.detail-table { table-layout: fixed; }
-.detail-table th { position: relative; }
-.detail-table th .resize-handle {
-  position: absolute;
-  right: 0; top: 0; bottom: 0;
-  width: 6px;
-  cursor: col-resize;
-  background: transparent;
-  z-index: 2;
-  transition: background .2s var(--ease);
-}
-.detail-table th .resize-handle:hover,
-.detail-table th .resize-handle.active {
-  background: var(--brand-blue);
-  opacity: .5;
+/* Сетка 2x2 для основной информации */
+.form-grid-2x2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 
-/* Кнопка «Сохранить изменения» на этапе согласования
-   (замена инлайн-стилей background/color в modals.js) */
-.btn-approval-submit {
-  background: var(--brand-blue);
-  border-color: var(--brand-blue);
-  color: #fff;
+/* Мини-карточка позиции закупки */
+.purchase-item-card {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+  position: relative;
+  transition: border-color 0.2s var(--ease);
 }
-.btn-approval-submit:hover {
-  background: var(--brand-blue-hover);
-  border-color: var(--brand-blue-hover);
+.purchase-item-card:hover { border-color: #CBD5E1; }
+
+.purchase-item-row { display: flex; gap: 12px; margin-bottom: 12px; }
+.purchase-item-row:last-child { margin-bottom: 0; }
+
+.purchase-item-row .form-group { margin-bottom: 0; flex: 1; }
+
+/* Пропорции для Row 1 */
+.purchase-item-row.row-1 .fg-name { flex: 4.5; }
+.purchase-item-row.row-1 .fg-price { flex: 2; }
+.purchase-item-row.row-1 .fg-qty { flex: 1.5; }
+.purchase-item-row.row-1 .fg-total { flex: 2; }
+
+/* Пропорции для Row 2 */
+.purchase-item-row.row-2 .fg-purpose { flex: 3.5; }
+.purchase-item-row.row-2 .fg-supplier { flex: 3; }
+.purchase-item-row.row-2 .fg-link { flex: 3.5; }
+
+/* Бейдж с рассчитанной суммой */
+.total-badge {
+  display: flex; align-items: center; justify-content: flex-end;
+  height: 100%; font-weight: 700; color: var(--brand-blue);
+  font-size: 14px; padding-top: 24px;
 }
+
+/* Кнопка удаления позиции */
+.card-delete-btn {
+  position: absolute; top: 12px; right: 12px;
+  background: transparent; border: none; color: #94A3B8;
+  cursor: pointer; width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; line-height: 1; transition: all 0.2s var(--ease);
+}
+.card-delete-btn:hover { background: #FEE2E2; color: #EF4444; }
+
+/* Обертка для поля ссылки с иконкой */
+.link-input-wrapper { position: relative; }
+.link-input-wrapper svg {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: #94A3B8; width: 16px; height: 16px; pointer-events: none;
+}
+.link-input-wrapper input { padding-left: 32px; }
+
+/* Чистая панель итогов */
+.purchase-summary-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; background: #F8FAFC; border: 1px solid #E2E8F0;
+  border-radius: 10px; margin-top: 16px;
+}
+.purchase-summary-label { font-size: 14px; font-weight: 600; color: #475569; }
+.purchase-summary-value { font-size: 18px; font-weight: 800; color: var(--brand-blue); }
+
+/* Кнопка «Сохранить изменения» на этапе согласования */
+.btn-approval-submit { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; }
+.btn-approval-submit:hover { background: var(--brand-blue-hover); border-color: var(--brand-blue-hover); }

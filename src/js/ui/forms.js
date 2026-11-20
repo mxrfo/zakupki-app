@@ -8,7 +8,7 @@ function initResizableTable(tableId) {
   if (!table) return;
   const ths = table.querySelectorAll('thead th');
   ths.forEach(function (th, idx) {
-    if (idx === ths.length - 1) return; // пропуск кнопки удаления
+    if (idx === ths.length - 1) return;
     if (th.querySelector('.resize-handle')) return;
     const handle = document.createElement('div');
     handle.className = 'resize-handle';
@@ -34,7 +34,6 @@ function initResizableTable(tableId) {
   });
 }
 
-// Поставщик всегда в таблице — динамическая вставка колонки не нужна
 function syncSupplierColumns() {}
 
 function populateCreateSection() {
@@ -67,78 +66,92 @@ function openCreateModal() {
   let availableDepts = 0;
   departments.forEach(d => { if (settings.visibleDepts.includes(String(d.ID)) && settings.deptShortNames[d.ID]) { deptSelect.innerHTML += `<option value="${d.ID}">${d.NAME} (${settings.deptShortNames[d.ID]})</option>`; availableDepts++; } });
   if (availableDepts === 0) return showToast('Нет доступных отделов', 'error');
+  
   document.getElementById('create-modal-title').innerText = 'Создать запрос на закупку';
   document.getElementById('form-create').reset();
   document.getElementById('edit-item-id').value = '';
-  document.getElementById('detail-tbody').innerHTML = '';
+  document.getElementById('purchase-items-container').innerHTML = '';
+  
   const amountInput = document.getElementById('create-amount-product');
   amountInput.value = '';
-  amountInput.readOnly = false; // стили readonly берутся из CSS [readonly]
+  amountInput.readOnly = true;
+  
+  document.getElementById('create-total-sum').innerText = '0.00 ₽';
   document.getElementById('btn-save-create').disabled = false;
   document.getElementById('btn-save-create').innerText = 'Сохранить';
-  document.getElementById('create-modal-content').style.borderTop = ''; // сброс после edit
+  document.getElementById('create-modal-content').style.borderTop = '';
+  
   populateCreateSection();
   addDetailRow();
+  
   document.getElementById('modal-create').style.display = 'flex';
-  setTimeout(function () { initResizableTable('detail-table'); }, 50);
 }
 
-// Порядок: Наименование, Цель, Цена с НДС, Кол-во, Всего, Поставщик, Ссылка
 function addDetailRow() {
-  const tr = document.createElement('tr');
-  tr.innerHTML = `<td><input type="text" class="det-name" oninput="calculateAllTotals()"></td>` +
-    `<td><input type="text" class="det-purpose"></td>` +
-    `<td><input type="number" class="det-price" step="0.01" oninput="calculateRowTotal(this)"></td>` +
-    `<td><input type="number" class="det-qty" step="1" oninput="calculateRowTotal(this)"></td>` +
-    `<td><input type="text" class="det-total" readonly></td>` +
-    `<td><input type="text" class="det-supplier"></td>` +
-    `<td><input type="url" class="det-link"></td>` +
-    `<td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove(); calculateAllTotals();">&times;</button></td>`;
-  document.getElementById('detail-tbody').appendChild(tr);
-}
-
-function addDataDetailRow() {
-  const tr = document.createElement('tr');
-  tr.innerHTML = `<td><input type="text" class="data-det-name"></td>` +
-    `<td><input type="text" class="data-det-purpose"></td>` +
-    `<td><input type="number" class="data-det-price" step="0.01" oninput="calculateDataRowTotal(this)"></td>` +
-    `<td><input type="number" class="data-det-qty" step="1" oninput="calculateDataRowTotal(this)"></td>` +
-    `<td><input type="text" class="data-det-total" readonly></td>` +
-    `<td><input type="text" class="data-det-supplier"></td>` +
-    `<td><input type="url" class="data-det-link"></td>` +
-    `<td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
-  document.getElementById('data-detail-tbody').appendChild(tr);
+  const container = document.getElementById('purchase-items-container');
+  const div = document.createElement('div');
+  div.className = 'purchase-item-card';
+  div.innerHTML = `
+    <button type="button" class="card-delete-btn" onclick="this.closest('.purchase-item-card').remove(); calculateAllTotals();" title="Удалить позицию">&times;</button>
+    <div class="purchase-item-row row-1">
+      <div class="form-group fg-name">
+        <label>Наименование</label>
+        <input type="text" class="det-name" placeholder="Например: Ацетонитрил ОСЧ, 1л" oninput="calculateAllTotals()">
+      </div>
+      <div class="form-group fg-price">
+        <label>Цена с НДС (без доставки)</label>
+        <input type="number" class="det-price" step="0.01" placeholder="0.00" oninput="calculateRowTotal(this)">
+      </div>
+      <div class="form-group fg-qty">
+        <label>Кол-во</label>
+        <input type="number" class="det-qty" step="1" placeholder="1" oninput="calculateRowTotal(this)">
+      </div>
+      <div class="form-group fg-total">
+        <label>Всего</label>
+        <div class="total-badge det-total">0.00 ₽</div>
+      </div>
+    </div>
+    <div class="purchase-item-row row-2">
+      <div class="form-group fg-purpose">
+        <label>Цель использования</label>
+        <input type="text" class="det-purpose" placeholder="Например: Для ВЭЖХ анализа">
+      </div>
+      <div class="form-group fg-supplier">
+        <label>Поставщик</label>
+        <input type="text" class="det-supplier" placeholder="Например: Химмед">
+      </div>
+      <div class="form-group fg-link">
+        <label>Ссылка</label>
+        <div class="link-input-wrapper">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <input type="url" class="det-link" placeholder="https://...">
+        </div>
+      </div>
+    </div>
+  `;
+  container.appendChild(div);
 }
 
 function calculateRowTotal(input) {
-  const tr = input.closest('tr');
-  const price = parseFloat(tr.querySelector('.det-price').value) || 0;
-  const qty = parseFloat(tr.querySelector('.det-qty').value) || 0;
-  tr.querySelector('.det-total').value = (price * qty) > 0 ? (price * qty).toFixed(2) : '';
+  const card = input.closest('.purchase-item-card');
+  const price = parseFloat(card.querySelector('.det-price').value) || 0;
+  const qty = parseFloat(card.querySelector('.det-qty').value) || 0;
+  const total = price * qty;
+  card.querySelector('.det-total').innerText = total > 0 ? total.toFixed(2) + ' ₽' : '0.00 ₽';
   calculateAllTotals();
 }
 
 function calculateAllTotals() {
   let sum = 0;
-  let hasDetails = false;
-  document.querySelectorAll('#detail-tbody tr').forEach(tr => {
-    const name = tr.querySelector('.det-name').value.trim();
-    const qty = tr.querySelector('.det-qty').value.trim();
-    const price = tr.querySelector('.det-price').value.trim();
-    const total = parseFloat(tr.querySelector('.det-total').value) || 0;
-    if (name || qty || price) hasDetails = true;
-    sum += total;
+  document.querySelectorAll('.purchase-item-card').forEach(card => {
+    const price = parseFloat(card.querySelector('.det-price').value) || 0;
+    const qty = parseFloat(card.querySelector('.det-qty').value) || 0;
+    sum += (price * qty);
   });
+  
   const amountInput = document.getElementById('create-amount-product');
-  if (hasDetails) { amountInput.value = sum > 0 ? sum.toFixed(2) : ''; amountInput.readOnly = true; }
-  else { amountInput.readOnly = false; }
-}
-
-function calculateDataRowTotal(input) {
-  const tr = input.closest('tr');
-  const price = parseFloat(tr.querySelector('.data-det-price').value) || 0;
-  const qty = parseFloat(tr.querySelector('.data-det-qty').value) || 0;
-  tr.querySelector('.data-det-total').value = (price * qty) > 0 ? (price * qty).toFixed(2) : '';
+  amountInput.value = sum > 0 ? sum.toFixed(2) : '';
+  document.getElementById('create-total-sum').innerText = sum > 0 ? sum.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽' : '0.00 ₽';
 }
 
 function updateFileName(input) {
@@ -174,6 +187,7 @@ function submitCreateRequest(e) {
   btn.disabled = true;
   btn.innerText = 'Создание...';
   logAction('Начало создания запроса...', 'info');
+  
   const editId = document.getElementById('edit-item-id').value;
   const deadline = document.getElementById('create-deadline').value;
   const deptId = document.getElementById('create-dept').value;
@@ -187,26 +201,58 @@ function submitCreateRequest(e) {
   if (secText && dirText) combinedText = `${secText} / ${dirText}`;
   else if (secText) combinedText = secText;
 
-  const rows = document.querySelectorAll('#detail-tbody tr');
+  const cards = document.querySelectorAll('.purchase-item-card');
   const arrNames = [], arrPurposes = [], arrPrices = [], arrQtys = [], arrLinks = [], arrSuppliers = [];
   let hasDetails = false;
-  rows.forEach(tr => {
-    const n = tr.querySelector('.det-name').value.trim();
-    const p = tr.querySelector('.det-purpose').value.trim();
-    const pr = tr.querySelector('.det-price').value.trim();
-    const q = tr.querySelector('.det-qty').value.trim();
-    const l = tr.querySelector('.det-link').value.trim();
-    const s = tr.querySelector('.det-supplier').value.trim();
-    if (n || p || q || l || pr || s) { arrNames.push(n); arrPurposes.push(p); arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); arrQtys.push(q); arrLinks.push(l); arrSuppliers.push(s); hasDetails = true; }
+  
+  cards.forEach(card => {
+    const n = card.querySelector('.det-name').value.trim();
+    const p = card.querySelector('.det-purpose').value.trim();
+    const pr = card.querySelector('.det-price').value.trim();
+    const q = card.querySelector('.det-qty').value.trim();
+    const l = card.querySelector('.det-link').value.trim();
+    const s = card.querySelector('.det-supplier').value.trim();
+    
+    if (n || p || q || l || pr || s) { 
+      arrNames.push(n); 
+      arrPurposes.push(p); 
+      arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB'); 
+      arrQtys.push(q); 
+      arrLinks.push(l); 
+      arrSuppliers.push(s); 
+      hasDetails = true; 
+    }
   });
+  
   const shortDept = settings.deptShortNames[deptId] || (departments.find(d => d.ID == deptId)?.NAME || 'Отдел');
   const dateStr = new Date().toLocaleDateString('ru-RU');
-  const fields = { categoryId: currentCategoryId, [actualFields.shortDesc]: shortDesc, [actualFields.deadlineZakup]: deadline, [actualFields.dept]: deptId, [actualFields.creator]: currentUser.ID, [actualFields.amountProduct]: amountProduct ? parseFloat(amountProduct) : 0 };
+  const fields = { 
+    categoryId: currentCategoryId, 
+    [actualFields.shortDesc]: shortDesc, 
+    [actualFields.deadlineZakup]: deadline, 
+    [actualFields.dept]: deptId, 
+    [actualFields.creator]: currentUser.ID, 
+    [actualFields.amountProduct]: amountProduct ? parseFloat(amountProduct) : 0 
+  };
   if (section) fields[actualFields.section] = section;
   if (direction) fields[actualFields.direction] = direction;
   if (actualFields.combinedDir && combinedText) fields[actualFields.combinedDir] = combinedText;
-  if (hasDetails) { fields[actualFields.detailName] = arrNames; fields[actualFields.detailPurpose] = arrPurposes; fields[actualFields.detailPrice] = arrPrices; fields[actualFields.detailQty] = arrQtys; fields[actualFields.detailLink] = arrLinks; if (actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier]) fields[actualFields.detailSupplier] = arrSuppliers; }
-  else { fields[actualFields.detailName] = []; fields[actualFields.detailPurpose] = []; fields[actualFields.detailPrice] = []; fields[actualFields.detailQty] = []; fields[actualFields.detailLink] = []; if (actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier]) fields[actualFields.detailSupplier] = []; }
+  
+  if (hasDetails) {
+    fields[actualFields.detailName] = arrNames;
+    fields[actualFields.detailPurpose] = arrPurposes;
+    fields[actualFields.detailPrice] = arrPrices;
+    fields[actualFields.detailQty] = arrQtys;
+    fields[actualFields.detailLink] = arrLinks;
+    if (actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier]) fields[actualFields.detailSupplier] = arrSuppliers;
+  } else {
+    fields[actualFields.detailName] = [];
+    fields[actualFields.detailPurpose] = [];
+    fields[actualFields.detailPrice] = [];
+    fields[actualFields.detailQty] = [];
+    fields[actualFields.detailLink] = [];
+    if (actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier]) fields[actualFields.detailSupplier] = [];
+  }
 
   if (editId) {
     const oldItem = items.find(i => i.id == editId);
@@ -367,4 +413,100 @@ function submitUpload(e) {
   } else {
     doUpdate(null);
   }
+}
+
+function openEditModal(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  document.getElementById('create-modal-title').innerText = 'Редактировать закупку';
+  document.getElementById('edit-item-id').value = item.id;
+  
+  const deptSelect = document.getElementById('create-dept');
+  deptSelect.innerHTML = '';
+  departments.forEach(d => { 
+    const sn = settings.deptShortNames[d.ID]; 
+    if ((settings.visibleDepts.includes(String(d.ID)) && sn) || item[actualFields.dept] == d.ID) {
+      deptSelect.innerHTML += `<option value="${d.ID}" ${item[actualFields.dept] == d.ID ? 'selected' : ''}>${d.NAME} (${sn || '—'})</option>`; 
+    }
+  });
+  
+  document.getElementById('create-deadline').value = item[actualFields.deadlineZakup] ? item[actualFields.deadlineZakup].split('T')[0] : '';
+  document.getElementById('create-short-desc').value = getShortDesc(item);
+  document.getElementById('create-amount-product').value = parseAmount(item[actualFields.amountProduct]) || '';
+  
+  populateCreateSection();
+  const curSec = String(Array.isArray(item[actualFields.section]) ? item[actualFields.section][0] : (item[actualFields.section] || ''));
+  const curDir = String(Array.isArray(item[actualFields.direction]) ? item[actualFields.direction][0] : (item[actualFields.direction] || ''));
+  if (curSec) { document.getElementById('create-section').value = curSec; updateDirectionsCreate(curDir); }
+  
+  const container = document.getElementById('purchase-items-container');
+  container.innerHTML = '';
+  
+  const names = item[actualFields.detailName] || [];
+  const purposes = item[actualFields.detailPurpose] || [];
+  const prices = item[actualFields.detailPrice] || [];
+  const qtys = item[actualFields.detailQty] || [];
+  const links = item[actualFields.detailLink] || [];
+  const suppliers = item[actualFields.detailSupplier] || [];
+  
+  const arrN = Array.isArray(names) ? names : (names ? [names] : []);
+  const arrP = Array.isArray(purposes) ? purposes : (purposes ? [purposes] : []);
+  const arrPr = Array.isArray(prices) ? prices : (prices ? [prices] : []);
+  const arrQ = Array.isArray(qtys) ? qtys : (qtys ? [qtys] : []);
+  const arrL = Array.isArray(links) ? links : (links ? [links] : []);
+  const arrS = Array.isArray(suppliers) ? suppliers : (suppliers ? [suppliers] : []);
+  
+  const maxLen = Math.max(arrN.length, 1);
+  for (let i = 0; i < maxLen; i++) {
+    const card = document.createElement('div');
+    card.className = 'purchase-item-card';
+    const priceVal = parseAmount(arrPr[i]);
+    const qtyVal = parseAmount(arrQ[i]);
+    const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || 0;
+    
+    card.innerHTML = `
+      <button type="button" class="card-delete-btn" onclick="this.closest('.purchase-item-card').remove(); calculateAllTotals();" title="Удалить позицию">&times;</button>
+      <div class="purchase-item-row row-1">
+        <div class="form-group fg-name">
+          <label>Наименование</label>
+          <input type="text" class="det-name" value="${arrN[i] || ''}" oninput="calculateAllTotals()">
+        </div>
+        <div class="form-group fg-price">
+          <label>Цена с НДС (без доставки)</label>
+          <input type="number" class="det-price" step="0.01" value="${priceVal}" oninput="calculateRowTotal(this)">
+        </div>
+        <div class="form-group fg-qty">
+          <label>Кол-во</label>
+          <input type="number" class="det-qty" step="1" value="${qtyVal}" oninput="calculateRowTotal(this)">
+        </div>
+        <div class="form-group fg-total">
+          <label>Всего</label>
+          <div class="total-badge det-total">${totalVal > 0 ? totalVal.toFixed(2) + ' ₽' : '0.00 ₽'}</div>
+        </div>
+      </div>
+      <div class="purchase-item-row row-2">
+        <div class="form-group fg-purpose">
+          <label>Цель использования</label>
+          <input type="text" class="det-purpose" value="${arrP[i] || ''}">
+        </div>
+        <div class="form-group fg-supplier">
+          <label>Поставщик</label>
+          <input type="text" class="det-supplier" value="${arrS[i] || ''}">
+        </div>
+        <div class="form-group fg-link">
+          <label>Ссылка</label>
+          <div class="link-input-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <input type="url" class="det-link" value="${arrL[i] || ''}">
+          </div>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  }
+  
+  calculateAllTotals();
+  const stage = spStages[item.stageId];
+  document.getElementById('create-modal-content').style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
+  document.getElementById('modal-create').style.display = 'flex';
 }
