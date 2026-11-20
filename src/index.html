@@ -128,21 +128,23 @@
         <!-- ШАГ 1 -->
         <div class="step-panel active" data-step="1">
           <div class="form-grid-2x2">
-            <div class="form-group">
+            <div class="form-group fg-full">
               <label>Ответственный отдел *</label>
               <select id="create-dept" required></select>
             </div>
-            <div class="form-group">
+            <div class="fg-pair">
+              <div class="form-group">
+                <label>Раздел направления расхода д/с *</label>
+                <select id="create-section" required onchange="updateDirectionsCreate()"></select>
+              </div>
+              <div class="form-group">
+                <label>Направление расхода д/с *</label>
+                <select id="create-direction" required></select>
+              </div>
+            </div>
+            <div class="form-group fg-full">
               <label>Крайний срок закупки *</label>
               <input type="date" id="create-deadline" required>
-            </div>
-            <div class="form-group">
-              <label>Раздел направления расхода д/с *</label>
-              <select id="create-section" required onchange="updateDirectionsCreate()"></select>
-            </div>
-            <div class="form-group">
-              <label>Направление расхода д/с *</label>
-              <select id="create-direction" required></select>
             </div>
           </div>
         </div>
@@ -152,6 +154,13 @@
           <div class="form-group">
             <label>Краткое описание *</label>
             <input type="text" id="create-short-desc" required placeholder="Например: оборудование для лаборатории">
+          </div>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin: 18px 0 12px;">
+            <h5 style="font-size:14px; font-weight:700; color:#334155; margin:0;">Позиции закупки</h5>
+            <button type="button" class="btn btn-sm" onclick="openPastItemsModal()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px; vertical-align:middle;"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+              Выбрать из прошлых
+            </button>
           </div>
           <div id="purchase-items-container"></div>
           <button type="button" class="btn btn-sm" onclick="addDetailRow()" style="margin-top: 8px;">
@@ -177,6 +186,29 @@
         <button type="submit" class="btn btn-primary" id="btn-save-create" style="display:none">Сохранить</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ✅ МОДАЛКА "ВЫБРАТЬ ИЗ ПРОШЛЫХ" -->
+<div id="modal-past" class="modal-overlay">
+  <div class="modal" style="max-width: 760px;">
+    <div class="modal-header">
+      <h2>Выбрать позиции из прошлых закупок</h2>
+      <button onclick="closeModal('modal-past')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="past-toolbar">
+        <div class="search-bar" style="width:100%;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="21.65"/></svg>
+          <input type="text" id="past-search" placeholder="Поиск по наименованию..." oninput="renderPastItems()">
+        </div>
+      </div>
+      <div class="past-list" id="past-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" onclick="closeModal('modal-past')">Отмена</button>
+      <button type="submit" class="btn btn-primary" id="btn-past-add" onclick="addSelectedPastItems()">Добавить выбранные</button>
+    </div>
   </div>
 </div>
 
