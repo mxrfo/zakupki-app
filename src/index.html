@@ -97,21 +97,36 @@
 </div>
 </div>
 
-<!-- ✅ МОДАЛКА СОЗДАНИЯ: карточки позиций + скрытый amount-product -->
+<!-- ✅ МАСТЕР СОЗДАНИЯ ЗАПРОСА: 3 шага, вкладки, анимация -->
 <div id="modal-create" class="modal-overlay">
   <div class="modal" id="create-modal-content">
     <div class="modal-header">
       <h2 id="create-modal-title">Создать запрос на закупку</h2>
       <button onclick="closeModal('modal-create')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
     </div>
+
+    <div class="create-stepper">
+      <div class="cs-steps">
+        <div class="cs-fill" id="cs-fill"></div>
+        <button type="button" class="cs-step active" data-step="1" onclick="tryGoCreateStep(1)">
+          <span class="cs-num">1</span><span class="cs-label">Основная информация</span>
+        </button>
+        <button type="button" class="cs-step" data-step="2" onclick="tryGoCreateStep(2)">
+          <span class="cs-num">2</span><span class="cs-label">Позиции закупки</span>
+        </button>
+        <button type="button" class="cs-step" data-step="3" onclick="tryGoCreateStep(3)">
+          <span class="cs-num">3</span><span class="cs-label">Итоги</span>
+        </button>
+      </div>
+    </div>
+
     <form id="form-create" onsubmit="submitCreateRequest(event)">
       <div class="modal-body">
         <input type="hidden" id="edit-item-id">
-        <!-- ✅ восстановлено скрытое поле, на которое опирается JS -->
         <input type="hidden" id="create-amount-product" value="">
 
-        <div class="form-section-block">
-          <h4 class="form-section-title">Основная информация</h4>
+        <!-- ШАГ 1 -->
+        <div class="step-panel active" data-step="1">
           <div class="form-grid-2x2">
             <div class="form-group">
               <label>Ответственный отдел *</label>
@@ -132,30 +147,34 @@
           </div>
         </div>
 
-        <div class="form-section-block">
-          <h4 class="form-section-title">Что нужно закупить</h4>
+        <!-- ШАГ 2 -->
+        <div class="step-panel" data-step="2">
           <div class="form-group">
             <label>Краткое описание *</label>
             <input type="text" id="create-short-desc" required placeholder="Например: оборудование для лаборатории">
           </div>
-
-          <h5 style="font-size: 14px; font-weight: 700; color: #334155; margin: 20px 0 12px 0;">Позиции закупки</h5>
           <div id="purchase-items-container"></div>
-
           <button type="button" class="btn btn-sm" onclick="addDetailRow()" style="margin-top: 8px;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px; vertical-align: middle;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Добавить позицию
           </button>
-
           <div class="purchase-summary-bar">
             <span class="purchase-summary-label">Сумма позиций (без доставки):</span>
             <span class="purchase-summary-value" id="create-total-sum">0.00 ₽</span>
           </div>
         </div>
+
+        <!-- ШАГ 3 -->
+        <div class="step-panel" data-step="3">
+          <div id="create-review-container"></div>
+        </div>
       </div>
+
       <div class="modal-footer">
         <button type="button" class="btn" onclick="closeModal('modal-create')">Отмена</button>
-        <button type="submit" class="btn btn-primary" id="btn-save-create">Сохранить</button>
+        <button type="button" class="btn" id="btn-create-back" onclick="prevCreateStep()" style="display:none">Назад</button>
+        <button type="button" class="btn btn-primary" id="btn-create-next" onclick="nextCreateStep()">Далее</button>
+        <button type="submit" class="btn btn-primary" id="btn-save-create" style="display:none">Сохранить</button>
       </div>
     </form>
   </div>
