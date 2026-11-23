@@ -622,79 +622,35 @@ async function parseVseinstrumentiCart(url, card) {
 // Универсальный парсер (JSON-LD -> OpenGraph -> Извлечение из URL)
 async function parseLinkData(url, card) {
   try {
+    // Fetch is intentionally kept through the existing Cloudflare Worker Proxy.
     const res = await fetch(MY_PROXY_URL + encodeURIComponent(url));
     if (!res.ok) throw new Error('Network error');
     const html = await res.text();
-    
+
     if (html.includes('captcha') || html.includes('Доступ ограничен')) {
       showToast('Сайт запросил капчу. Попробуйте позже.', 'error');
       return false;
     }
 
     const doc = new DOMParser().parseFromString(html, 'text/html');
+    const parsed = window.LinkParser && typeof window.LinkParser.parseDocument === 'function'
+      ? window.LinkParser.parseDocument(doc, url)
+      : {};
     let parsedSomething = false;
+    const title = parsed.title || '';
+    const price = Number(parsed.price) || 0;
+    const article = parsed.article || '';
 
-    let title = '';
-    let price = 0;
-    let article = '';
-
-    // 1. Пытаемся найти JSON-LD (Schema.org) - самый надежный источник
-    const ldJsonScripts = doc.querySelectorAll('script[type="application/ld+json"]');
-    for (const script of ldJsonScripts) {
-      try {
-        const data = JSON.parse(script.textContent);
-        const products = Array.isArray(data) ? data : (data['@graph'] ? data['@graph'] : [data]);
-        for (const prod of products) {
-          if (prod['@type'] === 'Product' || prod['@type'] === 'http://schema.org/Product') {
-            title = title || prod.name;
-            article = article || prod.sku || prod.mpn || prod.productID;
-            if (prod.offers) {
-              const offer = Array.isArray(prod.offers) ? prod.offers[0] : prod.offers;
-              price = price || parseFloat(offer.price || offer.lowPrice || 0);
-            }
-            if (title && price) break;
-          }
-        }
-      } catch (e) { /* ignore broken JSON */ }
-    }
-
-    // 2. OpenGraph (og:title, product:price:amount)
-    if (!title) title = doc.querySelector('meta[property="og:title"]')?.content || doc.querySelector('h1')?.innerText?.trim() || '';
-    if (!price) {
-      const priceMeta = doc.querySelector('meta[property="product:price:amount"]')?.content || doc.querySelector('meta[property="og:price:amount"]')?.content || doc.querySelector('meta[itemprop="price"]')?.content;
-      if (priceMeta) price = parseFloat(priceMeta.replace(/[^\d.,]/g, '').replace(',', '.'));
-    }
-
-    // 3. Специфичные селекторы (если мета-теги не сработали)
-    if (!price) {
-      const priceStr = doc.querySelector('.price, .product-price, [itemprop="price"], .product__price, .tsHeadline500Medium')?.innerText || '';
-      if (priceStr) price = parseFloat(priceStr.replace(/[^\d.,]/g, '').replace(',', '.'));
-    }
-    
-    if (!article) {
-       const artStr = doc.querySelector('.article, .sku, [itemprop="sku"], [data-widget="webProductSku"]')?.innerText?.trim() || '';
-       if (artStr) article = artStr.replace(/[^\d]/g, '');
-    }
-
-    // 4. Если артикул не найден на странице, пытаемся вытащить его из URL
-    if (!article) {
-      // Ozon: /product/name-123456789/
-      const ozonMatch = url.match(/-(\d{6,})\/?$/);
-      if (url.includes('ozon.ru') && ozonMatch) article = ozonMatch[1];
-      // Wildberries: /catalog/12345678/detail.aspx
-      const wbMatch = url.match(/\/catalog\/(\d+)\//);
-      if (url.includes('wildberries.ru') && wbMatch) article = wbMatch[1];
-    }
-
-    // Заполнение полей
     if (title && title.length > 2) {
-      card.querySelector('.det-name').value = title;
-      onDetNameInput(card.querySelector('.det-name'));
+      const nameInput = card.querySelector('.det-name');
+      nameInput.value = title;
+      onDetNameInput(nameInput);
       parsedSomething = true;
     }
-    if (price > 0 && !card.querySelector('.det-price').value) {
-      card.querySelector('.det-price').value = price;
-      calculateRowTotal(card.querySelector('.det-price'));
+    const priceInput = card.querySelector('.det-price');
+    if (price > 0 && !priceInput.value) {
+      priceInput.value = price;
+      calculateRowTotal(priceInput);
       parsedSomething = true;
     }
     if (article) {
@@ -702,8 +658,13 @@ async function parseLinkData(url, card) {
       parsedSomething = true;
     }
 
-    // Установка поставщика по умолчанию на основе домена
-    const host = new URL(url).hostname.replace('www.', '');
+    // Store extra extracted fields on the card for later UI expansion without
+    // changing the current purchase form or its submission data structure.
+    card._parsedProductData = parsed;
+    card.dataset.parsedProduct = JSON.stringify(parsed);
+
+    // Supplier is still determined using the existing domain mapping.
+    const host = new URL(url).hostname.replace(/^www\./, '');
     let supplierName = '';
     if (host.includes('ozon.ru')) supplierName = 'Ozon';
     else if (host.includes('wildberries.ru')) supplierName = 'Wildberries';
@@ -716,12 +677,10 @@ async function parseLinkData(url, card) {
       supplierName = parts.length >= 2 ? parts[parts.length - 2] : host;
       supplierName = supplierName.charAt(0).toUpperCase() + supplierName.slice(1);
     }
-
     if (!card.querySelector('.det-supplier').value) {
       card.querySelector('.det-supplier').value = supplierName;
       parsedSomething = true;
     }
-
     return parsedSomething;
   } catch (e) {
     console.warn('Ошибка разбора HTML:', e);

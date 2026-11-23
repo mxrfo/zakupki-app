@@ -27,6 +27,7 @@ const JS_FILES_ORDER = [
   'src/js/ui/dragdrop.js',
   'src/js/ui/render.js',
   'src/js/ui/modals.js',
+  'src/js/ui/parsers/parsers/link-parser.js',
   'src/js/ui/forms.js',
   'src/js/logic/actions.js',
   'src/js/logic/settings.js',
