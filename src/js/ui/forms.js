@@ -373,12 +373,13 @@ function renderEmptyState() {
   container.appendChild(div);
 }
 
-// ✅ ИСПРАВЛЕННАЯ функция клика по чипсу
-function applyChip(chip, val) {
+// ✅ ИСПРАВЛЕННАЯ функция клика по чипсу (теперь работает 100%)
+function applyChip(chip) {
   if (window.event) {
     window.event.preventDefault();
     window.event.stopPropagation();
   }
+  const val = chip.getAttribute('data-val');
   const group = chip.closest('.form-group');
   const input = group ? group.querySelector('input') : null;
   if (input) {
@@ -404,7 +405,7 @@ function updatePositionNumbers() {
   });
 }
 
-// ✅ ОБНОВЛЕННАЯ функция добавления строки (Новый порядок полей + Парсинг ссылки)
+// ✅ ОБНОВЛЕННАЯ функция добавления строки (Кнопка парсера + Data-атрибуты для чипсов)
 function addDetailRow(data) {
   data = data || {};
   const container = document.getElementById('purchase-items-container');
@@ -429,14 +430,15 @@ function addDetailRow(data) {
   
   const hasExtra = !!(supplierVal || articleVal || purposeVal || noteVal);
   
+  // Используем data-val для безопасной передачи строк
   const purposeChips = _topPurposes.length
     ? '<div class="chip-row"><span class="chip-hint">Частые варианты</span>' + 
-      _topPurposes.map(function (p) { return `<span class="chip" onclick="applyChip(this, '${escapeHtml(p)}')">${escapeHtml(p)}</span>`; }).join('') + '</div>'
+      _topPurposes.map(function (p) { return `<span class="chip" data-val="${escapeHtml(p)}" onclick="applyChip(this)">${escapeHtml(p)}</span>`; }).join('') + '</div>'
     : '';
     
   const supplierChips = _topSuppliers.length
     ? '<div class="chip-row"><span class="chip-hint">Частые поставщики</span>' + 
-      _topSuppliers.map(function (p) { return `<span class="chip" onclick="applyChip(this, '${escapeHtml(p)}')">${escapeHtml(p)}</span>`; }).join('') + '</div>'
+      _topSuppliers.map(function (p) { return `<span class="chip" data-val="${escapeHtml(p)}" onclick="applyChip(this)">${escapeHtml(p)}</span>`; }).join('') + '</div>'
     : '';
 
   details.innerHTML = `
@@ -449,13 +451,11 @@ function addDetailRow(data) {
     </summary>
     <div class="pos-body">
       <div class="pos-main">
-        <!-- 1. Наименование -->
         <div class="form-group pg-name">
           <label>Наименование</label>
           <input type="text" class="det-name" value="${escapeHtml(nameVal)}" placeholder="Что закупаем"
             oninput="onDetNameInput(this)" onblur="smartParseItemLine(this); hideSuggestions();" onpaste="handleItemsPaste(event)">
         </div>
-        <!-- 2. Цена -->
         <div class="form-group pg-price">
           <label>Цена с НДС</label>
           <div class="unit-input">
@@ -463,7 +463,6 @@ function addDetailRow(data) {
             <span class="unit">₽</span>
           </div>
         </div>
-        <!-- 3. Кол-во -->
         <div class="form-group pg-qty">
           <label>Кол-во</label>
           <div class="unit-input">
@@ -471,36 +470,32 @@ function addDetailRow(data) {
             <span class="unit">шт.</span>
           </div>
         </div>
-        <!-- 4. Ссылка -->
         <div class="form-group pg-link">
           <label>Ссылка</label>
           <div class="link-input-wrapper">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            <input type="url" class="det-link" placeholder="https://..." value="${escapeHtml(linkVal)}" onblur="handleLinkBlur(this.value, this.closest('.pos-card'))">
+            <input type="url" class="det-link" placeholder="https://..." value="${escapeHtml(linkVal)}">
+            <button type="button" class="btn-parse" onclick="handleLinkParse(this)" title="Парсить ссылку">Парсить</button>
           </div>
         </div>
       </div>
       <details class="pos-extra"${hasExtra ? ' open' : ''}>
         <summary>Дополнительно: цель, поставщик, артикул, примечание</summary>
         <div class="pos-grid">
-          <!-- 1. Цель -->
           <div class="form-group pg-purpose">
             <label>Цель использования</label>
             <input type="text" class="det-purpose" value="${escapeHtml(purposeVal)}" placeholder="Зачем нужно">
             ${purposeChips}
           </div>
-          <!-- 2. Поставщик -->
           <div class="form-group pg-supplier">
             <label>Поставщик</label>
             <input type="text" class="det-supplier" value="${escapeHtml(supplierVal)}" placeholder="Например: ОЗОН">
             ${supplierChips}
           </div>
-          <!-- 3. Артикул -->
           <div class="form-group pg-article">
             <label>Артикул</label>
             <input type="text" class="det-article" value="${escapeHtml(articleVal)}" placeholder="Код товара">
           </div>
-          <!-- 4. Примечание -->
           <div class="form-group pg-note">
             <label>Примечание</label>
             <input type="text" class="det-note" value="${escapeHtml(noteVal)}" placeholder="Особые отметки">
@@ -514,7 +509,6 @@ function addDetailRow(data) {
   renderEmptyState();
 }
 
-// ✅ ОБНОВЛЕННАЯ функция расчета с поддержкой нового layout
 function calculateRowTotal(input) {
   const card = input.closest('.pos-card');
   const price = parseFloat(card.querySelector('.det-price').value) || 0;
@@ -523,7 +517,7 @@ function calculateRowTotal(input) {
   const txt = total > 0 ? total.toFixed(2) + ' ₽' : '0.00 ₽';
   const head = card.querySelector('.pos-total');
   if (head) head.textContent = txt;
-  const readout = card.querySelector('.det-total'); // для совместимости, если где-то используется
+  const readout = card.querySelector('.det-total');
   if (readout) readout.textContent = txt;
   calculateAllTotals();
 }
@@ -550,29 +544,48 @@ function calculateAllTotals() {
 }
 
 /* ============================================================
-   ПАРСИНГ ССЫЛОК (ВсеИнструменты + Универсальный)
+   ПАРСИНГ ССЫЛОК (Кнопка)
    ============================================================ */
-async function handleLinkBlur(url, card) {
-  if (!url || !url.trim()) return;
-  url = url.trim();
+async function handleLinkParse(btn) {
+  const card = btn.closest('.pos-card');
+  const url = card.querySelector('.det-link').value.trim();
+  if (!url) return showToast('Введите ссылку', 'error');
 
-  // Если корзина ВсеИнструменты
-  if (url.includes('vseinstrumenti.ru/cart')) {
-    const ok = await parseVseinstrumentiCart(url, card);
-    if (ok) return;
+  const originalText = btn.innerText;
+  btn.disabled = true;
+  btn.innerText = '...';
+
+  let success = false;
+  try {
+    if (url.includes('vseinstrumenti.ru')) {
+      success = await parseVseinstrumentiCart(url, card);
+    }
+    if (!success) {
+      success = await parseLinkData(url, card);
+    }
+  } catch (e) {
+    console.warn(e);
   }
-  
-  // Универсальный парсинг
-  await parseLinkData(url, card);
+
+  btn.disabled = false;
+  btn.innerText = originalText;
+
+  if (!success) {
+    showToast('Не удалось распознать данные. Сайт может блокировать парсинг.', 'error');
+  } else {
+    showToast('Данные успешно подтянуты!', 'success');
+  }
 }
 
+// Парсер ВсеИнструменты
 async function parseVseinstrumentiCart(url, card) {
   try {
     const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
     const res = await fetch(proxy);
-    if (!res.ok) throw new Error('Network response was not ok');
+    if (!res.ok) throw new Error('Network error');
     const html = await res.text();
 
+    // Ищем JSON состояние
     const match = html.match(/window\.__INITIAL_STATE__\s*=\s*({.+?});?\s*<\/script>/s);
     if (match && match[1]) {
       const state = JSON.parse(match[1]);
@@ -603,38 +616,62 @@ async function parseVseinstrumentiCart(url, card) {
   return false;
 }
 
+// Универсальный парсер (через OpenGraph мета-теги)
 async function parseLinkData(url, card) {
   try {
     const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
     const res = await fetch(proxy);
-    if (!res.ok) throw new Error('Network response was not ok');
+    if (!res.ok) throw new Error('Network error');
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
 
-    const title = doc.querySelector('h1')?.innerText?.trim() || '';
-    const priceText = doc.querySelector('.price, .product-price, [itemprop="price"], .product__price')?.innerText || '';
-    const article = doc.querySelector('.article, .sku, [itemprop="sku"]')?.innerText?.trim() || '';
-    const supplier = doc.querySelector('.supplier, .brand, [itemprop="brand"]')?.innerText?.trim() || '';
+    // 1. Пытаемся взять OG-теги (Самый надежный способ)
+    let title = doc.querySelector('meta[property="og:title"]')?.content || doc.querySelector('h1')?.innerText?.trim() || '';
+    let priceStr = doc.querySelector('meta[property="product:price:amount"]')?.content || doc.querySelector('meta[property="og:price:amount"]')?.content || '';
+    
+    // 2. Если нет OG-цены, ищем в тексте
+    if (!priceStr) {
+      priceStr = doc.querySelector('.price, .product-price, [itemprop="price"], .product__price')?.innerText || '';
+    }
+    
+    let article = doc.querySelector('.article, .sku, [itemprop="sku"]')?.innerText?.trim() || '';
+    let supplier = doc.querySelector('.supplier, .brand, [itemprop="brand"]')?.innerText?.trim() || '';
 
-    if (title && !card.querySelector('.det-name').value) {
+    let parsedSomething = false;
+
+    if (title && title.length > 2) {
       card.querySelector('.det-name').value = title;
       onDetNameInput(card.querySelector('.det-name'));
+      parsedSomething = true;
     }
-    if (priceText) {
-      const num = parseFloat(priceText.replace(/[^\d.,]/g, '').replace(',', '.'));
-      if (num && !card.querySelector('.det-price').value) {
+    
+    if (priceStr) {
+      const num = parseFloat(priceStr.replace(/[^\d.,]/g, '').replace(',', '.'));
+      if (num > 0 && !card.querySelector('.det-price').value) {
         card.querySelector('.det-price').value = num;
         calculateRowTotal(card.querySelector('.det-price'));
+        parsedSomething = true;
       }
     }
-    if (article && !card.querySelector('.det-article').value) {
+    
+    if (article) {
       card.querySelector('.det-article').value = article;
+      parsedSomething = true;
     }
-    if (supplier && !card.querySelector('.det-supplier').value) {
+    
+    if (supplier) {
       card.querySelector('.det-supplier').value = supplier;
+      parsedSomething = true;
     }
+
+    // Если это Ozon или WB, ставим поставщика по умолчанию
+    if (url.includes('ozon.ru')) card.querySelector('.det-supplier').value = 'Ozon';
+    else if (url.includes('wildberries.ru')) card.querySelector('.det-supplier').value = 'Wildberries';
+
+    return parsedSomething;
   } catch (e) {
     console.warn('Parse error:', e);
+    return false;
   }
 }
 
@@ -766,7 +803,6 @@ function openEditModal(id) {
   const qtys = item[actualFields.detailQty] || [];
   const links = item[actualFields.detailLink] || [];
   const suppliers = item[actualFields.detailSupplier] || [];
-  // Чтение новых полей (если они есть в mapping)
   const arrArt = actualFields.detailArticle ? (Array.isArray(item[actualFields.detailArticle]) ? item[actualFields.detailArticle] : (item[actualFields.detailArticle] ? [item[actualFields.detailArticle]] : [])) : [];
   const arrNote = actualFields.detailNote ? (Array.isArray(item[actualFields.detailNote]) ? item[actualFields.detailNote] : (item[actualFields.detailNote] ? [item[actualFields.detailNote]] : [])) : [];
   

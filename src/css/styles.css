@@ -506,6 +506,44 @@ body {
 }
 .chip:hover { background: #e6f0fa; border-color: var(--brand-blue); color: var(--brand-blue); }
 
+/* === Кнопка парсера ссылок === */
+.link-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.link-input-wrapper .det-link {
+  padding-right: 75px; /* Оставляем место для кнопки */
+}
+
+.btn-parse {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  bottom: 4px;
+  padding: 0 12px;
+  background: #e6f0fa;
+  color: var(--brand-blue);
+  border: 1px solid #b3d4f5;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+
+.btn-parse:hover {
+  background: var(--brand-blue);
+  color: #fff;
+  border-color: var(--brand-blue);
+}
+
+.btn-parse:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 /* dropdown автоподсказок — поверх модалки (z-index выше оверлея 1000) */
 .suggest-dropdown {
   position: fixed; z-index: 100000; background: #fff; border: 1px solid var(--border-color);
