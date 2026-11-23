@@ -387,7 +387,13 @@ function addDetailRow(data) {
   const nameVal = data.name || '';
   const priceVal = data.price || '';
   const qtyVal = data.qty || '';
+  const purposeVal = data.purpose || '';
+  const supplierVal = data.supplier || '';
+  const linkVal = data.link || '';
   const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || 0;
+  const totalTxt = totalVal > 0 ? totalVal.toFixed(2) + ' ₽' : '0.00 ₽';
+  // доп. поля разворачиваем автоматически, если там есть данные (редактирование)
+  const hasExtra = !!(purposeVal || supplierVal || linkVal);
   const purposeChips = _topPurposes.length
     ? '<div class="chip-row"><span class="chip-hint">Частые варианты из прошлых закупок</span>' + _topPurposes.map(function () { return '<span class="chip" onclick="applyChip(this)"></span>'; }).join('') + '</div>'
     : '';
@@ -399,44 +405,59 @@ function addDetailRow(data) {
       <span class="pos-chev"></span>
       <span class="pos-num">Позиция</span>
       <span class="pos-preview ${nameVal ? '' : 'empty'}">${escapeHtml(nameVal || 'Без названия')}</span>
-      <span class="pos-total">${totalVal > 0 ? totalVal.toFixed(2) + ' ₽' : '0.00 ₽'}</span>
+      <span class="pos-total">${totalTxt}</span>
       <button type="button" class="pos-del" title="Удалить позицию" onclick="event.preventDefault(); event.stopPropagation(); removeDetailRow(this);">&times;</button>
     </summary>
     <div class="pos-body">
-      <div class="pos-grid">
+      <div class="pos-main">
         <div class="form-group pg-name">
           <label>Наименование</label>
-          <input type="text" class="det-name" value="${escapeHtml(nameVal)}"
+          <input type="text" class="det-name" value="${escapeHtml(nameVal)}" placeholder="Что закупаем"
             oninput="onDetNameInput(this)"
             onblur="smartParseItemLine(this); hideSuggestions();"
             onpaste="handleItemsPaste(event)">
         </div>
         <div class="form-group pg-price">
-          <label>Цена с НДС (без доставки)</label>
-          <input type="number" class="det-price" step="0.01" value="${priceVal}" oninput="calculateRowTotal(this)">
+          <label>Цена с НДС</label>
+          <div class="unit-input">
+            <input type="number" class="det-price" step="0.01" placeholder="0.00" value="${priceVal}" oninput="calculateRowTotal(this)">
+            <span class="unit">₽</span>
+          </div>
         </div>
         <div class="form-group pg-qty">
           <label>Кол-во</label>
-          <input type="number" class="det-qty" step="1" value="${qtyVal}" oninput="calculateRowTotal(this)">
-        </div>
-        <div class="form-group pg-purpose">
-          <label>Цель использования</label>
-          <input type="text" class="det-purpose" value="${escapeHtml(data.purpose || '')}">
-          ${purposeChips}
-        </div>
-        <div class="form-group pg-supplier">
-          <label>Поставщик</label>
-          <input type="text" class="det-supplier" value="${escapeHtml(data.supplier || '')}">
-          ${supplierChips}
-        </div>
-        <div class="form-group pg-link">
-          <label>Ссылка</label>
-          <div class="link-input-wrapper">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            <input type="url" class="det-link" placeholder="https://..." value="${escapeHtml(data.link || '')}">
+          <div class="unit-input">
+            <input type="number" class="det-qty" step="1" placeholder="1" value="${qtyVal}" oninput="calculateRowTotal(this)">
+            <span class="unit">шт.</span>
           </div>
         </div>
+        <div class="form-group pg-total">
+          <label>Всего</label>
+          <div class="total-readout det-total">${totalTxt}</div>
+        </div>
       </div>
+      <details class="pos-extra"${hasExtra ? ' open' : ''}>
+        <summary>Дополнительно: цель, поставщик, ссылка</summary>
+        <div class="pos-grid">
+          <div class="form-group pg-purpose">
+            <label>Цель использования</label>
+            <input type="text" class="det-purpose" value="${escapeHtml(purposeVal)}" placeholder="Зачем нужно">
+            ${purposeChips}
+          </div>
+          <div class="form-group pg-supplier">
+            <label>Поставщик</label>
+            <input type="text" class="det-supplier" value="${escapeHtml(supplierVal)}" placeholder="Откуда берём">
+            ${supplierChips}
+          </div>
+          <div class="form-group pg-link">
+            <label>Ссылка</label>
+            <div class="link-input-wrapper">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              <input type="url" class="det-link" placeholder="https://..." value="${escapeHtml(linkVal)}">
+            </div>
+          </div>
+        </div>
+      </details>
     </div>`;
   container.appendChild(details);
   const pchips = details.querySelectorAll('.pg-purpose .chip');
@@ -475,7 +496,10 @@ function calculateRowTotal(input) {
   const qty = parseFloat(card.querySelector('.det-qty').value) || 0;
   const total = price * qty;
   const txt = total > 0 ? total.toFixed(2) + ' ₽' : '0.00 ₽';
-  card.querySelector('.pos-total').textContent = txt;
+  const head = card.querySelector('.pos-total');
+  if (head) head.textContent = txt;
+  const readout = card.querySelector('.det-total');
+  if (readout) readout.textContent = txt;
   calculateAllTotals();
 }
 

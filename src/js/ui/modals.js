@@ -63,10 +63,7 @@ function openExecutorModal(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
   const taskId = item[actualFields.taskVyborSotr];
-  if (!taskId || !String(taskId).match(/^\d+$/)) { 
-    showToast('Задача на выбор исполнителя не найдена', 'error'); 
-    return; 
-  }
+  if (!taskId || !String(taskId).match(/^\d+$/)) { showToast('Задача на выбор исполнителя не найдена', 'error'); return; }
   if (item[actualFields.manager] && (Array.isArray(item[actualFields.manager]) ? item[actualFields.manager].length : true)) {
     showToast('Исполнитель уже выбран. Откройте карточку закупки.', 'info');
     openViewModal(id);
@@ -76,22 +73,24 @@ function openExecutorModal(id) {
   document.getElementById('executor-task-id').value = taskId;
   document.getElementById('executor-title').innerText = 'Выбор исполнителя — закупка №' + id;
   document.getElementById('executor-desc').value = (getShortDesc(item));
-  
+
   let deptId = '';
   const deptVal = item[actualFields.dept];
   if (deptVal) deptId = String(Array.isArray(deptVal) ? deptVal[0] : deptVal);
-  
+
   const sel = document.getElementById('executor-to');
   sel.innerHTML = '<option value="">-- Выберите сотрудника из отдела --</option>';
+  const addedIds = new Set();
   let added = 0;
   allUsers.forEach(u => {
     if (String(u.ACTIVE) === 'N') return;
     const depts = Array.isArray(u.UF_DEPARTMENT) ? u.UF_DEPARTMENT : (u.UF_DEPARTMENT ? [u.UF_DEPARTMENT] : []);
     const inDept = deptId ? depts.some(d => String(d) === deptId) : false;
     const isSelf = String(u.ID) === String(currentUser.ID);
-    if (inDept || isSelf) { 
-      sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${isSelf ? ' (я)' : ''}${isUserUnavailable(u.ID) ? ' (недоступен)' : ''}</option>`; 
-      added++; 
+    if (inDept || isSelf) {
+      sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${isSelf ? ' (я)' : ''}${isUserUnavailable(u.ID) ? ' (недоступен)' : ''}</option>`;
+      addedIds.add(String(u.ID));
+      added++;
     }
   });
   if (added === 0) {
@@ -99,7 +98,14 @@ function openExecutorModal(id) {
       if (String(u.ACTIVE) === 'N') return;
       const self = String(u.ID) === String(currentUser.ID) ? ' (я)' : '';
       sel.innerHTML += `<option value="${u.ID}">${u.LAST_NAME} ${u.NAME}${self}${isUserUnavailable(u.ID) ? ' (недоступен)' : ''}</option>`;
+      addedIds.add(String(u.ID));
     });
+  }
+  // ✅ гарантированно добавляем текущего пользователя, если его нет в списке
+  if (currentUser && currentUser.ID && !addedIds.has(String(currentUser.ID))) {
+    const cu = allUsers.find(u => String(u.ID) === String(currentUser.ID));
+    const label = cu ? (cu.LAST_NAME + ' ' + cu.NAME) : (userNames[currentUser.ID] || 'Я');
+    sel.innerHTML += `<option value="${currentUser.ID}">${label} (я)</option>`;
   }
   document.getElementById('modal-executor').style.display = 'flex';
 }
