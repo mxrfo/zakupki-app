@@ -89,7 +89,6 @@
 <button class="fab-btn" onclick="openCreateModal()" title="Создать запрос">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
-
 <div id="modal-view" class="modal-overlay">
 <div class="modal" id="view-modal-content" style="max-width: 1000px;">
 <div class="modal-header"><h2 id="view-title">Детали закупки</h2><button onclick="closeModal('modal-view')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -98,7 +97,7 @@
 </div>
 </div>
 
-<!-- ✅ МАСТЕР СОЗДАНИЯ ЗАПРОСА -->
+<!-- ✅ МАСТЕР СОЗДАНИЯ: сумма в шапке, шаг1 в блоках-подложках, позиции без плейсхолдеров -->
 <div id="modal-create" class="modal-overlay">
   <div class="modal" id="create-modal-content">
     <div class="modal-header">
@@ -129,7 +128,7 @@
         <input type="hidden" id="edit-item-id">
         <input type="hidden" id="create-amount-product" value="">
 
-        <!-- ШАГ 1: поля в блоках-подложках БЕЗ заголовков и БЕЗ вертикальной полоски -->
+        <!-- ШАГ 1: блоки-подложки, без полоски, без заголовков -->
         <div class="step-panel active" data-step="1">
           <div class="form-block">
             <div class="form-group">
@@ -155,7 +154,7 @@
           </div>
         </div>
 
-        <!-- ШАГ 2: позиции -->
+        <!-- ШАГ 2: позиции (сумма в шапке, нижней панели нет) -->
         <div class="step-panel" data-step="2">
           <div class="form-group">
             <label>Краткое описание *</label>
@@ -191,7 +190,7 @@
   </div>
 </div>
 
-<!-- ✅ МОДАЛКА "ВЫБРАТЬ ИЗ ПРОШЛЫХ" (добавлена, так как её не было) -->
+<!-- ✅ МОДАЛКА "ВЫБРАТЬ ИЗ ПРОШЛЫХ" (была отсутствует → кнопка не работала) -->
 <div id="modal-past" class="modal-overlay">
   <div class="modal" style="max-width: 760px;">
     <div class="modal-header">
@@ -251,7 +250,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-edit-amount" class="modal-overlay">
 <div class="modal" style="max-width: 400px;">
 <div class="modal-header"><h2>Изменить сумму</h2><button onclick="closeModal('modal-edit-amount')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -267,7 +265,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-upload" class="modal-overlay">
 <div class="modal">
 <div class="modal-header"><h2>Загрузка входящего счета</h2><button onclick="closeModal('modal-upload')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -284,7 +281,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-action" class="modal-overlay">
 <div class="modal">
 <div class="modal-header"><h2 id="action-title">Действие</h2><button onclick="closeModal('modal-action')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -299,7 +295,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-delegate" class="modal-overlay">
 <div class="modal" style="max-width: 500px;">
 <div class="modal-header"><h2 id="delegate-title">Делегировать закупку</h2><button onclick="closeModal('modal-delegate')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -319,7 +314,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-executor" class="modal-overlay">
 <div class="modal" style="max-width: 500px;">
 <div class="modal-header"><h2 id="executor-title">Выбор исполнителя</h2><button onclick="closeModal('modal-executor')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -338,7 +332,6 @@
 </form>
 </div>
 </div>
-
 <div id="modal-settings" class="modal-overlay">
 <div class="modal" style="max-width: 1000px;">
 <div class="modal-header"><h2>Настройки приложения</h2><button onclick="closeModal('modal-settings')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button></div>
@@ -416,7 +409,6 @@
 <div class="modal-footer"><button class="btn btn-primary" onclick="saveSettings()">Сохранить</button></div>
 </div>
 </div>
-
 <div class="log-panel" id="log-panel">
 <div class="log-header" onclick="toggleLogPanel()"><span>Консоль логов</span><div class="log-header-actions"><button type="button" class="log-clear-btn" onclick="event.stopPropagation(); clearLogPanel()">Очистить</button><button type="button" class="log-close-btn" onclick="event.stopPropagation(); toggleLogPanel(false)" title="Закрыть">✕</button></div></div>
 <div class="log-content" id="log-content"></div>
@@ -425,7 +417,6 @@
 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
 </button>
 <div id="toast" class="toast"></div>
-
 <script src="js/core/config.js"></script>
 <script src="js/core/state.js"></script>
 <script src="js/core/utils.js"></script>

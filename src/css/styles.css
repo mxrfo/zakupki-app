@@ -426,12 +426,11 @@ body {
 @keyframes slideInRight { from { opacity: 0; transform: translateX(32px); } to { opacity: 1; transform: none; } }
 @keyframes slideInLeft { from { opacity: 0; transform: translateX(-32px); } to { opacity: 1; transform: none; } }
 
-/* Шаг 1: поля в блоках-подложках БЕЗ заголовков и БЕЗ вертикальной полоски */
+/* ШАГ 1: блоки-подложки без заголовков и без полоски */
 .form-block { background: #f8fafc; border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
 .form-block .form-group { margin-bottom: 0; }
 .form-block-pair { display: flex; gap: 16px; }
 .form-block-pair .form-group { flex: 1; min-width: 0; }
-@media (max-width: 900px) { .form-block-pair { flex-direction: column; } }
 
 /* ============================================================
    КАРТОЧКИ ПОЗИЦИЙ (сворачиваемые, необязательные)
@@ -457,7 +456,7 @@ body {
 .pos-del:hover { background: #fee2e2; color: var(--danger); }
 .pos-body { padding: 14px; border-top: 1px solid var(--border-color); }
 
-/* Компактная сетка с плавающими подписями (без пустых рамок) */
+/* компактная сетка позиции с плавающими подписями (без «пустых коробок») */
 .pos-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
 .pg-name { grid-column: span 6; position: relative; }
 .pg-price { grid-column: span 3; }
@@ -473,7 +472,7 @@ body {
 .link-input-wrapper svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94A3B8; width: 16px; height: 16px; pointer-events: none; }
 .link-input-wrapper input { padding-left: 32px; }
 
-/* Чипсы-памятки: скрыты, показываются только при фокусе */
+/* чипсы-памятки: скрыты, показываются только при фокусе/вводе */
 .chip-row { display: none; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .pg-purpose:focus-within .chip-row, .pg-supplier:focus-within .chip-row { display: flex; }
 .chip-hint { width: 100%; font-size: 11px; color: var(--text-muted); margin-bottom: 2px; font-style: italic; }
@@ -484,7 +483,7 @@ body {
 }
 .chip:hover { background: #e6f0fa; border-color: var(--brand-blue); color: var(--brand-blue); }
 
-/* Dropdown автоподсказок из кэша прошлых заявок (z-index выше модалки) */
+/* dropdown автоподсказок — поверх модалки (z-index выше оверлея 1000) */
 .suggest-dropdown {
   position: fixed; z-index: 100000; background: #fff; border: 1px solid var(--border-color);
   border-radius: 8px; box-shadow: var(--shadow-md); max-height: 240px; overflow-y: auto; display: none;
@@ -497,7 +496,7 @@ body {
 .suggest-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 .suggest-meta .s-price { color: var(--brand-blue); font-weight: 700; }
 
-/* Шаг 3: сводка */
+/* ШАГ 3: сводка */
 .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .review-item { background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 14px; }
 .review-item.full { grid-column: 1 / -1; }
@@ -540,9 +539,9 @@ body {
   .fab-btn { bottom: 20px; right: 20px; width: 50px; height: 50px; }
   .fab-btn svg { width: 24px; height: 24px; }
 
+  .form-block-pair { flex-direction: column; }
   .pos-grid { grid-template-columns: 1fr 1fr; }
   .pg-name, .pg-price, .pg-qty, .pg-purpose, .pg-supplier, .pg-link { grid-column: span 2; }
-
   .review-grid { grid-template-columns: 1fr; }
   .modal-header-sum { font-size: 13px; padding: 3px 8px; }
 }
