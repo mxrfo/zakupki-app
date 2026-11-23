@@ -373,8 +373,12 @@ function renderEmptyState() {
   container.appendChild(div);
 }
 
-// ✅ ИСПРАВЛЕННАЯ функция клика по чипсу (теперь 100% надежная)
+// ✅ ИСПРАВЛЕННАЯ функция клика по чипсу
 function applyChip(chip, val) {
+  if (window.event) {
+    window.event.preventDefault();
+    window.event.stopPropagation();
+  }
   const group = chip.closest('.form-group');
   const input = group ? group.querySelector('input') : null;
   if (input) {
@@ -400,7 +404,7 @@ function updatePositionNumbers() {
   });
 }
 
-// ✅ ОБНОВЛЕННАЯ функция добавления строки с новыми полями и правильной сеткой
+// ✅ ОБНОВЛЕННАЯ функция добавления строки (Новый порядок полей + Парсинг ссылки)
 function addDetailRow(data) {
   data = data || {};
   const container = document.getElementById('purchase-items-container');
@@ -445,25 +449,13 @@ function addDetailRow(data) {
     </summary>
     <div class="pos-body">
       <div class="pos-main">
+        <!-- 1. Наименование -->
         <div class="form-group pg-name">
           <label>Наименование</label>
           <input type="text" class="det-name" value="${escapeHtml(nameVal)}" placeholder="Что закупаем"
             oninput="onDetNameInput(this)" onblur="smartParseItemLine(this); hideSuggestions();" onpaste="handleItemsPaste(event)">
         </div>
-        <div class="form-group pg-link">
-          <label>Ссылка</label>
-          <div class="link-input-wrapper">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            <input type="url" class="det-link" placeholder="https://..." value="${escapeHtml(linkVal)}">
-          </div>
-        </div>
-        <div class="form-group pg-qty">
-          <label>Кол-во</label>
-          <div class="unit-input">
-            <input type="number" class="det-qty" step="1" placeholder="1" value="${qtyVal}" oninput="calculateRowTotal(this)">
-            <span class="unit">шт.</span>
-          </div>
-        </div>
+        <!-- 2. Цена -->
         <div class="form-group pg-price">
           <label>Цена с НДС</label>
           <div class="unit-input">
@@ -471,24 +463,44 @@ function addDetailRow(data) {
             <span class="unit">₽</span>
           </div>
         </div>
+        <!-- 3. Кол-во -->
+        <div class="form-group pg-qty">
+          <label>Кол-во</label>
+          <div class="unit-input">
+            <input type="number" class="det-qty" step="1" placeholder="1" value="${qtyVal}" oninput="calculateRowTotal(this)">
+            <span class="unit">шт.</span>
+          </div>
+        </div>
+        <!-- 4. Ссылка -->
+        <div class="form-group pg-link">
+          <label>Ссылка</label>
+          <div class="link-input-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <input type="url" class="det-link" placeholder="https://..." value="${escapeHtml(linkVal)}" onblur="handleLinkBlur(this.value, this.closest('.pos-card'))">
+          </div>
+        </div>
       </div>
       <details class="pos-extra"${hasExtra ? ' open' : ''}>
-        <summary>Дополнительно: поставщик, артикул, цель, примечание</summary>
+        <summary>Дополнительно: цель, поставщик, артикул, примечание</summary>
         <div class="pos-grid">
-          <div class="form-group pg-supplier">
-            <label>Поставщик</label>
-            <input type="text" class="det-supplier" value="${escapeHtml(supplierVal)}" placeholder="Например: ОЗОН">
-            ${supplierChips}
-          </div>
-          <div class="form-group pg-article">
-            <label>Артикул</label>
-            <input type="text" class="det-article" value="${escapeHtml(articleVal)}" placeholder="Код товара">
-          </div>
+          <!-- 1. Цель -->
           <div class="form-group pg-purpose">
             <label>Цель использования</label>
             <input type="text" class="det-purpose" value="${escapeHtml(purposeVal)}" placeholder="Зачем нужно">
             ${purposeChips}
           </div>
+          <!-- 2. Поставщик -->
+          <div class="form-group pg-supplier">
+            <label>Поставщик</label>
+            <input type="text" class="det-supplier" value="${escapeHtml(supplierVal)}" placeholder="Например: ОЗОН">
+            ${supplierChips}
+          </div>
+          <!-- 3. Артикул -->
+          <div class="form-group pg-article">
+            <label>Артикул</label>
+            <input type="text" class="det-article" value="${escapeHtml(articleVal)}" placeholder="Код товара">
+          </div>
+          <!-- 4. Примечание -->
           <div class="form-group pg-note">
             <label>Примечание</label>
             <input type="text" class="det-note" value="${escapeHtml(noteVal)}" placeholder="Особые отметки">
@@ -536,6 +548,96 @@ function calculateAllTotals() {
   updateHeaderSum();
   if (createStep === 3) renderCreateSummary();
 }
+
+/* ============================================================
+   ПАРСИНГ ССЫЛОК (ВсеИнструменты + Универсальный)
+   ============================================================ */
+async function handleLinkBlur(url, card) {
+  if (!url || !url.trim()) return;
+  url = url.trim();
+
+  // Если корзина ВсеИнструменты
+  if (url.includes('vseinstrumenti.ru/cart')) {
+    const ok = await parseVseinstrumentiCart(url, card);
+    if (ok) return;
+  }
+  
+  // Универсальный парсинг
+  await parseLinkData(url, card);
+}
+
+async function parseVseinstrumentiCart(url, card) {
+  try {
+    const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+    const res = await fetch(proxy);
+    if (!res.ok) throw new Error('Network response was not ok');
+    const html = await res.text();
+
+    const match = html.match(/window\.__INITIAL_STATE__\s*=\s*({.+?});?\s*<\/script>/s);
+    if (match && match[1]) {
+      const state = JSON.parse(match[1]);
+      const cartItems = state?.cart?.items || state?.cartItems || state?.basket?.items || [];
+      if (cartItems.length > 0) {
+        const item = cartItems[0];
+        const name = item.name || item.title || '';
+        const price = item.price || item.cost || 0;
+        const qty = item.quantity || 1;
+        const article = item.article || item.sku || item.vendorCode || '';
+
+        if (name) {
+          card.querySelector('.det-name').value = name;
+          onDetNameInput(card.querySelector('.det-name'));
+        }
+        if (price) card.querySelector('.det-price').value = price;
+        if (qty) card.querySelector('.det-qty').value = qty;
+        if (article) card.querySelector('.det-article').value = article;
+        card.querySelector('.det-supplier').value = 'ВсеИнструменты';
+
+        calculateRowTotal(card.querySelector('.det-price'));
+        return true;
+      }
+    }
+  } catch (e) {
+    console.warn('Vseinstrumenti parse error:', e);
+  }
+  return false;
+}
+
+async function parseLinkData(url, card) {
+  try {
+    const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+    const res = await fetch(proxy);
+    if (!res.ok) throw new Error('Network response was not ok');
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+
+    const title = doc.querySelector('h1')?.innerText?.trim() || '';
+    const priceText = doc.querySelector('.price, .product-price, [itemprop="price"], .product__price')?.innerText || '';
+    const article = doc.querySelector('.article, .sku, [itemprop="sku"]')?.innerText?.trim() || '';
+    const supplier = doc.querySelector('.supplier, .brand, [itemprop="brand"]')?.innerText?.trim() || '';
+
+    if (title && !card.querySelector('.det-name').value) {
+      card.querySelector('.det-name').value = title;
+      onDetNameInput(card.querySelector('.det-name'));
+    }
+    if (priceText) {
+      const num = parseFloat(priceText.replace(/[^\d.,]/g, '').replace(',', '.'));
+      if (num && !card.querySelector('.det-price').value) {
+        card.querySelector('.det-price').value = num;
+        calculateRowTotal(card.querySelector('.det-price'));
+      }
+    }
+    if (article && !card.querySelector('.det-article').value) {
+      card.querySelector('.det-article').value = article;
+    }
+    if (supplier && !card.querySelector('.det-supplier').value) {
+      card.querySelector('.det-supplier').value = supplier;
+    }
+  } catch (e) {
+    console.warn('Parse error:', e);
+  }
+}
+
 
 /* ============================================================
    МОДАЛКА "ВЫБРАТЬ ИЗ ПРОШЛЫХ"
