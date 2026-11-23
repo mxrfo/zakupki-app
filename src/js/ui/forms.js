@@ -1,6 +1,11 @@
 // js/forms.js — Обработка форм + мастер создания + автоподсказки из кэша
 
 /* ============================================================
+   ⚠️ ВАЖНО: ЗАМЕНИТЕ ЭТУ ССЫЛКУ НА ВАШУ ССЫЛКУ ОТ CLOUDFLARE!
+   ============================================================ */
+const MY_PROXY_URL = 'https://zakupki-proxy.ваш-ник.workers.dev/?url=';
+
+/* ============================================================
    RESIZABLE COLUMNS (модалка данных)
    ============================================================ */
 function initResizableTable(tableId) {
@@ -405,7 +410,7 @@ function updatePositionNumbers() {
   });
 }
 
-// ✅ ОБНОВЛЕННАЯ функция добавления строки
+// ✅ ОБНОВЛЕННАЯ функция добавления строки (Порядок полей + Кнопка парсера + Data-атрибуты чипсов)
 function addDetailRow(data) {
   data = data || {};
   const container = document.getElementById('purchase-items-container');
@@ -543,7 +548,7 @@ function calculateAllTotals() {
 }
 
 /* ============================================================
-   ПАРСИНГ ССЫЛОК (Кнопка)
+   ПАРСИНГ ССЫЛОК (Через Cloudflare Worker)
    ============================================================ */
 async function handleLinkParse(btn) {
   const card = btn.closest('.pos-card');
@@ -564,28 +569,26 @@ async function handleLinkParse(btn) {
     }
   } catch (e) {
     console.warn(e);
+    showToast('Ошибка при загрузке страницы', 'error');
   }
 
   btn.disabled = false;
   btn.innerText = originalText;
 
-  if (!success) {
-    // showToast('Не удалось распознать данные. Сайт может блокировать парсинг.', 'error');
-    // Тост выводится внутри parseLinkData, чтобы не дублировать
-  } else {
+  if (success) {
     showToast('Данные успешно подтянуты!', 'success');
+  } else if (!url.includes('ozon.ru')) { 
+    showToast('Не удалось распознать данные. Заполните вручную.', 'error');
   }
 }
 
-// Парсер ВсеИнструменты
+// Парсер ВсеИнструменты (через наш прокси)
 async function parseVseinstrumentiCart(url, card) {
   try {
-    const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
-    const res = await fetch(proxy);
+    const res = await fetch(MY_PROXY_URL + encodeURIComponent(url));
     if (!res.ok) throw new Error('Network error');
     const html = await res.text();
 
-    // Ищем JSON состояние
     const match = html.match(/window\.__INITIAL_STATE__\s*=\s*({.+?});?\s*<\/script>/s);
     if (match && match[1]) {
       const state = JSON.parse(match[1]);
@@ -616,47 +619,19 @@ async function parseVseinstrumentiCart(url, card) {
   return false;
 }
 
-// ✅ ОБНОВЛЕННЫЙ Универсальный парсер (с перебором прокси и таймаутом)
+// Универсальный парсер (через наш прокси)
 async function parseLinkData(url, card) {
-  const proxies = [
-    'https://api.allorigins.win/raw?url=',
-    'https://corsproxy.io/?url=',
-    'https://api.codetabs.com/v1/proxy?quest=',
-    'https://thingproxy.freeboard.io/fetch/'
-  ];
-
-  let html = null;
-  let lastError = null;
-
-  for (const proxy of proxies) {
-    try {
-      const proxyUrl = proxy + encodeURIComponent(url);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 секунд таймаут
-      
-      const res = await fetch(proxyUrl, { signal: controller.signal });
-      if (res.ok) {
-        html = await res.text();
-      }
-      clearTimeout(timeoutId);
-
-      if (html && html.includes('<html')) {
-        console.log(`Парсинг успешен через прокси: ${proxy}`);
-        break; 
-      }
-    } catch (e) {
-      lastError = e;
-      console.warn(`Прокси ${proxy} не сработал:`, e.message);
-    }
-  }
-
-  if (!html) {
-    console.error('Все прокси вернули ошибку.', lastError);
-    showToast('Не удалось загрузить страницу. Попробуйте позже или введите данные вручную.', 'error');
-    return false;
-  }
-
   try {
+    const res = await fetch(MY_PROXY_URL + encodeURIComponent(url));
+    if (!res.ok) throw new Error('Network error');
+    const html = await res.text();
+    
+    // Проверяем, что это не капча
+    if (html.includes('captcha') || html.includes('Доступ ограничен')) {
+      showToast('Сайт запросил капчу. Попробуйте позже.', 'error');
+      return false;
+    }
+
     const doc = new DOMParser().parseFromString(html, 'text/html');
 
     let title = doc.querySelector('meta[property="og:title"]')?.content || doc.querySelector('h1')?.innerText?.trim() || '';
