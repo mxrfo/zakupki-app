@@ -373,7 +373,7 @@ function renderEmptyState() {
   container.appendChild(div);
 }
 
-// ✅ ИСПРАВЛЕННАЯ функция клика по чипсу (теперь работает 100%)
+// ✅ ИСПРАВЛЕННАЯ функция клика по чипсу
 function applyChip(chip) {
   if (window.event) {
     window.event.preventDefault();
@@ -405,7 +405,7 @@ function updatePositionNumbers() {
   });
 }
 
-// ✅ ОБНОВЛЕННАЯ функция добавления строки (Кнопка парсера + Data-атрибуты для чипсов)
+// ✅ ОБНОВЛЕННАЯ функция добавления строки
 function addDetailRow(data) {
   data = data || {};
   const container = document.getElementById('purchase-items-container');
@@ -430,7 +430,6 @@ function addDetailRow(data) {
   
   const hasExtra = !!(supplierVal || articleVal || purposeVal || noteVal);
   
-  // Используем data-val для безопасной передачи строк
   const purposeChips = _topPurposes.length
     ? '<div class="chip-row"><span class="chip-hint">Частые варианты</span>' + 
       _topPurposes.map(function (p) { return `<span class="chip" data-val="${escapeHtml(p)}" onclick="applyChip(this)">${escapeHtml(p)}</span>`; }).join('') + '</div>'
@@ -571,7 +570,8 @@ async function handleLinkParse(btn) {
   btn.innerText = originalText;
 
   if (!success) {
-    showToast('Не удалось распознать данные. Сайт может блокировать парсинг.', 'error');
+    // showToast('Не удалось распознать данные. Сайт может блокировать парсинг.', 'error');
+    // Тост выводится внутри parseLinkData, чтобы не дублировать
   } else {
     showToast('Данные успешно подтянуты!', 'success');
   }
@@ -616,20 +616,52 @@ async function parseVseinstrumentiCart(url, card) {
   return false;
 }
 
-// Универсальный парсер (через OpenGraph мета-теги)
+// ✅ ОБНОВЛЕННЫЙ Универсальный парсер (с перебором прокси и таймаутом)
 async function parseLinkData(url, card) {
+  const proxies = [
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?url=',
+    'https://api.codetabs.com/v1/proxy?quest=',
+    'https://thingproxy.freeboard.io/fetch/'
+  ];
+
+  let html = null;
+  let lastError = null;
+
+  for (const proxy of proxies) {
+    try {
+      const proxyUrl = proxy + encodeURIComponent(url);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 секунд таймаут
+      
+      const res = await fetch(proxyUrl, { signal: controller.signal });
+      if (res.ok) {
+        html = await res.text();
+      }
+      clearTimeout(timeoutId);
+
+      if (html && html.includes('<html')) {
+        console.log(`Парсинг успешен через прокси: ${proxy}`);
+        break; 
+      }
+    } catch (e) {
+      lastError = e;
+      console.warn(`Прокси ${proxy} не сработал:`, e.message);
+    }
+  }
+
+  if (!html) {
+    console.error('Все прокси вернули ошибку.', lastError);
+    showToast('Не удалось загрузить страницу. Попробуйте позже или введите данные вручную.', 'error');
+    return false;
+  }
+
   try {
-    const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
-    const res = await fetch(proxy);
-    if (!res.ok) throw new Error('Network error');
-    const html = await res.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
 
-    // 1. Пытаемся взять OG-теги (Самый надежный способ)
     let title = doc.querySelector('meta[property="og:title"]')?.content || doc.querySelector('h1')?.innerText?.trim() || '';
     let priceStr = doc.querySelector('meta[property="product:price:amount"]')?.content || doc.querySelector('meta[property="og:price:amount"]')?.content || '';
     
-    // 2. Если нет OG-цены, ищем в тексте
     if (!priceStr) {
       priceStr = doc.querySelector('.price, .product-price, [itemprop="price"], .product__price')?.innerText || '';
     }
@@ -664,13 +696,12 @@ async function parseLinkData(url, card) {
       parsedSomething = true;
     }
 
-    // Если это Ozon или WB, ставим поставщика по умолчанию
     if (url.includes('ozon.ru')) card.querySelector('.det-supplier').value = 'Ozon';
     else if (url.includes('wildberries.ru')) card.querySelector('.det-supplier').value = 'Wildberries';
 
     return parsedSomething;
   } catch (e) {
-    console.warn('Parse error:', e);
+    console.warn('Ошибка разбора HTML:', e);
     return false;
   }
 }
