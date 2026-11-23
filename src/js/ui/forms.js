@@ -622,48 +622,111 @@ async function parseVseinstrumentiCart(url, card) {
 // Универсальный парсер (JSON-LD -> OpenGraph -> Извлечение из URL)
 async function parseLinkData(url, card) {
   try {
-    // Fetch is intentionally kept through the existing Cloudflare Worker Proxy.
     const res = await fetch(MY_PROXY_URL + encodeURIComponent(url));
-    if (!res.ok) throw new Error('Network error');
+    if (!res.ok) throw new Error('Proxy HTTP ' + res.status);
     const html = await res.text();
+    if (!html || html.length < 200) throw new Error('Proxy returned empty/short HTML');
 
-    if (html.includes('captcha') || html.includes('Доступ ограничен')) {
-      showToast('Сайт запросил капчу. Попробуйте позже.', 'error');
+    if (/captcha|Доступ ограничен|проверка браузера/i.test(html)) {
+      showToast('Сайт запросил проверку/капчу. Данные товара не получены.', 'error');
       return false;
     }
 
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    const parsed = window.LinkParser && typeof window.LinkParser.parseDocument === 'function'
-      ? window.LinkParser.parseDocument(doc, url)
-      : {};
-    let parsedSomething = false;
-    const title = parsed.title || '';
-    const price = Number(parsed.price) || 0;
-    const article = parsed.article || '';
+    let title = '', price = 0, article = '';
 
-    if (title && title.length > 2) {
-      const nameInput = card.querySelector('.det-name');
-      nameInput.value = title;
-      onDetNameInput(nameInput);
-      parsedSomething = true;
+    // Parse localized price safely (e.g. "2 938 ₽", "2 938,00", "2938.00 RUB").
+    const parsePrice = (value) => {
+      if (value === null || value === undefined) return 0;
+      if (typeof value === 'number') return value > 0 ? value : 0;
+      let str = String(value).replace(/\u00a0/g, ' ').trim();
+      const match = str.match(/[\d\s]+(?:[.,]\d{1,2})?/);
+      if (!match) return 0;
+      str = match[0].replace(/[\s]/g, '').replace(',', '.');
+      const n = Number(str);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    };
+    const cleanText = (value) => typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+    const first = (...values) => values.find(v => v !== undefined && v !== null && String(v).trim() !== '') || '';
+    const nodes = [];
+    const walk = (obj, depth = 0) => {
+      if (!obj || depth > 12) return;
+      if (Array.isArray(obj)) { obj.forEach(v => walk(v, depth + 1)); return; }
+      if (typeof obj !== 'object') return;
+      nodes.push(obj);
+      Object.values(obj).forEach(v => walk(v, depth + 1));
+    };
+    // Schema.org, Next/Nuxt state and other embedded product JSON objects.
+    doc.querySelectorAll('script[type="application/ld+json"],script#__NEXT_DATA__,script[type="application/json"],script:not([src])').forEach(script => {
+      const text = script.textContent || '';
+      if (!text.trim() || text.length > 5e6) return;
+      try { walk(JSON.parse(text)); } catch (_) {
+        // Some state scripts wrap JSON in assignment; attempt to parse the first object/array.
+        const m = text.match(/[\[{][\s\S]*[\]}]/);
+        if (m) try { walk(JSON.parse(m[0])); } catch (_) {}
+      }
+    });
+    const isProduct = (o) => {
+      const type = o['@type'];
+      return type === 'Product' || (Array.isArray(type) && type.includes('Product')) || !!(o.sku || o.productID || o.mpn) && !!(o.name || o.title);
+    };
+    const offersPrice = (offers) => {
+      if (!offers) return 0;
+      if (Array.isArray(offers)) return offers.map(offersPrice).find(v => v > 0) || 0;
+      if (typeof offers !== 'object') return parsePrice(offers);
+      return parsePrice(first(offers.price, offers.lowPrice, offers.highPrice, offers.priceSpecification?.price, offers.priceSpecification?.minPrice));
+    };
+    // Prefer objects that clearly describe a product; choose the richest candidate.
+    const products = nodes.filter(isProduct).sort((a,b) => Object.keys(b).length - Object.keys(a).length);
+    for (const product of products) {
+      title = title || cleanText(first(product.name, product.title));
+      article = article || cleanText(first(product.sku, product.mpn, product.productID, product.gtin13, product.gtin12, product.gtin14, product.gtin8));
+      price = price || offersPrice(product.offers);
     }
-    const priceInput = card.querySelector('.det-price');
-    if (price > 0 && !priceInput.value) {
-      priceInput.value = price;
-      calculateRowTotal(priceInput);
-      parsedSomething = true;
-    }
-    if (article) {
-      card.querySelector('.det-article').value = article;
-      parsedSomething = true;
+    // Search all embedded JSON nodes as fallback for storefront state objects.
+    for (const node of nodes) {
+      title = title || cleanText(first(node.productName, node.productTitle, node.name, node.title));
+      article = article || cleanText(first(node.sku, node.article, node.vendorCode, node.productID, node.mpn, node.gtin));
+      price = price || parsePrice(first(node.price, node.finalPrice, node.currentPrice, node.salePrice, node.priceValue, node.lowPrice));
     }
 
-    // Store extra extracted fields on the card for later UI expansion without
-    // changing the current purchase form or its submission data structure.
-    card._parsedProductData = parsed;
-    card.dataset.parsedProduct = JSON.stringify(parsed);
+    // DOM/meta fallback. Meta price often uses content rather than visible text.
+    title = title || cleanText(first(doc.querySelector('meta[property="og:title"]')?.content,
+      doc.querySelector('meta[name="twitter:title"]')?.content, doc.querySelector('h1')?.textContent));
+    const metaPrice = first(doc.querySelector('meta[property="product:price:amount"]')?.content,
+      doc.querySelector('meta[property="og:price:amount"]')?.content,
+      doc.querySelector('meta[itemprop="price"]')?.content,
+      doc.querySelector('[itemprop="price"]')?.getAttribute('content'));
+    price = price || parsePrice(metaPrice);
+    article = article || cleanText(first(doc.querySelector('[itemprop="sku"]')?.content,
+      doc.querySelector('[itemprop="sku"]')?.textContent,
+      doc.querySelector('[data-product-sku]')?.getAttribute('data-product-sku')));
 
-    // Supplier is still determined using the existing domain mapping.
+    // Site-specific selectors for Vseinstrumenti product pages.
+    if (new URL(url).hostname.includes('vseinstrumenti.ru')) {
+      title = title || cleanText(first(doc.querySelector('[data-qa="product-title"]')?.textContent,
+        doc.querySelector('[data-testid="product-title"]')?.textContent, doc.querySelector('h1')?.textContent));
+      price = price || parsePrice(first(doc.querySelector('[data-qa*="price"]')?.textContent,
+        doc.querySelector('[data-testid*="price"]')?.textContent, doc.querySelector('[class*="Price"]')?.textContent,
+        doc.querySelector('[class*="price"]')?.textContent));
+      article = article || cleanText(first(doc.querySelector('[data-qa*="sku"]')?.textContent,
+        doc.querySelector('[data-testid*="sku"]')?.textContent, doc.querySelector('[class*="article"]')?.textContent));
+    }
+    // Broad visible text fallback: match currency amounts without swallowing unrelated numbers.
+    if (!price) {
+      const bodyText = doc.body?.innerText || '';
+      const candidates = bodyText.match(/(?:Цена|Стоимость|В корзину)[\s\S]{0,80}?([\d\s\u00a0]+(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?)/i);
+      if (candidates) price = parsePrice(candidates[1]);
+    }
+
+    // Avoid treating the product page's numeric URL ID as the article/SKU.
+    if (!article) {
+      const urlObj = new URL(url);
+      if (urlObj.hostname.includes('ozon.ru')) article = url.match(/-(\d{6,})\/?$/)?.[1] || '';
+      else if (urlObj.hostname.includes('wildberries.ru')) article = url.match(/\/catalog\/(\d+)\//)?.[1] || '';
+    }
+
+    // Supplier is independent of parse success. Do not count it as parsed product data.
     const host = new URL(url).hostname.replace(/^www\./, '');
     let supplierName = '';
     if (host.includes('ozon.ru')) supplierName = 'Ozon';
@@ -672,16 +735,26 @@ async function parseLinkData(url, card) {
     else if (host.includes('yandex.ru') || host.includes('ya.ru')) supplierName = 'Яндекс.Маркет';
     else if (host.includes('leroymerlin.ru')) supplierName = 'Леруа Мерлен';
     else if (host.includes('citilink.ru')) supplierName = 'Ситилинк';
-    else {
-      const parts = host.split('.');
-      supplierName = parts.length >= 2 ? parts[parts.length - 2] : host;
-      supplierName = supplierName.charAt(0).toUpperCase() + supplierName.slice(1);
+    else { const parts = host.split('.'); supplierName = parts.length >= 2 ? parts[parts.length - 2] : host; supplierName = supplierName.charAt(0).toUpperCase() + supplierName.slice(1); }
+    const supplierInput = card.querySelector('.det-supplier');
+    if (supplierInput && !supplierInput.value) supplierInput.value = supplierName;
+
+    // Fill only empty fields so manually entered values are preserved.
+    let productDataFound = false;
+    const nameInput = card.querySelector('.det-name');
+    const priceInput = card.querySelector('.det-price');
+    const articleInput = card.querySelector('.det-article');
+    if (title && title.length > 2 && nameInput && !nameInput.value.trim()) {
+      nameInput.value = title; onDetNameInput(nameInput); productDataFound = true;
     }
-    if (!card.querySelector('.det-supplier').value) {
-      card.querySelector('.det-supplier').value = supplierName;
-      parsedSomething = true;
+    if (price > 0 && priceInput && !priceInput.value.trim()) {
+      priceInput.value = String(price); calculateRowTotal(priceInput); productDataFound = true;
     }
-    return parsedSomething;
+    if (article && articleInput && !articleInput.value.trim()) {
+      articleInput.value = article; productDataFound = true;
+    }
+    console.info('[Link parser] result', { host, titleFound: !!title, priceFound: price > 0, articleFound: !!article, htmlLength: html.length });
+    return productDataFound;
   } catch (e) {
     console.warn('Ошибка разбора HTML:', e);
     return false;
