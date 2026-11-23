@@ -101,7 +101,10 @@
 <div id="modal-create" class="modal-overlay">
   <div class="modal" id="create-modal-content">
     <div class="modal-header">
-      <h2 id="create-modal-title">Создать запрос на закупку</h2>
+      <div class="modal-header-title">
+        <h2 id="create-modal-title">Создать запрос на закупку</h2>
+        <span class="modal-header-sum hidden" id="create-header-sum">0.00 ₽</span>
+      </div>
       <button onclick="closeModal('modal-create')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
     </div>
 
@@ -125,7 +128,7 @@
         <input type="hidden" id="edit-item-id">
         <input type="hidden" id="create-amount-product" value="">
 
-        <!-- ШАГ 1 -->
+        <!-- ШАГ 1: поля в блоках без заголовков -->
         <div class="step-panel active" data-step="1">
           <div class="form-grid-2x2">
             <div class="form-group fg-full">
@@ -149,7 +152,7 @@
           </div>
         </div>
 
-        <!-- ШАГ 2 -->
+        <!-- ШАГ 2: позиции (без нижней панели суммы — она в шапке) -->
         <div class="step-panel" data-step="2">
           <div class="form-group">
             <label>Краткое описание *</label>
@@ -167,10 +170,6 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px; vertical-align: middle;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Добавить позицию
           </button>
-          <div class="purchase-summary-bar">
-            <span class="purchase-summary-label">Сумма позиций (без доставки):</span>
-            <span class="purchase-summary-value" id="create-total-sum">0.00 ₽</span>
-          </div>
         </div>
 
         <!-- ШАГ 3 -->
@@ -186,29 +185,6 @@
         <button type="submit" class="btn btn-primary" id="btn-save-create" style="display:none">Сохранить</button>
       </div>
     </form>
-  </div>
-</div>
-
-<!-- ✅ МОДАЛКА "ВЫБРАТЬ ИЗ ПРОШЛЫХ" -->
-<div id="modal-past" class="modal-overlay">
-  <div class="modal" style="max-width: 760px;">
-    <div class="modal-header">
-      <h2>Выбрать позиции из прошлых закупок</h2>
-      <button onclick="closeModal('modal-past')" style="background:none;border:none;cursor:pointer;font-size:24px;color:#94a3b8;">&times;</button>
-    </div>
-    <div class="modal-body">
-      <div class="past-toolbar">
-        <div class="search-bar" style="width:100%;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="21.65"/></svg>
-          <input type="text" id="past-search" placeholder="Поиск по наименованию..." oninput="renderPastItems()">
-        </div>
-      </div>
-      <div class="past-list" id="past-list"></div>
-    </div>
-    <div class="modal-footer">
-      <button type="button" class="btn" onclick="closeModal('modal-past')">Отмена</button>
-      <button type="submit" class="btn btn-primary" id="btn-past-add" onclick="addSelectedPastItems()">Добавить выбранные</button>
-    </div>
   </div>
 </div>
 

@@ -82,13 +82,14 @@ function goCreateStep(n, dir) {
     s.classList.toggle('done', sn < n);
   });
   const fill = document.getElementById('cs-fill');
-  if (fill) fill.style.width = ((n - 1) / 2 * 100) + '%';
+  if (fill) fill.style.width = ((n - 1) / 2 * 66.66) + '%'; // трек = 66.66% (между центрами шагов)
   const back = document.getElementById('btn-create-back');
   const next = document.getElementById('btn-create-next');
   const save = document.getElementById('btn-save-create');
   if (back) back.style.display = n > 1 ? '' : 'none';
   if (next) next.style.display = n < 3 ? '' : 'none';
   if (save) save.style.display = n === 3 ? '' : 'none';
+  updateHeaderSum();
   if (n === 3) renderCreateSummary();
   const mb = document.querySelector('#modal-create .modal-body');
   if (mb) mb.scrollTop = 0;
@@ -176,21 +177,24 @@ function buildItemSuggestions() {
     const names = Array.isArray(it[actualFields.detailName]) ? it[actualFields.detailName] : (it[actualFields.detailName] ? [it[actualFields.detailName]] : []);
     const purposes = Array.isArray(it[actualFields.detailPurpose]) ? it[actualFields.detailPurpose] : (it[actualFields.detailPurpose] ? [it[actualFields.detailPurpose]] : []);
     const prices = Array.isArray(it[actualFields.detailPrice]) ? it[actualFields.detailPrice] : (it[actualFields.detailPrice] ? [it[actualFields.detailPrice]] : []);
+    const qtys = Array.isArray(it[actualFields.detailQty]) ? it[actualFields.detailQty] : (it[actualFields.detailQty] ? [it[actualFields.detailQty]] : []);
     const links = Array.isArray(it[actualFields.detailLink]) ? it[actualFields.detailLink] : (it[actualFields.detailLink] ? [it[actualFields.detailLink]] : []);
     const sups = actualFields.detailSupplier ? (Array.isArray(it[actualFields.detailSupplier]) ? it[actualFields.detailSupplier] : (it[actualFields.detailSupplier] ? [it[actualFields.detailSupplier]] : [])) : [];
     names.forEach(function (nm, i) {
       const key = (nm || '').trim().toLowerCase();
       if (!key) return;
       const price = parseAmount(prices[i]) || 0;
+      const qty = parseAmount(qtys[i]) || 0;          // ✅ количество
       const sup = (sups[i] || '').trim();
       const pur = (purposes[i] || '').trim();
       const lnk = (links[i] || '').trim();
       if (!map.has(key)) {
-        map.set(key, { name: nm.trim(), price: price, supplier: sup, purpose: pur, link: lnk, count: 1 });
+        map.set(key, { name: nm.trim(), price: price, qty: qty, supplier: sup, purpose: pur, link: lnk, count: 1 });
       } else {
         const rec = map.get(key);
         rec.count++;
-        if (price > 0) rec.price = price;        // последняя ненулевая цена
+        if (price > 0) rec.price = price;
+        if (qty > 0) rec.qty = qty;                   // ✅ последнее ненулевое кол-во
         if (sup) rec.supplier = sup;
         if (pur) rec.purpose = pur;
         if (lnk) rec.link = lnk;
@@ -198,7 +202,6 @@ function buildItemSuggestions() {
     });
   });
   _itemSuggestions = Array.from(map.values()).sort((a, b) => b.count - a.count);
-  // топ целей и поставщиков
   const pc = new Map(), sc = new Map();
   _itemSuggestions.forEach(function (r) {
     if (r.purpose) pc.set(r.purpose, (pc.get(r.purpose) || 0) + r.count);
@@ -270,6 +273,7 @@ function fillCardFromSuggestion(card, rec) {
   if (!rec) return;
   card.querySelector('.det-name').value = rec.name;
   if (rec.price > 0) card.querySelector('.det-price').value = rec.price;
+  if (rec.qty > 0) card.querySelector('.det-qty').value = rec.qty;   // ✅
   if (rec.supplier) card.querySelector('.det-supplier').value = rec.supplier;
   if (rec.purpose) card.querySelector('.det-purpose').value = rec.purpose;
   if (rec.link) card.querySelector('.det-link').value = rec.link;
@@ -384,8 +388,12 @@ function addDetailRow(data) {
   const priceVal = data.price || '';
   const qtyVal = data.qty || '';
   const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || 0;
-  const purposeChips = _topPurposes.length ? '<div class="chip-row">' + _topPurposes.map(function (p) { return '<span class="chip" onclick="applyChip(this)"></span>'; }).join('') + '</div>' : '';
-  const supplierChips = _topSuppliers.length ? '<div class="chip-row">' + _topSuppliers.map(function (p) { return '<span class="chip" onclick="applyChip(this)"></span>'; }).join('') + '</div>' : '';
+  const purposeChips = _topPurposes.length
+    ? '<div class="chip-row"><span class="chip-hint">Частые варианты из прошлых закупок</span>' + _topPurposes.map(function () { return '<span class="chip" onclick="applyChip(this)"></span>'; }).join('') + '</div>'
+    : '';
+  const supplierChips = _topSuppliers.length
+    ? '<div class="chip-row"><span class="chip-hint">Частые поставщики из прошлых закупок</span>' + _topSuppliers.map(function () { return '<span class="chip" onclick="applyChip(this)"></span>'; }).join('') + '</div>'
+    : '';
   details.innerHTML = `
     <summary class="pos-head">
       <span class="pos-chev"></span>
@@ -430,7 +438,6 @@ function addDetailRow(data) {
         </div>
       </div>
     </div>`;
-  // подставить текст в чипсы (после вставки в DOM)
   container.appendChild(details);
   const pchips = details.querySelectorAll('.pg-purpose .chip');
   _topPurposes.forEach(function (p, i) { if (pchips[i]) { pchips[i].textContent = p; pchips[i].dataset.val = p; } });
@@ -472,6 +479,14 @@ function calculateRowTotal(input) {
   calculateAllTotals();
 }
 
+function updateHeaderSum() {
+  const el = document.getElementById('create-header-sum');
+  if (!el) return;
+  const sum = parseFloat(document.getElementById('create-amount-product').value) || 0;
+  el.innerText = sum.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+  el.classList.toggle('hidden', sum <= 0);
+}
+
 function calculateAllTotals() {
   let sum = 0;
   document.querySelectorAll('.pos-card').forEach(function (card) {
@@ -481,8 +496,7 @@ function calculateAllTotals() {
   });
   const amountInput = document.getElementById('create-amount-product');
   amountInput.value = sum > 0 ? sum.toFixed(2) : '';
-  const totalEl = document.getElementById('create-total-sum');
-  if (totalEl) totalEl.innerText = sum > 0 ? sum.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽' : '0.00 ₽';
+  updateHeaderSum();
   if (createStep === 3) renderCreateSummary();
 }
 
@@ -526,7 +540,10 @@ function addSelectedPastItems() {
   if (!checks.length) return showToast('Выберите хотя бы одну позицию', 'error');
   checks.forEach(function (ch) {
     const rec = list._filtered[+ch.dataset.idx];
-    addDetailRow({ name: rec.name, price: rec.price || '', qty: '', supplier: rec.supplier || '', purpose: rec.purpose || '', link: rec.link || '' });
+    addDetailRow({
+      name: rec.name, price: rec.price || '', qty: rec.qty || '',   // ✅ qty из истории
+      supplier: rec.supplier || '', purpose: rec.purpose || '', link: rec.link || ''
+    });
   });
   closeModal('modal-past');
   showToast('Добавлено позиций: ' + checks.length, 'success');
@@ -553,18 +570,22 @@ function openCreateModal() {
   document.getElementById('form-create').reset();
   document.getElementById('edit-item-id').value = '';
   document.getElementById('purchase-items-container').innerHTML = '';
+  
+  // Сброс суммы и обновление заголовка модалки
   document.getElementById('create-amount-product').value = '';
-  document.getElementById('create-total-sum').innerText = '0.00 ₽';
+  updateHeaderSum();
+
   document.getElementById('btn-save-create').disabled = false;
   document.getElementById('btn-save-create').innerText = 'Сохранить';
   document.getElementById('create-modal-content').style.borderTop = '';
   document.querySelectorAll('#modal-create .field-error').forEach(el => el.classList.remove('field-error'));
+  
   const sd = document.getElementById('create-short-desc');
   if (sd) delete sd.dataset.autofilled;
 
   populateCreateSection();
-  buildItemSuggestions();      // прогреваем кэш подсказок
-  renderEmptyState();          // позиции необязательны — пустое состояние
+  buildItemSuggestions();
+  renderEmptyState();
   goCreateStep(1, 'forward');
   document.getElementById('modal-create').style.display = 'flex';
 }
@@ -572,6 +593,7 @@ function openCreateModal() {
 function openEditModal(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
+  
   document.getElementById('create-modal-title').innerText = 'Редактировать закупку';
   document.getElementById('edit-item-id').value = item.id;
 
@@ -592,7 +614,10 @@ function openEditModal(id) {
   populateCreateSection();
   const curSec = String(Array.isArray(item[actualFields.section]) ? item[actualFields.section][0] : (item[actualFields.section] || ''));
   const curDir = String(Array.isArray(item[actualFields.direction]) ? item[actualFields.direction][0] : (item[actualFields.direction] || ''));
-  if (curSec) { document.getElementById('create-section').value = curSec; updateDirectionsCreate(curDir); }
+  if (curSec) { 
+    document.getElementById('create-section').value = curSec; 
+    updateDirectionsCreate(curDir); 
+  }
 
   const container = document.getElementById('purchase-items-container');
   container.innerHTML = '';
@@ -622,8 +647,10 @@ function openEditModal(id) {
       supplier: arrS[i] || ''
     });
   }
+
   renderEmptyState();
-  calculateAllTotals();
+  calculateAllTotals(); // Эта функция сама внутри себя вызовет updateHeaderSum()
+
   const stage = spStages[item.stageId];
   document.getElementById('create-modal-content').style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
   goCreateStep(1, 'forward');
