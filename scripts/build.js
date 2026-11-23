@@ -1,15 +1,20 @@
+
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
+const esbuild = require('esbuild');
 
 const INPUT_HTML = 'src/index.html';
 const OUTPUT_HTML = 'dist/index.html';
 const CSS_FILE = 'src/css/styles.css';
 
 const now = new Date();
-const timestamp = now.getFullYear() +
+
+const timestamp =
+  now.getFullYear() +
   String(now.getMonth() + 1).padStart(2, '0') +
-  String(now.getDate()).padStart(2, '0') + '_' +
+  String(now.getDate()).padStart(2, '0') +
+  '_' +
   String(now.getHours()).padStart(2, '0') +
   String(now.getMinutes()).padStart(2, '0') +
   String(now.getSeconds()).padStart(2, '0');
@@ -20,6 +25,7 @@ const JS_FILES_ORDER = [
   'src/js/core/config.js',
   'src/js/core/state.js',
   'src/js/core/utils.js',
+  'src/js/core/product-name-normalizer.js',
   'src/js/api/bot.js',
   'src/js/api/api.js',
   'src/js/api/cache.js',
@@ -36,81 +42,403 @@ const JS_FILES_ORDER = [
 
 const BUILD_ID_FILE = 'src/js/core/config.js';
 
+// ============================================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ============================================================
+
 function ensureDir(dir) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true });
 }
+
+// ============================================================
+// ОБНОВЛЕНИЕ BUILD ID
+// ============================================================
 
 function injectBuildId(content, buildId) {
-  const re = /let\s+APP_BUILD_ID\s*=\s*'[^']*'\s*;/;
+  const re = /\blet\s+APP_BUILD_ID\s*=\s*(['"])[^'"]*\1\s*;/;
+
   if (!re.test(content)) {
-    console.warn('⚠️  В ' + BUILD_ID_FILE + ' не найден маркер APP_BUILD_ID');
+    console.warn(
+      `⚠️ В ${BUILD_ID_FILE} не найден маркер APP_BUILD_ID`
+    );
+
     return content;
   }
-  return content.replace(re, "let APP_BUILD_ID = '" + buildId + "';");
+
+  return content.replace(
+    re,
+    `let APP_BUILD_ID = '${buildId}';`
+  );
 }
 
-function build() {
+// ============================================================
+// СБОРКА ТРАНСЛИТЕРАТОРА
+// ============================================================
+
+async function buildTransliterator() {
+  const result = await esbuild.build({
+    stdin: {
+      contents: `
+        const ImportedCyrillicToTranslit =
+          require('cyrillic-to-translit-js');
+
+        const CyrillicToTranslit =
+          ImportedCyrillicToTranslit.default ||
+          ImportedCyrillicToTranslit;
+
+        window.CyrillicToTranslit = CyrillicToTranslit;
+      `,
+      resolveDir: process.cwd(),
+      sourcefile: 'transliterator-entry.js',
+      loader: 'js'
+    },
+
+    bundle: true,
+    platform: 'browser',
+    format: 'iife',
+    target: ['es2018'],
+    minify: true,
+    write: false
+  });
+
+  if (!result.outputFiles || !result.outputFiles.length) {
+    throw new Error(
+      'Не удалось собрать библиотеку транслитерации.'
+    );
+  }
+
+  console.log(
+    '✅ Библиотека cyrillic-to-translit-js собрана'
+  );
+
+  return result.outputFiles[0].text;
+}
+
+// ============================================================
+// СБОРКА HUNSPELL И РУССКОГО СЛОВАРЯ
+// ============================================================
+
+async function buildRussianSpellChecker() {
+  const dictionaryPath = path.join(
+    process.cwd(),
+    'node_modules',
+    'dictionary-ru'
+  );
+
+  const affPath = path.join(dictionaryPath, 'index.aff');
+  const dicPath = path.join(dictionaryPath, 'index.dic');
+
+  if (!fs.existsSync(affPath) || !fs.existsSync(dicPath)) {
+    throw new Error(
+      `Файлы русского словаря Hunspell не найдены.
+
+Проверенные пути:
+${affPath}
+${dicPath}
+
+Проверь установку пакета dictionary-ru.`
+    );
+  }
+
+  console.log('📖 Читаю русский словарь Hunspell...');
+
+  const aff = fs.readFileSync(affPath, 'utf8');
+  const dic = fs.readFileSync(dicPath, 'utf8');
+
+  const contents = `
+    import nspell from 'nspell';
+
+    const spell = nspell({
+      aff: ${JSON.stringify(aff)},
+      dic: ${JSON.stringify(dic)}
+    });
+
+    window.RussianSpellChecker = {
+      correct(word) {
+        try {
+          const normalizedWord = String(word)
+            .toLowerCase()
+            .trim();
+
+          if (!normalizedWord) {
+            return false;
+          }
+
+          return spell.correct(normalizedWord);
+        } catch (error) {
+          console.warn(
+            '[RussianSpellChecker] Ошибка проверки:',
+            word,
+            error
+          );
+
+          return false;
+        }
+      }
+    };
+  `;
+
+  const result = await esbuild.build({
+    stdin: {
+      contents,
+      resolveDir: process.cwd(),
+      sourcefile: 'russian-spell-checker-entry.js',
+      loader: 'js'
+    },
+
+    bundle: true,
+    platform: 'browser',
+    format: 'iife',
+    target: ['es2018'],
+    minify: true,
+    write: false
+  });
+
+  if (!result.outputFiles || !result.outputFiles.length) {
+    throw new Error(
+      'Не удалось собрать русский словарь Hunspell.'
+    );
+  }
+
+  console.log('✅ Русский словарь Hunspell собран');
+
+  return result.outputFiles[0].text;
+}
+
+// ============================================================
+// ВСТРАИВАНИЕ CSS
+// ============================================================
+
+function replaceCssLink(html, css) {
+  const cssLinkPattern =
+    /<link\b(?=[^>]*\bhref\s*=\s*["'][^"']*styles\.css(?:\?[^"']*)?["'])[^>]*>/i;
+
+  if (!cssLinkPattern.test(html)) {
+    console.warn(
+      '⚠️ Ссылка на styles.css в HTML не найдена'
+    );
+
+    return html;
+  }
+
+  return html.replace(
+    cssLinkPattern,
+    `<style>\n${css}\n</style>`
+  );
+}
+
+// ============================================================
+// УДАЛЕНИЕ ПОДКЛЮЧЕНИЙ ИСХОДНЫХ JS-ФАЙЛОВ
+// ============================================================
+
+function removeSourceJsScripts(html) {
+  const sourceScriptPattern =
+    /<script\b(?=[^>]*\bsrc\s*=\s*["'][^"']*src\/js\/[^"']+\.js(?:\?[^"']*)?["'])[^>]*>\s*<\/script>/gi;
+
+  return html.replace(sourceScriptPattern, '');
+}
+
+// ============================================================
+// ВСТРАИВАНИЕ ОБЪЕДИНЁННОГО JAVASCRIPT
+// ============================================================
+
+function injectApplicationJs(html, js) {
+  if (/<\/body>/i.test(html)) {
+    return html.replace(
+      /<\/body>/i,
+      `<script>\n${js}\n</script>\n</body>`
+    );
+  }
+
+  throw new Error(
+    'В src/index.html не найден закрывающий тег </body>'
+  );
+}
+
+// ============================================================
+// СОЗДАНИЕ ZIP-АРХИВА
+// ============================================================
+
+async function createZip() {
+  ensureDir(path.dirname(ZIP_OUTPUT));
+
+  return new Promise((resolve, reject) => {
+    const output = fs.createWriteStream(ZIP_OUTPUT);
+
+    const archive = archiver('zip', {
+      zlib: { level: 9 }
+    });
+
+    output.on('close', () => {
+      console.log(
+        `✅ ZIP-архив создан: ${ZIP_OUTPUT} ` +
+        `(${(archive.pointer() / 1024).toFixed(1)} КБ)`
+      );
+
+      resolve();
+    });
+
+    output.on('error', reject);
+
+    archive.on('warning', (error) => {
+      if (error.code === 'ENOENT') {
+        console.warn(
+          '⚠️ Предупреждение архива:',
+          error.message
+        );
+      } else {
+        reject(error);
+      }
+    });
+
+    archive.on('error', reject);
+
+    archive.pipe(output);
+
+    archive.file(OUTPUT_HTML, {
+      name: 'index.html'
+    });
+
+    archive.finalize().catch(reject);
+  });
+}
+
+// ============================================================
+// ОСНОВНАЯ СБОРКА ПРИЛОЖЕНИЯ
+// ============================================================
+
+async function build() {
   console.log('🔨 Начинаю сборку...\n');
 
-  let css = '';
-  if (fs.existsSync(CSS_FILE)) {
-    css = fs.readFileSync(CSS_FILE, 'utf8');
-    console.log('✅ CSS загружен: ' + CSS_FILE + ' (' + (css.length / 1024).toFixed(1) + ' КБ)');
-  }
-
-  let js = '';
-  JS_FILES_ORDER.forEach(file => {
-    if (fs.existsSync(file)) {
-      let content = fs.readFileSync(file, 'utf8');
-      if (file === BUILD_ID_FILE) {
-        content = injectBuildId(content, timestamp);
-        console.log('🏷️  APP_BUILD_ID подставлен: ' + timestamp);
-      }
-      js += '\n\n// ============================================================\n';
-      js += '// МОДУЛЬ: ' + path.basename(file) + '\n';
-      js += '// ============================================================\n\n';
-      js += content;
-      console.log('✅ JS модуль: ' + file + ' (' + (content.length / 1024).toFixed(1) + ' КБ)');
-    } else {
-      console.error('❌ НЕ НАЙДЕН: ' + file);
-    }
-  });
+  ensureDir('dist');
 
   if (!fs.existsSync(INPUT_HTML)) {
-    console.error('❌ HTML файл не найден: ' + INPUT_HTML);
-    process.exit(1);
+    throw new Error(
+      `HTML-файл не найден: ${INPUT_HTML}`
+    );
   }
+
+  // 1. Загружаем CSS
+
+  let css = '';
+
+  if (fs.existsSync(CSS_FILE)) {
+    css = fs.readFileSync(CSS_FILE, 'utf8');
+
+    console.log(
+      `✅ CSS загружен: ${CSS_FILE} ` +
+      `(${(css.length / 1024).toFixed(1)} КБ)`
+    );
+  } else {
+    console.warn(
+      `⚠️ CSS-файл не найден: ${CSS_FILE}`
+    );
+  }
+
+  // 2. Собираем транслитератор
+
+  const transliteratorBundle =
+    await buildTransliterator();
+
+  // 3. Собираем Hunspell
+
+  const russianSpellCheckerBundle =
+    await buildRussianSpellChecker();
+
+  // 4. Объединяем библиотеки
+
+  let js = '';
+
+  js += '\n\n// ============================================================\n';
+  js += '// БИБЛИОТЕКА: cyrillic-to-translit-js\n';
+  js += '// ============================================================\n\n';
+  js += transliteratorBundle;
+
+  js += '\n\n// ============================================================\n';
+  js += '// БИБЛИОТЕКА: HUNSPELL + РУССКИЙ СЛОВАРЬ\n';
+  js += '// ============================================================\n\n';
+  js += russianSpellCheckerBundle;
+
+  // 5. Объединяем JS-модули приложения
+
+  for (const file of JS_FILES_ORDER) {
+    if (!fs.existsSync(file)) {
+      throw new Error(
+        `Обязательный JS-файл не найден: ${file}`
+      );
+    }
+
+    let content = fs.readFileSync(file, 'utf8');
+
+    if (file === BUILD_ID_FILE) {
+      content = injectBuildId(content, timestamp);
+
+      console.log(
+        `🏷️ APP_BUILD_ID: ${timestamp}`
+      );
+    }
+
+    js += '\n\n// ============================================================\n';
+    js += `// МОДУЛЬ: ${path.basename(file)}\n`;
+    js += '// ============================================================\n\n';
+    js += content;
+
+    console.log(
+      `✅ JS модуль: ${file} ` +
+      `(${(content.length / 1024).toFixed(1)} КБ)`
+    );
+  }
+
+  // 6. Загружаем HTML
+
   let html = fs.readFileSync(INPUT_HTML, 'utf8');
 
-  html = html.replace(/<link\s+[^>]*href=["']css\/styles\.css["'][^>]*\/?>/gi, '<style>\n' + css + '\n</style>');
-  html = html.replace(/<script\s+src=["']js\/[^"']+["'][^>]*><\/script>/gi, '');
-  html = html.replace('</body>', '<script>\n' + js + '\n</script>\n</body>');
+  // 7. Встраиваем CSS
 
-  ensureDir('dist');
-  fs.writeFileSync(OUTPUT_HTML, html, 'utf8');
+  html = replaceCssLink(html, css);
 
-  const totalSize = (html.length / 1024).toFixed(1);
+  // 8. Удаляем отдельные подключения исходных JS
+
+  html = removeSourceJsScripts(html);
+
+  // 9. Встраиваем объединённый JavaScript
+
+  html = injectApplicationJs(html, js);
+
+  // 10. Записываем HTML
+
+  fs.writeFileSync(
+    OUTPUT_HTML,
+    html,
+    'utf8'
+  );
+
   console.log('\n🎉 Сборка HTML завершена!');
-  console.log('📦 Результат: ' + OUTPUT_HTML + ' (' + totalSize + ' КБ)');
 
-  console.log('\n🗜️  Начинаю создание ZIP-архива...');
-  ensureDir('dist/releases');
+  console.log(
+    `📦 Результат: ${OUTPUT_HTML} ` +
+    `(${(html.length / 1024).toFixed(1)} КБ)`
+  );
 
-  const output = fs.createWriteStream(ZIP_OUTPUT);
-  const archive = archiver('zip', { zlib: { level: 9 } });
+  // 11. Создаём ZIP
 
-  output.on('close', function() {
-    console.log('✅ ZIP-архив успешно создан: ' + ZIP_OUTPUT + ' (' + (archive.pointer() / 1024).toFixed(1) + ' КБ)');
-    console.log('🚀 Готов к загрузке в Битрикс24!');
-  });
+  console.log(
+    '\n🗜️ Начинаю создание ZIP-архива...'
+  );
 
-  archive.on('error', function(err) {
-    console.error('❌ Ошибка создания ZIP-архива: ' + err.message);
-  });
+  await createZip();
 
-  archive.pipe(output);
-  archive.file(OUTPUT_HTML, { name: 'index.html' });
-  archive.finalize();
+  console.log(
+    '\n🚀 Приложение готово к загрузке в Битрикс24!'
+  );
 }
 
-build();
+// ============================================================
+// ЗАПУСК
+// ============================================================
+
+build().catch((error) => {
+  console.error('\n❌ Ошибка сборки:', error);
+
+  process.exitCode = 1;
+});

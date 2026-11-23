@@ -8,6 +8,13 @@
     "watch": "npx nodemon --watch src/js --watch src/css --ext js,css,html -x \"node scripts/build.js\""
   },
   "devDependencies": {
-    "archiver": "^7.0.1"
+    "archiver": "^7.0.1",
+    "esbuild": "^0.28.2"
+  },
+  "dependencies": {
+    "buffer": "^6.0.3",
+    "cyrillic-to-translit-js": "^3.2.1",
+    "dictionary-ru": "^3.0.0",
+    "nspell": "^2.1.5"
   }
 }
