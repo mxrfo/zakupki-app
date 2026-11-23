@@ -3,7 +3,7 @@
 /* ============================================================
    ⚠️ ВАЖНО: ЗАМЕНИТЕ ЭТУ ССЫЛКУ НА ВАШУ ССЫЛКУ ОТ CLOUDFLARE!
    ============================================================ */
-const MY_PROXY_URL = 'https://zakupki-proxy.ваш-ник.workers.dev/?url=';
+const MY_PROXY_URL = 'https://zakupki-proxy.artemgvardin1.workers.dev/?url=';
 
 /* ============================================================
    RESIZABLE COLUMNS (модалка данных)
