@@ -4,7 +4,7 @@
   --text-main: #1f2937;
   --text-muted: #64748b;
   --border-color: #e2e8f0;
-  --brand-blue: #122C6C;        /* Pantone 661 C — корпоративный цвет по брендбуку */
+  --brand-blue: #122C6C;
   --brand-blue-hover: #0A1F4D;
   --danger: #ef4444;
   --success: #10b981;
@@ -29,8 +29,6 @@ body {
 
 /* === Общий макет === */
 .app-layout { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
-
-/* === Левое меню === */
 .sidebar {
   width: 260px; background: var(--bg-card);
   border-right: 1px solid var(--border-color);
@@ -456,27 +454,34 @@ body {
 .pos-del:hover { background: #fee2e2; color: var(--danger); }
 .pos-body { padding: 14px; border-top: 1px solid var(--border-color); }
 
-/* ОСНОВНОЙ ряд позиции: наименование + цена + кол-во + итого в ОДНУ строку */
+/* ОСНОВНОЙ ряд позиции: наименование + ссылка + кол-во + цена */
 .pos-main { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
-.pg-name { grid-column: span 5; position: relative; }
-.pg-price { grid-column: span 3; }
-.pg-qty { grid-column: span 2; }
-.pg-total { grid-column: span 2; }
+.pg-name { grid-column: span 4; position: relative; }
+.pg-link { grid-column: span 4; position: relative; }
+.pg-qty { grid-column: span 2; position: relative; }
+.pg-price { grid-column: span 2; position: relative; }
 
-/* ДОПОЛНИТЕЛЬНЫЙ ряд: цель/поставщик/ссылка — свёрнут по умолчанию */
+/* ДОПОЛНИТЕЛЬНЫЙ ряд: поставщик + артикул + цель + примечание */
 .pos-extra { margin-top: 12px; border-top: 1px dashed var(--border-color); padding-top: 10px; }
-.pos-extra > summary { cursor: pointer; list-style: none; font-size: 12px; font-weight: 700; color: var(--brand-blue); display: flex; align-items: center; gap: 7px; user-select: none; }
+.pos-extra > summary { 
+  cursor: pointer; list-style: none; font-size: 12px; font-weight: 700; color: var(--brand-blue); 
+  display: flex; align-items: center; gap: 7px; user-select: none; 
+}
 .pos-extra > summary::-webkit-details-marker { display: none; }
-.pos-extra > summary::before { content: '+'; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px; background: #e6f0fa; color: var(--brand-blue); font-weight: 800; line-height: 1; flex-shrink: 0; }
+.pos-extra > summary::before { 
+  content: '+'; display: inline-flex; align-items: center; justify-content: center; 
+  width: 16px; height: 16px; border-radius: 5px; background: #e6f0fa; color: var(--brand-blue); font-weight: 800; line-height: 1; flex-shrink: 0; 
+}
 .pos-extra[open] > summary::before { content: '−'; }
 .pos-extra .pos-grid { margin-top: 12px; }
 
 .pos-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
-.pg-purpose { grid-column: span 4; }
-.pg-supplier { grid-column: span 4; }
-.pg-link { grid-column: span 4; }
+.pg-supplier { grid-column: span 3; position: relative; }
+.pg-article { grid-column: span 3; position: relative; }
+.pg-purpose { grid-column: span 3; position: relative; }
+.pg-note { grid-column: span 3; position: relative; }
 
-/* плавающие подписи для всех полей позиции (компактно, без «пустых коробок») */
+/* плавающие подписи для всех полей позиции */
 .pos-main .form-group, .pos-grid .form-group { margin-bottom: 0; position: relative; padding-top: 15px; }
 .pos-main .form-group > label, .pos-grid .form-group > label { position: absolute; top: 0; left: 0; margin: 0; font-size: 11px; font-weight: 600; color: var(--text-muted); }
 .pos-main .form-group input, .pos-grid .form-group input { padding: 9px 11px; font-size: 13px; }
@@ -486,14 +491,11 @@ body {
 .unit-input input { padding-right: 32px; }
 .unit-input .unit { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 700; color: var(--text-muted); pointer-events: none; }
 
-/* read-only «Всего» в основном ряду */
-.total-readout { min-height: 36px; display: flex; align-items: center; justify-content: flex-end; padding: 9px 11px; font-size: 13px; font-weight: 800; color: var(--brand-blue); background: #f8fafc; border: 1px solid var(--border-color); border-radius: 6px; }
-
 .link-input-wrapper { position: relative; }
 .link-input-wrapper svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94A3B8; width: 16px; height: 16px; pointer-events: none; }
-.pos-grid .form-group .link-input-wrapper input { padding-left: 32px; }
+.pos-grid .form-group .link-input-wrapper input, .pos-main .form-group .link-input-wrapper input { padding-left: 32px; }
 
-/* чипсы-памятки: скрыты, показываются только при фокусе/вводе */
+/* чипсы-памятки */
 .chip-row { display: none; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .pg-purpose:focus-within .chip-row, .pg-supplier:focus-within .chip-row { display: flex; }
 .chip-hint { width: 100%; font-size: 11px; color: var(--text-muted); margin-bottom: 2px; font-style: italic; }
@@ -561,12 +563,14 @@ body {
   .fab-btn svg { width: 24px; height: 24px; }
 
   .form-block-pair { flex-direction: column; }
-  .pg-name { grid-column: span 12; }
-  .pg-price { grid-column: span 6; }
-  .pg-qty { grid-column: span 3; }
-  .pg-total { grid-column: span 3; }
+  .pos-main { grid-template-columns: 1fr 1fr; }
+  .pg-name { grid-column: span 2; }
+  .pg-link { grid-column: span 2; }
+  .pg-qty { grid-column: span 1; }
+  .pg-price { grid-column: span 1; }
+  
   .pos-grid { grid-template-columns: 1fr; }
-  .pg-purpose, .pg-supplier, .pg-link { grid-column: auto; }
+  .pg-supplier, .pg-article, .pg-purpose, .pg-note { grid-column: auto; }
   .review-grid { grid-template-columns: 1fr; }
   .modal-header-sum { font-size: 13px; padding: 3px 8px; }
 }

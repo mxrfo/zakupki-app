@@ -82,7 +82,7 @@ function goCreateStep(n, dir) {
     s.classList.toggle('done', sn < n);
   });
   const fill = document.getElementById('cs-fill');
-  if (fill) fill.style.width = ((n - 1) / 2 * 66.66) + '%'; // трек = 66.66% (между центрами шагов)
+  if (fill) fill.style.width = ((n - 1) / 2 * 66.66) + '%';
   const back = document.getElementById('btn-create-back');
   const next = document.getElementById('btn-create-next');
   const save = document.getElementById('btn-save-create');
@@ -108,7 +108,6 @@ function validateCreateStep(n) {
     return ok;
   }
   if (n === 2) {
-    // Позиции необязательны — проверяем только краткое описание
     const sd = document.getElementById('create-short-desc');
     const badDesc = !sd.value.trim();
     sd.classList.toggle('field-error', badDesc);
@@ -166,7 +165,7 @@ function renderCreateSummary() {
 /* ============================================================
    КЭШ ПОДСКАЗОК: строим из массива items (уже загружен из CRM)
    ============================================================ */
-let _itemSuggestions = null;   // [{name, price, supplier, purpose, link, count}]
+let _itemSuggestions = null;
 let _topPurposes = [];
 let _topSuppliers = [];
 
@@ -184,7 +183,7 @@ function buildItemSuggestions() {
       const key = (nm || '').trim().toLowerCase();
       if (!key) return;
       const price = parseAmount(prices[i]) || 0;
-      const qty = parseAmount(qtys[i]) || 0;          // ✅ количество
+      const qty = parseAmount(qtys[i]) || 0;
       const sup = (sups[i] || '').trim();
       const pur = (purposes[i] || '').trim();
       const lnk = (links[i] || '').trim();
@@ -194,7 +193,7 @@ function buildItemSuggestions() {
         const rec = map.get(key);
         rec.count++;
         if (price > 0) rec.price = price;
-        if (qty > 0) rec.qty = qty;                   // ✅ последнее ненулевое кол-во
+        if (qty > 0) rec.qty = qty;
         if (sup) rec.supplier = sup;
         if (pur) rec.purpose = pur;
         if (lnk) rec.link = lnk;
@@ -273,7 +272,7 @@ function fillCardFromSuggestion(card, rec) {
   if (!rec) return;
   card.querySelector('.det-name').value = rec.name;
   if (rec.price > 0) card.querySelector('.det-price').value = rec.price;
-  if (rec.qty > 0) card.querySelector('.det-qty').value = rec.qty;   // ✅
+  if (rec.qty > 0) card.querySelector('.det-qty').value = rec.qty;
   if (rec.supplier) card.querySelector('.det-supplier').value = rec.supplier;
   if (rec.purpose) card.querySelector('.det-purpose').value = rec.purpose;
   if (rec.link) card.querySelector('.det-link').value = rec.link;
@@ -282,7 +281,6 @@ function fillCardFromSuggestion(card, rec) {
 
 /* ============================================================
    УМНЫЙ ПАРСИНГ СТРОКИ (без ИИ, регулярками)
-   "Перчатки нитриловые 10 шт по 500р" -> имя/кол-во/цена
    ============================================================ */
 function smartParseItemLine(input) {
   const raw = input.value.trim();
@@ -315,7 +313,6 @@ function maybeAutoFillShortDesc() {
   const names = Array.from(document.querySelectorAll('.pos-card .det-name')).map(function (i) { return i.value.trim(); }).filter(Boolean);
   if (!names.length) return;
   const auto = names[0] + (names.length > 1 ? ' и ещё ' + (names.length - 1) + ' поз.' : '');
-  // перетираем только если поле пустое или было заполнено автоматически
   if (!sd.value.trim() || sd.dataset.autofilled === '1') {
     sd.value = auto;
     sd.dataset.autofilled = '1';
@@ -333,7 +330,7 @@ function handleItemsPaste(e) {
   const lines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
   const hasTabs = /\t/.test(text);
   const multiLine = lines.length > 1;
-  if (!hasTabs && !multiLine) return; // обычная вставка одного значения
+  if (!hasTabs && !multiLine) return;
   e.preventDefault();
   const container = document.getElementById('purchase-items-container');
   const emptyCard = container.querySelector('.pos-card:not(.filled)');
@@ -376,102 +373,15 @@ function renderEmptyState() {
   container.appendChild(div);
 }
 
-function addDetailRow(data) {
-  data = data || {};
-  const container = document.getElementById('purchase-items-container');
-  const es = container.querySelector('.pos-empty');
-  if (es) es.remove();
-  const details = document.createElement('details');
-  details.className = 'pos-card';
-  details.open = true;
-  const nameVal = data.name || '';
-  const priceVal = data.price || '';
-  const qtyVal = data.qty || '';
-  const purposeVal = data.purpose || '';
-  const supplierVal = data.supplier || '';
-  const linkVal = data.link || '';
-  const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || 0;
-  const totalTxt = totalVal > 0 ? totalVal.toFixed(2) + ' ₽' : '0.00 ₽';
-  // доп. поля разворачиваем автоматически, если там есть данные (редактирование)
-  const hasExtra = !!(purposeVal || supplierVal || linkVal);
-  const purposeChips = _topPurposes.length
-    ? '<div class="chip-row"><span class="chip-hint">Частые варианты из прошлых закупок</span>' + _topPurposes.map(function () { return '<span class="chip" onclick="applyChip(this)"></span>'; }).join('') + '</div>'
-    : '';
-  const supplierChips = _topSuppliers.length
-    ? '<div class="chip-row"><span class="chip-hint">Частые поставщики из прошлых закупок</span>' + _topSuppliers.map(function () { return '<span class="chip" onclick="applyChip(this)"></span>'; }).join('') + '</div>'
-    : '';
-  details.innerHTML = `
-    <summary class="pos-head">
-      <span class="pos-chev"></span>
-      <span class="pos-num">Позиция</span>
-      <span class="pos-preview ${nameVal ? '' : 'empty'}">${escapeHtml(nameVal || 'Без названия')}</span>
-      <span class="pos-total">${totalTxt}</span>
-      <button type="button" class="pos-del" title="Удалить позицию" onclick="event.preventDefault(); event.stopPropagation(); removeDetailRow(this);">&times;</button>
-    </summary>
-    <div class="pos-body">
-      <div class="pos-main">
-        <div class="form-group pg-name">
-          <label>Наименование</label>
-          <input type="text" class="det-name" value="${escapeHtml(nameVal)}" placeholder="Что закупаем"
-            oninput="onDetNameInput(this)"
-            onblur="smartParseItemLine(this); hideSuggestions();"
-            onpaste="handleItemsPaste(event)">
-        </div>
-        <div class="form-group pg-price">
-          <label>Цена с НДС</label>
-          <div class="unit-input">
-            <input type="number" class="det-price" step="0.01" placeholder="0.00" value="${priceVal}" oninput="calculateRowTotal(this)">
-            <span class="unit">₽</span>
-          </div>
-        </div>
-        <div class="form-group pg-qty">
-          <label>Кол-во</label>
-          <div class="unit-input">
-            <input type="number" class="det-qty" step="1" placeholder="1" value="${qtyVal}" oninput="calculateRowTotal(this)">
-            <span class="unit">шт.</span>
-          </div>
-        </div>
-        <div class="form-group pg-total">
-          <label>Всего</label>
-          <div class="total-readout det-total">${totalTxt}</div>
-        </div>
-      </div>
-      <details class="pos-extra"${hasExtra ? ' open' : ''}>
-        <summary>Дополнительно: цель, поставщик, ссылка</summary>
-        <div class="pos-grid">
-          <div class="form-group pg-purpose">
-            <label>Цель использования</label>
-            <input type="text" class="det-purpose" value="${escapeHtml(purposeVal)}" placeholder="Зачем нужно">
-            ${purposeChips}
-          </div>
-          <div class="form-group pg-supplier">
-            <label>Поставщик</label>
-            <input type="text" class="det-supplier" value="${escapeHtml(supplierVal)}" placeholder="Откуда берём">
-            ${supplierChips}
-          </div>
-          <div class="form-group pg-link">
-            <label>Ссылка</label>
-            <div class="link-input-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-              <input type="url" class="det-link" placeholder="https://..." value="${escapeHtml(linkVal)}">
-            </div>
-          </div>
-        </div>
-      </details>
-    </div>`;
-  container.appendChild(details);
-  const pchips = details.querySelectorAll('.pg-purpose .chip');
-  _topPurposes.forEach(function (p, i) { if (pchips[i]) { pchips[i].textContent = p; pchips[i].dataset.val = p; } });
-  const schips = details.querySelectorAll('.pg-supplier .chip');
-  _topSuppliers.forEach(function (p, i) { if (schips[i]) { schips[i].textContent = p; schips[i].dataset.val = p; } });
-  updatePositionNumbers();
-  renderEmptyState();
-}
-
-function applyChip(chip) {
+// ✅ ИСПРАВЛЕННАЯ функция клика по чипсу (теперь 100% надежная)
+function applyChip(chip, val) {
   const group = chip.closest('.form-group');
-  const input = group.querySelector('input');
-  if (input) { input.value = chip.dataset.val; input.focus(); }
+  const input = group ? group.querySelector('input') : null;
+  if (input) {
+    input.value = val;
+    input.focus();
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
 }
 
 function removeDetailRow(btn) {
@@ -490,6 +400,109 @@ function updatePositionNumbers() {
   });
 }
 
+// ✅ ОБНОВЛЕННАЯ функция добавления строки с новыми полями и правильной сеткой
+function addDetailRow(data) {
+  data = data || {};
+  const container = document.getElementById('purchase-items-container');
+  const es = container.querySelector('.pos-empty');
+  if (es) es.remove();
+  
+  const details = document.createElement('details');
+  details.className = 'pos-card';
+  details.open = true;
+  
+  const nameVal = data.name || '';
+  const linkVal = data.link || '';
+  const qtyVal = data.qty || '';
+  const priceVal = data.price || '';
+  const supplierVal = data.supplier || '';
+  const articleVal = data.article || '';
+  const purposeVal = data.purpose || '';
+  const noteVal = data.note || '';
+  
+  const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || 0;
+  const totalTxt = totalVal > 0 ? totalVal.toFixed(2) + ' ₽' : '0.00 ₽';
+  
+  const hasExtra = !!(supplierVal || articleVal || purposeVal || noteVal);
+  
+  const purposeChips = _topPurposes.length
+    ? '<div class="chip-row"><span class="chip-hint">Частые варианты</span>' + 
+      _topPurposes.map(function (p) { return `<span class="chip" onclick="applyChip(this, '${escapeHtml(p)}')">${escapeHtml(p)}</span>`; }).join('') + '</div>'
+    : '';
+    
+  const supplierChips = _topSuppliers.length
+    ? '<div class="chip-row"><span class="chip-hint">Частые поставщики</span>' + 
+      _topSuppliers.map(function (p) { return `<span class="chip" onclick="applyChip(this, '${escapeHtml(p)}')">${escapeHtml(p)}</span>`; }).join('') + '</div>'
+    : '';
+
+  details.innerHTML = `
+    <summary class="pos-head">
+      <span class="pos-chev"></span>
+      <span class="pos-num">Позиция</span>
+      <span class="pos-preview ${nameVal ? '' : 'empty'}">${escapeHtml(nameVal || 'Без названия')}</span>
+      <span class="pos-total">${totalTxt}</span>
+      <button type="button" class="pos-del" title="Удалить позицию" onclick="event.preventDefault(); event.stopPropagation(); removeDetailRow(this);">&times;</button>
+    </summary>
+    <div class="pos-body">
+      <div class="pos-main">
+        <div class="form-group pg-name">
+          <label>Наименование</label>
+          <input type="text" class="det-name" value="${escapeHtml(nameVal)}" placeholder="Что закупаем"
+            oninput="onDetNameInput(this)" onblur="smartParseItemLine(this); hideSuggestions();" onpaste="handleItemsPaste(event)">
+        </div>
+        <div class="form-group pg-link">
+          <label>Ссылка</label>
+          <div class="link-input-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <input type="url" class="det-link" placeholder="https://..." value="${escapeHtml(linkVal)}">
+          </div>
+        </div>
+        <div class="form-group pg-qty">
+          <label>Кол-во</label>
+          <div class="unit-input">
+            <input type="number" class="det-qty" step="1" placeholder="1" value="${qtyVal}" oninput="calculateRowTotal(this)">
+            <span class="unit">шт.</span>
+          </div>
+        </div>
+        <div class="form-group pg-price">
+          <label>Цена с НДС</label>
+          <div class="unit-input">
+            <input type="number" class="det-price" step="0.01" placeholder="0.00" value="${priceVal}" oninput="calculateRowTotal(this)">
+            <span class="unit">₽</span>
+          </div>
+        </div>
+      </div>
+      <details class="pos-extra"${hasExtra ? ' open' : ''}>
+        <summary>Дополнительно: поставщик, артикул, цель, примечание</summary>
+        <div class="pos-grid">
+          <div class="form-group pg-supplier">
+            <label>Поставщик</label>
+            <input type="text" class="det-supplier" value="${escapeHtml(supplierVal)}" placeholder="Например: ОЗОН">
+            ${supplierChips}
+          </div>
+          <div class="form-group pg-article">
+            <label>Артикул</label>
+            <input type="text" class="det-article" value="${escapeHtml(articleVal)}" placeholder="Код товара">
+          </div>
+          <div class="form-group pg-purpose">
+            <label>Цель использования</label>
+            <input type="text" class="det-purpose" value="${escapeHtml(purposeVal)}" placeholder="Зачем нужно">
+            ${purposeChips}
+          </div>
+          <div class="form-group pg-note">
+            <label>Примечание</label>
+            <input type="text" class="det-note" value="${escapeHtml(noteVal)}" placeholder="Особые отметки">
+          </div>
+        </div>
+      </details>
+    </div>`;
+    
+  container.appendChild(details);
+  updatePositionNumbers();
+  renderEmptyState();
+}
+
+// ✅ ОБНОВЛЕННАЯ функция расчета с поддержкой нового layout
 function calculateRowTotal(input) {
   const card = input.closest('.pos-card');
   const price = parseFloat(card.querySelector('.det-price').value) || 0;
@@ -498,7 +511,7 @@ function calculateRowTotal(input) {
   const txt = total > 0 ? total.toFixed(2) + ' ₽' : '0.00 ₽';
   const head = card.querySelector('.pos-total');
   if (head) head.textContent = txt;
-  const readout = card.querySelector('.det-total');
+  const readout = card.querySelector('.det-total'); // для совместимости, если где-то используется
   if (readout) readout.textContent = txt;
   calculateAllTotals();
 }
@@ -565,8 +578,8 @@ function addSelectedPastItems() {
   checks.forEach(function (ch) {
     const rec = list._filtered[+ch.dataset.idx];
     addDetailRow({
-      name: rec.name, price: rec.price || '', qty: rec.qty || '',   // ✅ qty из истории
-      supplier: rec.supplier || '', purpose: rec.purpose || '', link: rec.link || ''
+      name: rec.name, link: rec.link || '', qty: rec.qty || '', price: rec.price || '',
+      supplier: rec.supplier || '', purpose: rec.purpose || ''
     });
   });
   closeModal('modal-past');
@@ -595,7 +608,6 @@ function openCreateModal() {
   document.getElementById('edit-item-id').value = '';
   document.getElementById('purchase-items-container').innerHTML = '';
   
-  // Сброс суммы и обновление заголовка модалки
   document.getElementById('create-amount-product').value = '';
   updateHeaderSum();
 
@@ -652,28 +664,25 @@ function openEditModal(id) {
   const qtys = item[actualFields.detailQty] || [];
   const links = item[actualFields.detailLink] || [];
   const suppliers = item[actualFields.detailSupplier] || [];
-
-  const arrN = Array.isArray(names) ? names : (names ? [names] : []);
-  const arrP = Array.isArray(purposes) ? purposes : (purposes ? [purposes] : []);
-  const arrPr = Array.isArray(prices) ? prices : (prices ? [prices] : []);
-  const arrQ = Array.isArray(qtys) ? qtys : (qtys ? [qtys] : []);
-  const arrL = Array.isArray(links) ? links : (links ? [links] : []);
-  const arrS = Array.isArray(suppliers) ? suppliers : (suppliers ? [suppliers] : []);
-
-  buildItemSuggestions();
-  for (let i = 0; i < arrN.length; i++) {
+  // Чтение новых полей (если они есть в mapping)
+  const arrArt = actualFields.detailArticle ? (Array.isArray(item[actualFields.detailArticle]) ? item[actualFields.detailArticle] : (item[actualFields.detailArticle] ? [item[actualFields.detailArticle]] : [])) : [];
+  const arrNote = actualFields.detailNote ? (Array.isArray(item[actualFields.detailNote]) ? item[actualFields.detailNote] : (item[actualFields.detailNote] ? [item[actualFields.detailNote]] : [])) : [];
+  
+  for (let i = 0; i < names.length; i++) {
     addDetailRow({
-      name: arrN[i] || '',
-      purpose: arrP[i] || '',
-      price: parseAmount(arrPr[i]),
-      qty: parseAmount(arrQ[i]),
-      link: arrL[i] || '',
-      supplier: arrS[i] || ''
+      name: names[i] || '',
+      link: links[i] || '',
+      qty: parseAmount(qtys[i]),
+      price: parseAmount(prices[i]),
+      supplier: suppliers[i] || '',
+      article: arrArt[i] || '',
+      purpose: purposes[i] || '',
+      note: arrNote[i] || ''
     });
   }
 
   renderEmptyState();
-  calculateAllTotals(); // Эта функция сама внутри себя вызовет updateHeaderSum()
+  calculateAllTotals();
 
   const stage = spStages[item.stageId];
   document.getElementById('create-modal-content').style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
@@ -755,23 +764,28 @@ function submitCreateRequest(e) {
   else if (secText) combinedText = secText;
 
   const cards = document.querySelectorAll('.pos-card');
-  const arrNames = [], arrPurposes = [], arrPrices = [], arrQtys = [], arrLinks = [], arrSuppliers = [];
+  const arrNames = [], arrPurposes = [], arrPrices = [], arrQtys = [], arrLinks = [], arrSuppliers = [], arrArticles = [], arrNotes = [];
   let hasDetails = false;
 
   cards.forEach(card => {
     const n = card.querySelector('.det-name').value.trim();
-    const p = card.querySelector('.det-purpose').value.trim();
-    const pr = card.querySelector('.det-price').value.trim();
-    const q = card.querySelector('.det-qty').value.trim();
     const l = card.querySelector('.det-link').value.trim();
+    const q = card.querySelector('.det-qty').value.trim();
+    const pr = card.querySelector('.det-price').value.trim();
     const s = card.querySelector('.det-supplier').value.trim();
-    if (n || p || q || l || pr || s) {
+    const art = card.querySelector('.det-article') ? card.querySelector('.det-article').value.trim() : '';
+    const p = card.querySelector('.det-purpose').value.trim();
+    const note = card.querySelector('.det-note') ? card.querySelector('.det-note').value.trim() : '';
+    
+    if (n || l || q || pr || s || art || p || note) {
       arrNames.push(n);
-      arrPurposes.push(p);
-      arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB');
-      arrQtys.push(q);
       arrLinks.push(l);
+      arrQtys.push(q);
+      arrPrices.push(pr !== '' ? `${parseFloat(pr)}|RUB` : '0|RUB');
       arrSuppliers.push(s);
+      if (actualFields.detailArticle) arrArticles.push(art);
+      if (actualFields.detailNote) arrNotes.push(note);
+      arrPurposes.push(p);
       hasDetails = true;
     }
   });
@@ -797,6 +811,8 @@ function submitCreateRequest(e) {
     fields[actualFields.detailQty] = arrQtys;
     fields[actualFields.detailLink] = arrLinks;
     if (actualFields.detailSupplier && fieldDefs[actualFields.detailSupplier]) fields[actualFields.detailSupplier] = arrSuppliers;
+    if (actualFields.detailArticle && arrArticles.length) fields[actualFields.detailArticle] = arrArticles;
+    if (actualFields.detailNote && arrNotes.length) fields[actualFields.detailNote] = arrNotes;
   } else {
     fields[actualFields.detailName] = [];
     fields[actualFields.detailPurpose] = [];
