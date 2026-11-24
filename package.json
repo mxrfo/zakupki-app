@@ -5,11 +5,15 @@
   "private": true,
   "scripts": {
     "build": "node scripts/build.js",
-    "watch": "npx nodemon --watch src/js --watch src/css --ext js,css,html -x \"node scripts/build.js\""
+    "watch": "npx nodemon --watch src/js --watch src/css --ext js,css,html -x \"node scripts/build.js\"",
+    "lint:css": "stylelint \"src/**/*.css\"",
+    "lint:js": "eslint \"src/**/*.js\""
   },
   "devDependencies": {
     "archiver": "^7.0.1",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "stylelint": "^16.26.1",
+    "stylelint-config-standard": "^36.0.1"
   },
   "dependencies": {
     "buffer": "^6.0.3",
