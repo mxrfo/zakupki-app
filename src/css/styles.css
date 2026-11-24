@@ -491,8 +491,6 @@ body {
 .unit-input input { padding-right: 32px; }
 .unit-input .unit { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 700; color: var(--text-muted); pointer-events: none; }
 
-.link-input-wrapper { position: relative; }
-.link-input-wrapper svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94A3B8; width: 16px; height: 16px; pointer-events: none; }
 .pos-grid .form-group .link-input-wrapper input, .pos-main .form-group .link-input-wrapper input { padding-left: 32px; }
 
 /* чипсы-памятки */
