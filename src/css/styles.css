@@ -506,46 +506,65 @@ body {
 }
 .chip:hover { background: #e6f0fa; border-color: var(--brand-blue); color: var(--brand-blue); }
 
-/* === Кнопка парсера ссылок === */
+/* === Поле ссылки: иконка слева, поле тянется, кнопки справа в ряд === */
 .link-input-wrapper {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: stretch;          /* кнопки = высота поля */
+  gap: 6px;
 }
 
+.link-input-wrapper svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94A3B8;
+  width: 16px; height: 16px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* поле больше не width:100% — оно тянется; padding-right больше не нужен */
 .link-input-wrapper .det-link {
-  padding-right: 75px; /* Оставляем место для кнопки */
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 32px;
+  padding-right: 12px;
+}
+
+/* обе кнопки — обычные flex-элементы, НЕ absolute */
+.link-input-wrapper .btn-parse,
+.link-input-wrapper .btn-open-link {
+  flex: 0 0 auto;
+  align-self: center;
+  height: 35px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
 }
 
 .btn-parse {
-  position: absolute;
-  right: 4px;
-  top: 4px;
-  bottom: 4px;
   padding: 0 12px;
   background: #e6f0fa;
   color: var(--brand-blue);
   border: 1px solid #b3d4f5;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 700;
+  border-radius: 6px;
+  font-size: 11px; font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s var(--ease);
+  transition: all .2s var(--ease);
 }
+.btn-parse:hover { background: var(--brand-blue); color: #fff; border-color: var(--brand-blue); }
+.btn-parse:disabled { opacity: .6; cursor: wait; }
 
-.btn-parse:hover {
-  background: var(--brand-blue);
-  color: #fff;
-  border-color: var(--brand-blue);
+.btn-open-link {
+  padding: 0 10px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 15px; color: #374151;
+  cursor: pointer;
 }
-
-.btn-parse:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-
-.btn-open-link { padding: 0 10px; border: 1px solid #d1d5db; background: #f3f4f6;
-  border-radius: 8px; cursor: pointer; font-size: 15px; color: #374151; }
 .btn-open-link:disabled { opacity: .4; cursor: not-allowed; }
 
 /* dropdown автоподсказок — поверх модалки (z-index выше оверлея 1000) */
