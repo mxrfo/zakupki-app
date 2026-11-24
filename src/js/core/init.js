@@ -27,9 +27,33 @@ function tryRedirectToPortal() {
 }
 
 function getClientId() {
-  try { const auth = BX24.getAuth(); if (auth) { if (auth.client_id) return auth.client_id; if (auth.CLIENT_ID) return auth.CLIENT_ID; } } catch (e) {}
-  try { const params = new URLSearchParams(window.location.search); const clientId = params.get('client_id') || params.get('CLIENT_ID'); if (clientId) return decodeURIComponent(clientId); } catch (e) {}
-  try { if (typeof BX24 !== 'undefined' && BX24.placement && typeof BX24.placement.info === 'function') { const info = BX24.placement.info(); const o = (info && info.options) || {}; if (o.client_id) return o.client_id; if (o.CLIENT_ID) return o.CLIENT_ID; } } catch (e) {}
+  // 1. Пробуем получить из авторизации BX24
+  try {
+    const auth = BX24.getAuth();
+    if (auth && (auth.client_id || auth.CLIENT_ID)) {
+      return auth.client_id || auth.CLIENT_ID;
+    }
+  } catch (e) {}
+
+  // 2. Пробуем получить из URL-параметров
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const urlClientId = params.get('client_id') || params.get('CLIENT_ID');
+    if (urlClientId) return decodeURIComponent(urlClientId);
+  } catch (e) {}
+
+  // 3. Пробуем получить из placement info
+  try {
+    if (typeof BX24 !== 'undefined' && BX24.placement && typeof BX24.placement.info === 'function') {
+      const info = BX24.placement.info();
+      const options = (info && info.options) || {};
+      if (options.client_id || options.CLIENT_ID) {
+        return options.client_id || options.CLIENT_ID;
+      }
+    }
+  } catch (e) {}
+
+  // 4. Фолбэк на сохранённые настройки
   return (settings.clientId || '').trim();
 }
 

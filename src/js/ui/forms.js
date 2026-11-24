@@ -34,8 +34,6 @@ function initResizableTable(tableId) {
   });
 }
 
-function syncSupplierColumns() { }
-
 function populateCreateSection() {
   const secSelect = document.getElementById('create-section');
   const dirSelect = document.getElementById('create-direction');
