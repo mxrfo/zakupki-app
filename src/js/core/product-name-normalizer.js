@@ -33,6 +33,8 @@
         samokleyushchayasya: 'самоклеящаяся',
         nedelennaya: 'неделенная',
         listov: 'листов',
+        tekstilnyy: 'текстильный',
+        dvuhpetlevoy: 'двухпетлевой',
         // ================================================
         grunt: 'грунт',
         emal: 'эмаль',
@@ -160,6 +162,10 @@
             return `${number}${UNITS[normalizedUnit]}`;
         });
         result = result.replace(/(\d+)\s*x\s*(\d+)/gi, '$1×$2');
+        result = result.replace(
+            /(\d+(?:[.,]\d+)?)\s+(mm|sm|cm|ml|kg|km|gb|tb|hz|v|w|l|g)\b/gi,
+            (_, n, u) => `${n}${UNITS[u.toLowerCase()]}`
+        );
         return result;
     }
 

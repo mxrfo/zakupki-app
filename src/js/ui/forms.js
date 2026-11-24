@@ -34,7 +34,7 @@ function initResizableTable(tableId) {
   });
 }
 
-function syncSupplierColumns() {}
+function syncSupplierColumns() { }
 
 function populateCreateSection() {
   const secSelect = document.getElementById('create-section');
@@ -219,153 +219,110 @@ function buildItemSuggestions() {
 function invalidateSuggestions() { _itemSuggestions = null; _topPurposes = []; _topSuppliers = []; }
 
 /* ============================================================
-   ДРОПДАУН АВТОПОДСКАЗОК (ИСПРАВЛЕНО)
+   ДРОПДАУН АВТОПОДСКАЗОК (ИСПРАВЛЕНО: mousedown-делегат)
    ============================================================ */
-
 let _suggestEl = null;
 let _suggestHandlersBound = false;
 
 function ensureSuggestEl() {
-    if (_suggestEl) return _suggestEl;
+  if (_suggestEl) return _suggestEl;
 
-    _suggestEl = document.createElement('div');
-    _suggestEl.className = 'suggest-dropdown';
-    document.body.appendChild(_suggestEl);
+  _suggestEl = document.createElement('div');
+  _suggestEl.className = 'suggest-dropdown';
+  document.body.appendChild(_suggestEl);
 
-    if (!_suggestHandlersBound) {
-        _suggestHandlersBound = true;
+  if (!_suggestHandlersBound) {
+    _suggestHandlersBound = true;
 
-        // mousedown на dropdown — не даём input потерять фокус
-        _suggestEl.addEventListener('mousedown', function (e) {
-            e.preventDefault();
-        });
+    // mousedown на document: срабатывает ДО blur input и до отмены click
+    document.addEventListener('mousedown', function (e) {
+      const item = e.target.closest('.suggest-item');
+      if (!item || !_suggestEl || !_suggestEl.classList.contains('open')) return;
 
-        // click через event delegation на document — надёжнее,
-        // чем dd.onmousedown, который перезаписывался при каждом showSuggestions
-        document.addEventListener('click', function (e) {
-            var item = e.target.closest('.suggest-item');
-            if (!item) return;
-            if (!_suggestEl || !_suggestEl.classList.contains('open')) return;
+      e.preventDefault(); // не даём input потерять фокус/клик
 
-            var input = _suggestEl._input;
-            if (!input) return;
+      const idx = +item.dataset.idx;
+      const rec = _suggestEl._list && _suggestEl._list[idx];
+      const input = _suggestEl._input;
+      const card = input && input.closest('.pos-card');
 
-            var card = input.closest('.pos-card');
-            if (!card) return;
+      if (rec && card) {
+        fillCardFromSuggestion(card, rec);
+      }
+      _suggestEl.classList.remove('open');
+    });
 
-            var rec = _suggestEl._list && _suggestEl._list[+item.dataset.idx];
-            if (!rec) return;
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && _suggestEl) _suggestEl.classList.remove('open');
+    });
+  }
 
-            console.log('[Suggest] Заполнение карточки из чипса:', rec);
-
-            try {
-                fillCardFromSuggestion(card, rec);
-            } catch (err) {
-                console.error('[Suggest] Ошибка заполнения карточки:', err);
-            }
-
-            _suggestEl.classList.remove('open');
-        });
-
-        // Esc закрывает dropdown
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && _suggestEl) {
-                _suggestEl.classList.remove('open');
-            }
-        });
-    }
-
-    return _suggestEl;
+  return _suggestEl;
 }
 
 function onDetNameInput(input) {
-    var card = input.closest('.pos-card');
-    if (!card) return;
-    var pv = card.querySelector('.pos-preview');
-    var v = input.value.trim();
-    if (pv) {
-        pv.textContent = v || 'Без названия';
-        pv.classList.toggle('empty', !v);
-    }
-    calculateRowTotal(input);
-    maybeAutoFillShortDesc();
-    showSuggestions(input);
+  const card = input.closest('.pos-card');
+  if (!card) return;
+  const pv = card.querySelector('.pos-preview');
+  const v = input.value.trim();
+  if (pv) {
+    pv.textContent = v || 'Без названия';
+    pv.classList.toggle('empty', !v);
+  }
+  calculateRowTotal(input);
+  maybeAutoFillShortDesc();
+  showSuggestions(input);
 }
 
 function showSuggestions(input) {
-    var dd = ensureSuggestEl();
-    dd._input = input;
+  const dd = ensureSuggestEl();
+  dd._input = input;
 
-    var q = input.value.trim().toLowerCase();
-    if (q.length < 2) { dd.classList.remove('open'); return; }
+  const q = input.value.trim().toLowerCase();
+  if (q.length < 2) { dd.classList.remove('open'); return; }
 
-    var list = buildItemSuggestions().filter(function (r) {
-        return r.name.toLowerCase().indexOf(q) !== -1;
-    }).slice(0, 8);
+  const list = buildItemSuggestions().filter(function (r) {
+    return r.name.toLowerCase().indexOf(q) !== -1;
+  }).slice(0, 8);
 
-    if (!list.length) { dd.classList.remove('open'); return; }
+  if (!list.length) { dd.classList.remove('open'); return; }
 
-    var rect = input.getBoundingClientRect();
-    dd.style.position = 'fixed';
-    dd.style.top = (rect.bottom + 4) + 'px';
-    dd.style.left = rect.left + 'px';
-    dd.style.width = rect.width + 'px';
-    dd.innerHTML = list.map(function (r, idx) {
-        return '<div class="suggest-item" data-idx="' + idx + '">' +
-            '<div class="suggest-name">' + escapeHtml(r.name) + '</div>' +
-            '<div class="suggest-meta">' +
-            (r.price > 0 ? '<span class="s-price">' + r.price.toFixed(2) + ' ₽</span>' : '') +
-            (r.supplier ? ' · ' + escapeHtml(r.supplier) : '') +
-            (r.count > 1 ? ' · брали ' + r.count + ' раз' : '') +
-            '</div></div>';
-    }).join('');
+  const rect = input.getBoundingClientRect();
+  dd.style.position = 'fixed';
+  dd.style.top = (rect.bottom + 4) + 'px';
+  dd.style.left = rect.left + 'px';
+  dd.style.width = rect.width + 'px';
+  dd.innerHTML = list.map(function (r, idx) {
+    return '<div class="suggest-item" data-idx="' + idx + '">' +
+      '<div class="suggest-name">' + escapeHtml(r.name) + '</div>' +
+      '<div class="suggest-meta">' +
+      (r.price > 0 ? '<span class="s-price">' + r.price.toFixed(2) + ' ₽</span>' : '') +
+      (r.supplier ? ' · ' + escapeHtml(r.supplier) : '') +
+      (r.count > 1 ? ' · брали ' + r.count + ' раз' : '') +
+      '</div></div>';
+  }).join('');
 
-    dd.classList.add('open');
-    dd._list = list;
+  dd.classList.add('open');
+  dd._list = list;
 }
 
-function hideSuggestions() {
-    if (_suggestEl) _suggestEl.classList.remove('open');
-}
+function hideSuggestions() { if (_suggestEl) _suggestEl.classList.remove('open'); }
 
 function fillCardFromSuggestion(card, rec) {
-    if (!rec || !card) return;
-
-    var nameField = card.querySelector('.det-name');
-    var priceField = card.querySelector('.det-price');
-    var qtyField = card.querySelector('.det-qty');
-    var supplierField = card.querySelector('.det-supplier');
-    var purposeField = card.querySelector('.det-purpose');
-    var linkField = card.querySelector('.det-link');
-
-    if (nameField) {
-        nameField.value = rec.name || '';
-        nameField.dispatchEvent(new Event('input', { bubbles: true }));
+  if (!rec || !card) return;
+  const set = (sel, val) => {
+    const el = card.querySelector(sel);
+    if (el && val !== undefined && val !== null && String(val).trim() !== '') {
+      el.value = val;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
     }
-    if (priceField && rec.price > 0) {
-        priceField.value = rec.price;
-        priceField.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    if (qtyField && rec.qty > 0) {
-        qtyField.value = rec.qty;
-        qtyField.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    if (supplierField && rec.supplier) {
-        supplierField.value = rec.supplier;
-        supplierField.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    if (purposeField && rec.purpose) {
-        purposeField.value = rec.purpose;
-        purposeField.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    if (linkField && rec.link) {
-        linkField.value = rec.link;
-        linkField.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-
-    if (typeof onDetNameInput === 'function' && nameField) {
-        onDetNameInput(nameField);
-    }
+  };
+  set('.det-name', rec.name);
+  if (rec.price > 0) set('.det-price', rec.price);
+  if (rec.qty > 0) set('.det-qty', rec.qty);
+  if (rec.supplier) set('.det-supplier', rec.supplier);
+  if (rec.purpose) set('.det-purpose', rec.purpose);
+  if (rec.link) set('.det-link', rec.link);
 }
 
 /* ============================================================
@@ -462,19 +419,29 @@ function renderEmptyState() {
   container.appendChild(div);
 }
 
-// ✅ ИСПРАВЛЕННАЯ функция клика по чипсу
+// ✅ ИСПРАВЛЕННЫЙ клик по чипсу (без window.event, явный поиск поля)
 function applyChip(chip) {
   if (window.event) {
-    window.event.preventDefault();
-    window.event.stopPropagation();
+    try { window.event.preventDefault(); window.event.stopPropagation(); } catch (_) { }
   }
+
   const val = chip.getAttribute('data-val');
+  if (val === null) return;
+
+  // Ищем поле целевой группы: pg-supplier -> .det-supplier, pg-purpose -> .det-purpose
   const group = chip.closest('.form-group');
-  const input = group ? group.querySelector('input') : null;
+  let input = null;
+  if (group) {
+    if (group.classList.contains('pg-supplier')) input = group.querySelector('.det-supplier');
+    else if (group.classList.contains('pg-purpose')) input = group.querySelector('.det-purpose');
+    else input = group.querySelector('input'); // fallback
+  }
+
   if (input) {
     input.value = val;
-    input.focus();
     input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.focus();
   }
 }
 
@@ -500,11 +467,11 @@ function addDetailRow(data) {
   const container = document.getElementById('purchase-items-container');
   const es = container.querySelector('.pos-empty');
   if (es) es.remove();
-  
+
   const details = document.createElement('details');
   details.className = 'pos-card';
   details.open = true;
-  
+
   const nameVal = data.name || '';
   const linkVal = data.link || '';
   const qtyVal = data.qty || '';
@@ -513,20 +480,20 @@ function addDetailRow(data) {
   const articleVal = data.article || '';
   const purposeVal = data.purpose || '';
   const noteVal = data.note || '';
-  
+
   const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || 0;
   const totalTxt = totalVal > 0 ? totalVal.toFixed(2) + ' ₽' : '0.00 ₽';
-  
+
   const hasExtra = !!(supplierVal || articleVal || purposeVal || noteVal);
-  
+
   const purposeChips = _topPurposes.length
-    ? '<div class="chip-row"><span class="chip-hint">Частые варианты</span>' + 
-      _topPurposes.map(function (p) { return `<span class="chip" data-val="${escapeHtml(p)}" onclick="applyChip(this)">${escapeHtml(p)}</span>`; }).join('') + '</div>'
+    ? '<div class="chip-row"><span class="chip-hint">Частые варианты</span>' +
+    _topPurposes.map(function (p) { return `<span class="chip" data-val="${escapeHtml(p)}" onclick="applyChip(this)">${escapeHtml(p)}</span>`; }).join('') + '</div>'
     : '';
-    
+
   const supplierChips = _topSuppliers.length
-    ? '<div class="chip-row"><span class="chip-hint">Частые поставщики</span>' + 
-      _topSuppliers.map(function (p) { return `<span class="chip" data-val="${escapeHtml(p)}" onclick="applyChip(this)">${escapeHtml(p)}</span>`; }).join('') + '</div>'
+    ? '<div class="chip-row"><span class="chip-hint">Частые поставщики</span>' +
+    _topSuppliers.map(function (p) { return `<span class="chip" data-val="${escapeHtml(p)}" onclick="applyChip(this)">${escapeHtml(p)}</span>`; }).join('') + '</div>'
     : '';
 
   details.innerHTML = `
@@ -562,8 +529,9 @@ function addDetailRow(data) {
           <label>Ссылка</label>
           <div class="link-input-wrapper">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            <input type="url" class="det-link" placeholder="https://..." value="${escapeHtml(linkVal)}">
-            <button type="button" class="btn-parse" onclick="handleLinkParse(this)" title="Парсить ссылку">Парсить</button>
+            <input type="url" class="det-link" placeholder="https://..." value="${escapeHtml(linkVal)}" oninput="updateOpenLink(this)">
+            <button type="button" class="btn-parse" onclick="handleLinkParse(this)" title="Заполнить название, цену и поставщика из ссылки">Анализ</button>
+            <button type="button" class="btn-open-link" onclick="openLink(this)" title="Открыть товар в магазине" disabled>↗</button>
           </div>
         </div>
       </div>
@@ -572,27 +540,29 @@ function addDetailRow(data) {
         <div class="pos-grid">
           <div class="form-group pg-purpose">
             <label>Цель использования</label>
-            <input type="text" class="det-purpose" value="${escapeHtml(purposeVal)}" placeholder="Зачем нужно">
+            <input type="text" class="det-purpose" value="${escapeHtml(purposeVal)}" placeholder="">
             ${purposeChips}
           </div>
           <div class="form-group pg-supplier">
             <label>Поставщик</label>
-            <input type="text" class="det-supplier" value="${escapeHtml(supplierVal)}" placeholder="Например: ОЗОН">
+            <input type="text" class="det-supplier" value="${escapeHtml(supplierVal)}" placeholder="Например: Ozon">
             ${supplierChips}
           </div>
           <div class="form-group pg-article">
             <label>Артикул</label>
-            <input type="text" class="det-article" value="${escapeHtml(articleVal)}" placeholder="Код товара">
+            <input type="text" class="det-article" value="${escapeHtml(articleVal)}" placeholder="">
           </div>
           <div class="form-group pg-note">
             <label>Примечание</label>
-            <input type="text" class="det-note" value="${escapeHtml(noteVal)}" placeholder="Особые отметки">
+            <input type="text" class="det-note" value="${escapeHtml(noteVal)}" placeholder="">
           </div>
         </div>
       </details>
     </div>`;
-    
+
   container.appendChild(details);
+  const linkEl = details.querySelector('.det-link');
+  if (linkEl) updateOpenLink(linkEl);
   updatePositionNumbers();
   renderEmptyState();
 }
@@ -684,6 +654,25 @@ async function handleLinkParse(btn) {
   }
 }
 
+function updateOpenLink(input) {
+    const card = input.closest('.pos-card');
+    if (!card) return;
+    const btn = card.querySelector('.btn-open-link');
+    if (!btn) return;
+    const url = input.value.trim();
+    if (url && /^https?:\/\//i.test(url)) {
+        btn.dataset.url = url;
+        btn.disabled = false;
+    } else {
+        btn.dataset.url = '';
+        btn.disabled = true;
+    }
+}
+
+function openLink(btn) {
+    const url = btn.dataset.url;
+    if (url) window.open(url, '_blank', 'noopener');
+}
 // Парсер ВсеИнструменты (Корзина)
 async function parseVseinstrumentiCart(url, card) {
   if (typeof window.parseLinkData !== 'function') {
@@ -764,7 +753,7 @@ function openCreateModal() {
   document.getElementById('form-create').reset();
   document.getElementById('edit-item-id').value = '';
   document.getElementById('purchase-items-container').innerHTML = '';
-  
+
   document.getElementById('create-amount-product').value = '';
   updateHeaderSum();
 
@@ -772,7 +761,7 @@ function openCreateModal() {
   document.getElementById('btn-save-create').innerText = 'Сохранить';
   document.getElementById('create-modal-content').style.borderTop = '';
   document.querySelectorAll('#modal-create .field-error').forEach(el => el.classList.remove('field-error'));
-  
+
   const sd = document.getElementById('create-short-desc');
   if (sd) delete sd.dataset.autofilled;
 
@@ -786,7 +775,7 @@ function openCreateModal() {
 function openEditModal(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
-  
+
   document.getElementById('create-modal-title').innerText = 'Редактировать закупку';
   document.getElementById('edit-item-id').value = item.id;
 
@@ -807,9 +796,9 @@ function openEditModal(id) {
   populateCreateSection();
   const curSec = String(Array.isArray(item[actualFields.section]) ? item[actualFields.section][0] : (item[actualFields.section] || ''));
   const curDir = String(Array.isArray(item[actualFields.direction]) ? item[actualFields.direction][0] : (item[actualFields.direction] || ''));
-  if (curSec) { 
-    document.getElementById('create-section').value = curSec; 
-    updateDirectionsCreate(curDir); 
+  if (curSec) {
+    document.getElementById('create-section').value = curSec;
+    updateDirectionsCreate(curDir);
   }
 
   const container = document.getElementById('purchase-items-container');
@@ -823,7 +812,7 @@ function openEditModal(id) {
   const suppliers = item[actualFields.detailSupplier] || [];
   const arrArt = actualFields.detailArticle ? (Array.isArray(item[actualFields.detailArticle]) ? item[actualFields.detailArticle] : (item[actualFields.detailArticle] ? [item[actualFields.detailArticle]] : [])) : [];
   const arrNote = actualFields.detailNote ? (Array.isArray(item[actualFields.detailNote]) ? item[actualFields.detailNote] : (item[actualFields.detailNote] ? [item[actualFields.detailNote]] : [])) : [];
-  
+
   for (let i = 0; i < names.length; i++) {
     addDetailRow({
       name: names[i] || '',
@@ -932,7 +921,7 @@ function submitCreateRequest(e) {
     const art = card.querySelector('.det-article') ? card.querySelector('.det-article').value.trim() : '';
     const p = card.querySelector('.det-purpose').value.trim();
     const note = card.querySelector('.det-note') ? card.querySelector('.det-note').value.trim() : '';
-    
+
     if (n || l || q || pr || s || art || p || note) {
       arrNames.push(n);
       arrLinks.push(l);
@@ -1119,7 +1108,7 @@ function submitUpload(e) {
       BX24.callMethod('crm.item.get', { entityTypeId: ENTITY_TYPE_ID, id: parseInt(id), select: ['*', 'UF_*'] }, function (gRes) {
         if (!gRes.error() && gRes.data() && gRes.data().item && item) {
           const fresh = gRes.data().item;
-          try { item[actualFields.fileInvoice] = fresh[actualFields.fileInvoice]; } catch (e) {}
+          try { item[actualFields.fileInvoice] = fresh[actualFields.fileInvoice]; } catch (e) { }
         }
         try { const econId = resolveDeptHeadId(item, true); if (econId) notifyInvoiceUploaded(econId, item); } catch (e) { logAction('Ошибка уведомления по счёту: ' + e.message, 'error'); }
         try { groupStatusNotify(item, 'invoice_received'); } catch (e) { logAction('Ошибка группового статуса по счёту: ' + e.message, 'error'); }

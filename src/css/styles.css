@@ -544,6 +544,10 @@ body {
   cursor: wait;
 }
 
+.btn-open-link { padding: 0 10px; border: 1px solid #d1d5db; background: #f3f4f6;
+  border-radius: 8px; cursor: pointer; font-size: 15px; color: #374151; }
+.btn-open-link:disabled { opacity: .4; cursor: not-allowed; }
+
 /* dropdown автоподсказок — поверх модалки (z-index выше оверлея 1000) */
 .suggest-dropdown {
   position: fixed; z-index: 100000; background: #fff; border: 1px solid var(--border-color);
