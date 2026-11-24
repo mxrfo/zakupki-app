@@ -168,8 +168,9 @@ function replaceCssLink(html, css) {
 // УДАЛЕНИЕ ПОДКЛЮЧЕНИЙ ИСХОДНЫХ JS-ФАЙЛОВ
 // ============================================================
 function removeSourceJsScripts(html) {
-    // Исправленное регулярное выражение с корректными экранированиями
-    const sourceScriptPattern = /<script\b(?=[^>]*\bsrc\s*=\s*["'][^"']*src\/js\/[^"']+\.js(?:\?[^"']*)?["'])[^>]*>\s*<\/script>/gi;
+    // Удаляем любые <script> теги с атрибутом src, содержащие .js
+    // Работает с любыми путями, кавычками и дополнительными атрибутами
+    const sourceScriptPattern = /<script\b[^>]*\bsrc\s*=\s*["'][^"']*\.js(?:\?[^"']*)?["'][^>]*>\s*<\/script>/gi;
     return html.replace(sourceScriptPattern, '');
 }
 
