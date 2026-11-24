@@ -186,7 +186,7 @@
         const name = getFirstValue(product, ['name', 'title', 'productName', 'product_name']);
         const price = getFirstValue(product, ['price', 'currentPrice', 'current_price', 'amount']);
         const article = getFirstValue(product, ['article', 'sku', 'mpn', 'vendorCode', 'vendor_code', 'partNumber', 'part_number']);
-        const supplier = getFirstValue(product, ['supplier', 'brand', 'manufacturer', 'vendor', 'seller']);
+        const supplier = getFirstValue(product, ['supplier', 'brand', 'manufacturer', 'vendor', 'seller', 'company']);
 
         const normalizedName = name ? await normalizeName(name) : '';
 
