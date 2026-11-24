@@ -4,6 +4,69 @@
     const WORKER_URL = 'https://zakupki-proxy.artemgvardin1.workers.dev';
 
     // ============================================================
+    // МАППИНГ ДОМЕНОВ В НАЗВАНИЯ ПОСТАВЩИКОВ (fallback)
+    // Используется ТОЛЬКО когда Worker не вернул supplier
+    // ============================================================
+    const SUPPLIER_DOMAIN_MAP = {
+        'ozon.ru': 'Ozon',
+        'wildberries.ru': 'Wildberries',
+        'kanta.ru': 'Канта',
+        'dns-shop.ru': 'DNS',
+        'mvideo.ru': 'М.Видео',
+        'citilink.ru': 'Ситилинк',
+        'vseinstrumenti.ru': 'ВсеИнструменты.ру',
+        'leroymerlin.ru': 'Лемана ПРО',
+        'yamart.ru': 'Яндекс Маркет',
+        'market.yandex.ru': 'Яндекс Маркет',
+        'sbermegamarket.ru': 'СберМегаМаркет',
+        'detmir.ru': 'Детский мир',
+        'lenta.com': 'Лента',
+        'xcom-shop.ru': 'XCOM'
+    };
+
+    function getSupplierFromHostname(hostname) {
+        if (!hostname) return '';
+        const cleanHost = hostname.replace(/^www\./, '').toLowerCase();
+        for (const [domain, name] of Object.entries(SUPPLIER_DOMAIN_MAP)) {
+            if (cleanHost === domain || cleanHost.endsWith('.' + domain)) {
+                return name;
+            }
+        }
+        const mainPart = cleanHost.split('.')[0];
+        return mainPart.split(/[-_]/).map(w =>
+            w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1) : ''
+        ).filter(Boolean).join(' ');
+    }
+
+    // ============================================================
+    // УМНАЯ ОЧИСТКА СЛАГА ОТ ТЕХНИЧЕСКОГО МУСОРА
+    // ============================================================
+    function cleanSlug(slug) {
+        slug = slug.replace(/[-_]\d{6,}$/, '');
+        const tokens = slug.split(/[-_]/);
+        const cleanTokens = [];
+        let foundRealWord = false;
+        const garbageWords = new Set([
+            'delenie', 'del', 'art', 'sku', 'id', 'html', 'htm', 'x', 'h'
+        ]);
+        for (const token of tokens) {
+            if (!foundRealWord) {
+                if (
+                    /^\d+$/.test(token) ||
+                    /^\d+[a-zа-яё]+$/i.test(token) ||
+                    token.length <= 2 ||
+                    garbageWords.has(token.toLowerCase())
+                ) {
+                    continue;
+                }
+                foundRealWord = true;
+            }
+            cleanTokens.push(token);
+        }
+        return cleanTokens.join(' ');
+    }
+
+    // ============================================================
     // 1. НОРМАЛИЗАЦИЯ НАЗВАНИЯ
     // ============================================================
     async function normalizeName(value) {
@@ -20,7 +83,6 @@
     function getSlugFromUrl(url) {
         try {
             const parsed = new URL(url);
-            // Исправленное регулярное выражение: добавлены обратные слеши для экранирования
             const productMatch = parsed.pathname.match(/product\/([^/]+)/i);
             let slug;
             if (productMatch && productMatch[1]) {
@@ -33,7 +95,7 @@
             try {
                 slug = decodeURIComponent(slug);
             } catch (error) {}
-            return slug;
+            return cleanSlug(slug);
         } catch (error) {
             return '';
         }
@@ -49,21 +111,12 @@
     // 3. ЗАПОЛНЕНИЕ ПОЛЕЙ
     // ============================================================
     function fillIfEmpty(card, selector, value) {
-        if (!card || value === undefined || value === null) {
-            return false;
-        }
+        if (!card || value === undefined || value === null) return false;
         const normalizedValue = String(value).trim();
-        if (!normalizedValue) {
-            return false;
-        }
+        if (!normalizedValue) return false;
         const field = card.querySelector(selector);
-        if (!field) {
-            return false;
-        }
-        // Никогда не перезаписываем ручной ввод.
-        if (String(field.value || '').trim()) {
-            return false;
-        }
+        if (!field) return false;
+        if (String(field.value || '').trim()) return false;
         field.value = normalizedValue;
         field.dispatchEvent(new Event('input', { bubbles: true }));
         field.dispatchEvent(new Event('change', { bubbles: true }));
@@ -71,9 +124,7 @@
     }
 
     function getFirstValue(object, keys) {
-        if (!object || typeof object !== 'object') {
-            return '';
-        }
+        if (!object || typeof object !== 'object') return '';
         for (const key of keys) {
             const value = object[key];
             if (value !== undefined && value !== null && String(value).trim() !== '') {
@@ -100,9 +151,7 @@
 
     function recalculateCard(card) {
         if (typeof window.calculateRowTotal === 'function') {
-            try {
-                window.calculateRowTotal(card);
-            } catch (error) {
+            try { window.calculateRowTotal(card); } catch (error) {
                 console.warn('[LinkParser] Ошибка пересчёта:', error);
             }
         }
@@ -155,20 +204,32 @@
     // ============================================================
     // 7. РЕЗЕРВНОЕ ЗАПОЛНЕНИЕ ИЗ URL
     // ============================================================
-    async function fillFallbackName(card, fallbackName, url, error) {
-        if (!fallbackName) {
-            return false;
+    async function fillFallbackName(card, fallbackName, url, error, fallbackSupplier) {
+        let anyFilled = false;
+
+        if (fallbackName) {
+            const normalizedName = await normalizeName(fallbackName);
+            if (fillIfEmpty(card, '.det-name', normalizedName)) {
+                anyFilled = true;
+            }
         }
-        const normalizedName = await normalizeName(fallbackName);
-        const filled = fillIfEmpty(card, '.det-name', normalizedName);
+
+        if (fallbackSupplier) {
+            if (fillIfEmpty(card, '.det-supplier', fallbackSupplier)) {
+                anyFilled = true;
+            }
+        }
+
         card._parsedProductData = null;
         card._parsedProductFallback = {
             source: 'url',
             url: url,
-            error: error ? error.message || String(error) : null
+            error: error ? error.message || String(error) : null,
+            supplier: fallbackSupplier
         };
+
         recalculateCard(card);
-        return filled;
+        return anyFilled;
     }
 
     // ============================================================
@@ -180,7 +241,6 @@
             return false;
         }
 
-        // Исключаем повторную обработку одной и той же ссылки для одной карточки
         if (card._parsedProductUrl === url && (card._parsedProductData || card._parsedProductFallback)) {
             notify('Данные по этой ссылке уже были обработаны.', 'info');
             return true;
@@ -199,6 +259,7 @@
             return false;
         }
 
+        const fallbackSupplier = getSupplierFromHostname(parsedUrl.hostname);
         const fallbackName = await slugToRussianTitle(parsedUrl.href);
 
         try {
@@ -212,13 +273,13 @@
 
             if (response.success && product) {
                 card._parsedProductData = product;
-                card._parsedProductUrl = url; // Запоминаем обработанную ссылку
-                
+                card._parsedProductUrl = url;
+
                 const fields = await fillProductFields(product, card);
                 const productName = getFirstValue(product, ['name', 'title', 'productName', 'product_name']);
 
                 if (!productName) {
-                    await fillFallbackName(card, fallbackName, parsedUrl.href);
+                    await fillFallbackName(card, fallbackName, parsedUrl.href, null, fallbackSupplier);
                 }
 
                 const anyFieldFilled = fields.nameFilled || fields.priceFilled || fields.articleFilled || fields.supplierFilled;
@@ -242,26 +303,25 @@
             }
 
             card._parsedProductUrl = url;
-            const filled = await fillFallbackName(card, fallbackName, parsedUrl.href);
-            notify(filled ? 'Не удалось получить цену и артикул. Наименование заполнено из ссылки.' : 'Не удалось получить данные. Ранее введённые значения сохранены.', 'info');
+            const filled = await fillFallbackName(card, fallbackName, parsedUrl.href, new Error('Worker failed'), fallbackSupplier);
+            notify(filled
+                ? 'Страница недоступна для парсинга. Данные восстановлены из ссылки (вкл. поставщика).'
+                : 'Не удалось получить данные. Ранее введённые значения сохранены.', 'info');
             return Boolean(filled || fallbackName);
 
         } catch (error) {
             console.error('[LinkParser] Ошибка парсинга:', error);
             card._parsedProductUrl = url;
-            
-            const filled = await fillFallbackName(card, fallbackName, parsedUrl.href, error);
+            const filled = await fillFallbackName(card, fallbackName, parsedUrl.href, error, fallbackSupplier);
             if (filled) {
-                notify('Страница магазина недоступна для парсинга. Наименование заполнено из ссылки.', 'info');
+                notify('Страница магазина недоступна. Наименование и поставщик заполнены из ссылки.', 'info');
                 return true;
             }
-
             const nameField = card.querySelector('.det-name');
             if (nameField && String(nameField.value || '').trim()) {
-                notify('Страница магазина недоступна. Ранее введённое наименование сохранено.', 'info');
+                notify('Страница недоступна. Ранее введённые данные сохранены.', 'info');
                 return true;
             }
-
             notify('Не удалось получить данные товара. Заполните поля вручную.', 'error');
             return false;
         }

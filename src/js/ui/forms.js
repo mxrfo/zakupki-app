@@ -219,69 +219,153 @@ function buildItemSuggestions() {
 function invalidateSuggestions() { _itemSuggestions = null; _topPurposes = []; _topSuppliers = []; }
 
 /* ============================================================
-   ДРОПДАУН АВТОПОДСКАЗОК
+   ДРОПДАУН АВТОПОДСКАЗОК (ИСПРАВЛЕНО)
    ============================================================ */
+
 let _suggestEl = null;
+let _suggestHandlersBound = false;
+
 function ensureSuggestEl() {
-  if (_suggestEl) return _suggestEl;
-  _suggestEl = document.createElement('div');
-  _suggestEl.className = 'suggest-dropdown';
-  _suggestEl.addEventListener('mousedown', function (e) { e.preventDefault(); });
-  document.body.appendChild(_suggestEl);
-  return _suggestEl;
+    if (_suggestEl) return _suggestEl;
+
+    _suggestEl = document.createElement('div');
+    _suggestEl.className = 'suggest-dropdown';
+    document.body.appendChild(_suggestEl);
+
+    if (!_suggestHandlersBound) {
+        _suggestHandlersBound = true;
+
+        // mousedown на dropdown — не даём input потерять фокус
+        _suggestEl.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+        });
+
+        // click через event delegation на document — надёжнее,
+        // чем dd.onmousedown, который перезаписывался при каждом showSuggestions
+        document.addEventListener('click', function (e) {
+            var item = e.target.closest('.suggest-item');
+            if (!item) return;
+            if (!_suggestEl || !_suggestEl.classList.contains('open')) return;
+
+            var input = _suggestEl._input;
+            if (!input) return;
+
+            var card = input.closest('.pos-card');
+            if (!card) return;
+
+            var rec = _suggestEl._list && _suggestEl._list[+item.dataset.idx];
+            if (!rec) return;
+
+            console.log('[Suggest] Заполнение карточки из чипса:', rec);
+
+            try {
+                fillCardFromSuggestion(card, rec);
+            } catch (err) {
+                console.error('[Suggest] Ошибка заполнения карточки:', err);
+            }
+
+            _suggestEl.classList.remove('open');
+        });
+
+        // Esc закрывает dropdown
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && _suggestEl) {
+                _suggestEl.classList.remove('open');
+            }
+        });
+    }
+
+    return _suggestEl;
 }
 
 function onDetNameInput(input) {
-  const card = input.closest('.pos-card');
-  const pv = card.querySelector('.pos-preview');
-  const v = input.value.trim();
-  pv.textContent = v || 'Без названия';
-  pv.classList.toggle('empty', !v);
-  calculateRowTotal(input);
-  maybeAutoFillShortDesc();
-  showSuggestions(input);
+    var card = input.closest('.pos-card');
+    if (!card) return;
+    var pv = card.querySelector('.pos-preview');
+    var v = input.value.trim();
+    if (pv) {
+        pv.textContent = v || 'Без названия';
+        pv.classList.toggle('empty', !v);
+    }
+    calculateRowTotal(input);
+    maybeAutoFillShortDesc();
+    showSuggestions(input);
 }
 
 function showSuggestions(input) {
-  const dd = ensureSuggestEl();
-  const q = input.value.trim().toLowerCase();
-  if (q.length < 2) { dd.classList.remove('open'); return; }
-  const list = buildItemSuggestions().filter(function (r) { return r.name.toLowerCase().indexOf(q) !== -1; }).slice(0, 8);
-  if (!list.length) { dd.classList.remove('open'); return; }
-  const rect = input.getBoundingClientRect();
-  dd.style.position = 'fixed';
-  dd.style.top = (rect.bottom + 4) + 'px';
-  dd.style.left = rect.left + 'px';
-  dd.style.width = rect.width + 'px';
-  dd.innerHTML = list.map(function (r, idx) {
-    return `<div class="suggest-item" data-idx="${idx}">
-      <div class="suggest-name">${escapeHtml(r.name)}</div>
-      <div class="suggest-meta">${r.price > 0 ? '<span class="s-price">' + r.price.toFixed(2) + ' ₽</span>' : ''}${r.supplier ? ' · ' + escapeHtml(r.supplier) : ''}${r.count > 1 ? ' · брали ' + r.count + ' раз' : ''}</div>
-    </div>`;
-  }).join('');
-  dd.classList.add('open');
-  dd._list = list;
-  dd.onmousedown = function (e) {
-    const item = e.target.closest('.suggest-item');
-    if (!item) return;
-    e.preventDefault();
-    const rec = dd._list[+item.dataset.idx];
-    fillCardFromSuggestion(input.closest('.pos-card'), rec);
-    dd.classList.remove('open');
-  };
+    var dd = ensureSuggestEl();
+    dd._input = input;
+
+    var q = input.value.trim().toLowerCase();
+    if (q.length < 2) { dd.classList.remove('open'); return; }
+
+    var list = buildItemSuggestions().filter(function (r) {
+        return r.name.toLowerCase().indexOf(q) !== -1;
+    }).slice(0, 8);
+
+    if (!list.length) { dd.classList.remove('open'); return; }
+
+    var rect = input.getBoundingClientRect();
+    dd.style.position = 'fixed';
+    dd.style.top = (rect.bottom + 4) + 'px';
+    dd.style.left = rect.left + 'px';
+    dd.style.width = rect.width + 'px';
+    dd.innerHTML = list.map(function (r, idx) {
+        return '<div class="suggest-item" data-idx="' + idx + '">' +
+            '<div class="suggest-name">' + escapeHtml(r.name) + '</div>' +
+            '<div class="suggest-meta">' +
+            (r.price > 0 ? '<span class="s-price">' + r.price.toFixed(2) + ' ₽</span>' : '') +
+            (r.supplier ? ' · ' + escapeHtml(r.supplier) : '') +
+            (r.count > 1 ? ' · брали ' + r.count + ' раз' : '') +
+            '</div></div>';
+    }).join('');
+
+    dd.classList.add('open');
+    dd._list = list;
 }
 
-function hideSuggestions() { if (_suggestEl) _suggestEl.classList.remove('open'); }
+function hideSuggestions() {
+    if (_suggestEl) _suggestEl.classList.remove('open');
+}
 
 function fillCardFromSuggestion(card, rec) {
-  if (!rec) return;
-  card.querySelector('.det-name').value = rec.name;
-  if (rec.price > 0) card.querySelector('.det-price').value = rec.price;
-  if (rec.qty > 0) card.querySelector('.det-qty').value = rec.qty;
-  if (rec.supplier) card.querySelector('.det-supplier').value = rec.supplier;
-  if (rec.purpose) card.querySelector('.det-purpose').value = rec.purpose;
-  if (rec.link) card.querySelector('.det-link').value = rec.link;
-  onDetNameInput(card.querySelector('.det-name'));
+    if (!rec || !card) return;
+
+    var nameField = card.querySelector('.det-name');
+    var priceField = card.querySelector('.det-price');
+    var qtyField = card.querySelector('.det-qty');
+    var supplierField = card.querySelector('.det-supplier');
+    var purposeField = card.querySelector('.det-purpose');
+    var linkField = card.querySelector('.det-link');
+
+    if (nameField) {
+        nameField.value = rec.name || '';
+        nameField.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (priceField && rec.price > 0) {
+        priceField.value = rec.price;
+        priceField.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (qtyField && rec.qty > 0) {
+        qtyField.value = rec.qty;
+        qtyField.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (supplierField && rec.supplier) {
+        supplierField.value = rec.supplier;
+        supplierField.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (purposeField && rec.purpose) {
+        purposeField.value = rec.purpose;
+        purposeField.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (linkField && rec.link) {
+        linkField.value = rec.link;
+        linkField.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    if (typeof onDetNameInput === 'function' && nameField) {
+        onDetNameInput(nameField);
+    }
 }
 
 /* ============================================================
