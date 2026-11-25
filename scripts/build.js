@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 const esbuild = require('esbuild');
+const { execSync } = require('child_process');
 
 const INPUT_HTML = 'src/index.html';
 const OUTPUT_HTML = 'dist/index.html';
@@ -17,6 +18,16 @@ const timestamp =
     String(now.getSeconds()).padStart(2, '0');
 
 const ZIP_OUTPUT = `dist/releases/app_${timestamp}.zip`;
+
+// Стабильный id сборки = git sha. Меняется ТОЛЬКО при реальном изменении кода,
+// а не на каждой сборке -> md5 архива (и папка app_local/<hash>) перестаёт «прыгать».
+let buildId;
+try { 
+    buildId = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim(); 
+} catch (e) { 
+    buildId = 'dev'; 
+}
+const FIXED_ENTRY_DATE = new Date('2000-01-01T00:00:00Z'); // детерминированные даты в zip
 
 const JS_FILES_ORDER = [
     'src/js/core/config.js',
@@ -155,7 +166,6 @@ window.RussianSpellChecker = {
 // ВСТРАИВАНИЕ CSS
 // ============================================================
 function replaceCssLink(html, css) {
-    // Исправленное регулярное выражение с корректными экранированиями
     const cssLinkPattern = /<link\b(?=[^>]*\bhref\s*=\s*["'][^"']*styles\.css(?:\?[^"']*)?["'])[^>]*>/i;
     if (!cssLinkPattern.test(html)) {
         console.warn('⚠️ Ссылка на styles.css в HTML не найдена');
@@ -168,8 +178,6 @@ function replaceCssLink(html, css) {
 // УДАЛЕНИЕ ПОДКЛЮЧЕНИЙ ИСХОДНЫХ JS-ФАЙЛОВ
 // ============================================================
 function removeSourceJsScripts(html) {
-    // Удаляем любые <script> теги с атрибутом src, содержащие .js
-    // Работает с любыми путями, кавычками и дополнительными атрибутами
     const sourceScriptPattern = /<script\b[^>]*\bsrc\s*=\s*["'][^"']*\.js(?:\?[^"']*)?["'][^>]*>\s*<\/script>/gi;
     return html.replace(sourceScriptPattern, '');
 }
@@ -208,11 +216,12 @@ async function createZip() {
         archive.on('error', reject);
         archive.pipe(output);
 
-        archive.file(OUTPUT_HTML, { name: 'index.html' });
+        // Фиксируем дату создания файлов в архиве, чтобы md5 хеш архива не менялся без изменения кода
+        archive.file(OUTPUT_HTML, { name: 'index.html', date: FIXED_ENTRY_DATE });
         
         const spellCheckerPath = path.join(process.cwd(), 'dist', 'spellchecker.js');
         if (fs.existsSync(spellCheckerPath)) {
-            archive.file(spellCheckerPath, { name: 'spellchecker.js' });
+            archive.file(spellCheckerPath, { name: 'spellchecker.js', date: FIXED_ENTRY_DATE });
         }
 
         archive.finalize().catch(reject);
@@ -245,7 +254,7 @@ async function build() {
     // 3. Собираем Hunspell в ОТДЕЛЬНЫЙ файл (не в основной бандл!)
     await buildRussianSpellCheckerSeparate();
 
-    // 4. Объединяем библиотеки (БЕЗ Hunspell в основном бандле для мгновенной загрузки!)
+    // 4. Объединяем библиотеки
     let js = '';
     js += '\n\n// ============================================================\n';
     js += '// БИБЛИОТЕКА: cyrillic-to-translit-js\n';
@@ -259,8 +268,8 @@ async function build() {
         }
         let content = fs.readFileSync(file, 'utf8');
         if (file === BUILD_ID_FILE) {
-            content = injectBuildId(content, timestamp);
-            console.log(`🏷️ APP_BUILD_ID: ${timestamp}`);
+            content = injectBuildId(content, buildId);
+            console.log(`🏷️ APP_BUILD_ID: ${buildId}`);
         }
         js += '\n\n// ============================================================\n';
         js += `// МОДУЛЬ: ${path.basename(file)}\n`;

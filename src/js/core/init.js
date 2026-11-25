@@ -27,7 +27,6 @@ function tryRedirectToPortal() {
 }
 
 function getClientId() {
-  // 1. Пробуем получить из авторизации BX24
   try {
     const auth = BX24.getAuth();
     if (auth && (auth.client_id || auth.CLIENT_ID)) {
@@ -35,14 +34,12 @@ function getClientId() {
     }
   } catch (e) {}
 
-  // 2. Пробуем получить из URL-параметров
   try {
     const params = new URLSearchParams(window.location.search);
     const urlClientId = params.get('client_id') || params.get('CLIENT_ID');
     if (urlClientId) return decodeURIComponent(urlClientId);
   } catch (e) {}
 
-  // 3. Пробуем получить из placement info
   try {
     if (typeof BX24 !== 'undefined' && BX24.placement && typeof BX24.placement.info === 'function') {
       const info = BX24.placement.info();
@@ -53,7 +50,6 @@ function getClientId() {
     }
   } catch (e) {}
 
-  // 4. Фолбэк на сохранённые настройки
   return (settings.clientId || '').trim();
 }
 
@@ -62,14 +58,21 @@ function getCurrentHandlerUrl() { return window.location.href.split('?')[0].spli
 function ensureAppPlacement() {
   const current = getCurrentHandlerUrl();
   const saved = (settings.lastHandlerUrl || '').trim();
-  if (saved === current && saved !== '') { logAction('placement.bind: handler не изменился, пропускаем', 'info'); return; }
-  if (saved !== '') {
+  
+  // settings.lastHandlerUrl — память конкретного браузера; она может расходиться с тем,
+  // что реально зарегистрировано в Битрикс после пересборки.
+  // Поэтому НЕ пропускаем вслепую при saved === current: bind идемпотентен
+  // (bindNewPlacement уже обрабатывает 'already binded'), а пропуск мог оставить
+  // placement на уже удалённой папке -> 404 на POST клика по кнопке.
+  if (saved && saved !== current) {
     logAction('placement.unbind: удаляю старый handler ' + saved, 'info');
     BX24.callMethod('placement.unbind', { PLACEMENT: 'REST_APP_URI', HANDLER: saved }, function (unbindRes) {
       if (unbindRes.error() && !/not found|not binded|UNKNOWN/i.test(getApiErrorMessage(unbindRes))) logAction('placement.unbind: ' + getApiErrorMessage(unbindRes), 'error');
       bindNewPlacement(current);
     });
-  } else bindNewPlacement(current);
+  } else {
+    bindNewPlacement(current); // перевязываем текущий (живой) handler всегда
+  }
 }
 
 function bindNewPlacement(current) {

@@ -101,7 +101,6 @@ function openExecutorModal(id) {
       addedIds.add(String(u.ID));
     });
   }
-  // ✅ гарантированно добавляем текущего пользователя, если его нет в списке
   if (currentUser && currentUser.ID && !addedIds.has(String(currentUser.ID))) {
     const cu = allUsers.find(u => String(u.ID) === String(currentUser.ID));
     const label = cu ? (cu.LAST_NAME + ' ' + cu.NAME) : (userNames[currentUser.ID] || 'Я');
@@ -258,7 +257,7 @@ function openViewModal(id) {
     html += `<div class="view-details-divider"><div class="view-details-label">Детализация:</div><div class="detail-table-wrapper"><table class="detail-table"><thead><tr>` +
       `<th style="width: 22%;">Наименование</th>` +
       `<th style="width: 16%;">Цель</th>` +
-      `<th style="width: 18%;">Цена с НДС за 1 шт. без учета доставки</th>` +
+      `<th style="width: 18%;">Цена за 1 шт. без учета доставки</th>` +
       `<th style="width: 9%;">Кол-во</th>` +
       `<th style="width: 12%;">Всего</th>` +
       `<th style="width: 13%;">Поставщик</th>` +
@@ -501,9 +500,8 @@ function openActionModal(id, type) {
   document.getElementById('modal-action').style.display = 'flex';
 }
 
-// глобальный обработчик: скрывать dropdown подсказок при прокрутке/ресайзе
 window.addEventListener('scroll', function () { hideSuggestions(); }, true);
 window.addEventListener('resize', function () { hideSuggestions(); });
 document.addEventListener('click', function (e) {
-  if (_suggestEl && !e.target.closest('.pg-name')) hideSuggestions();
+  if (typeof _suggestEl !== 'undefined' && _suggestEl && !e.target.closest('.pg-name')) hideSuggestions();
 });
