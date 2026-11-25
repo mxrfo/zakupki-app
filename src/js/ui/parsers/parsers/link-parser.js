@@ -4,70 +4,15 @@
     const WORKER_URL = 'https://zakupki-proxy.artemgvardin1.workers.dev';
 
     // ============================================================
-    // МАППИНГ ДОМЕНОВ В НАЗВАНИЯ ПОСТАВЩИКОВ (fallback)
-    // Используется ТОЛЬКО когда Worker не вернул supplier
+    // ЭВРИСТИКА УДАЛЕНА (по требованию).
+    // Больше нет SUPPLIER_DOMAIN_MAP / getSupplierFromHostname /
+    // cleanSlug / getSlugFromUrl / slugToRussianTitle / fillFallbackName.
+    // Если Worker вернул блокировку/недоступность — поля НЕ заполняются
+    // из ссылки, а возвращается ошибка. Обычный парсинг (/parse) оставлен.
     // ============================================================
-    const SUPPLIER_DOMAIN_MAP = {
-        'ozon.ru': 'Ozon',
-        'wildberries.ru': 'Wildberries',
-        'kanta.ru': 'Канта',
-        'dns-shop.ru': 'DNS',
-        'mvideo.ru': 'М.Видео',
-        'citilink.ru': 'Ситилинк',
-        'vseinstrumenti.ru': 'ВсеИнструменты.ру',
-        'leroymerlin.ru': 'Лемана ПРО',
-        'yamart.ru': 'Яндекс Маркет',
-        'market.yandex.ru': 'Яндекс Маркет',
-        'sbermegamarket.ru': 'СберМегаМаркет',
-        'detmir.ru': 'Детский мир',
-        'lenta.com': 'Лента',
-        'xcom-shop.ru': 'XCOM'
-    };
-
-    function getSupplierFromHostname(hostname) {
-        if (!hostname) return '';
-        const cleanHost = hostname.replace(/^www\./, '').toLowerCase();
-        for (const [domain, name] of Object.entries(SUPPLIER_DOMAIN_MAP)) {
-            if (cleanHost === domain || cleanHost.endsWith('.' + domain)) {
-                return name;
-            }
-        }
-        const mainPart = cleanHost.split('.')[0];
-        return mainPart.split(/[-_]/).map(w =>
-            w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1) : ''
-        ).filter(Boolean).join(' ');
-    }
 
     // ============================================================
-    // УМНАЯ ОЧИСТКА СЛАГА ОТ ТЕХНИЧЕСКОГО МУСОРА
-    // ============================================================
-    function cleanSlug(slug) {
-        slug = slug.replace(/[-_]\d{6,}$/, '');
-        const tokens = slug.split(/[-_]/);
-        const cleanTokens = [];
-        let foundRealWord = false;
-        const garbageWords = new Set([
-            'delenie', 'del', 'art', 'sku', 'id', 'html', 'htm', 'x', 'h'
-        ]);
-        for (const token of tokens) {
-            if (!foundRealWord) {
-                if (
-                    /^\d+$/.test(token) ||
-                    /^\d+[a-zа-яё]+$/i.test(token) ||
-                    token.length <= 2 ||
-                    garbageWords.has(token.toLowerCase())
-                ) {
-                    continue;
-                }
-                foundRealWord = true;
-            }
-            cleanTokens.push(token);
-        }
-        return cleanTokens.join(' ');
-    }
-
-    // ============================================================
-    // 1. НОРМАЛИЗАЦИЯ НАЗВАНИЯ
+    // 1. НОРМАЛИЗАЦИЯ НАЗВАНИЯ (не эвристика блокировки — оставляем)
     // ============================================================
     async function normalizeName(value) {
         if (!value) return '';
@@ -78,37 +23,7 @@
     }
 
     // ============================================================
-    // 2. ИЗВЛЕЧЕНИЕ НАЗВАНИЯ ИЗ URL
-    // ============================================================
-    function getSlugFromUrl(url) {
-        try {
-            const parsed = new URL(url);
-            const productMatch = parsed.pathname.match(/product\/([^/]+)/i);
-            let slug;
-            if (productMatch && productMatch[1]) {
-                slug = productMatch[1];
-            } else {
-                const segments = parsed.pathname.split('/').filter(Boolean);
-                slug = segments.length ? segments[segments.length - 1] : '';
-            }
-            if (!slug) return '';
-            try {
-                slug = decodeURIComponent(slug);
-            } catch (error) {}
-            return cleanSlug(slug);
-        } catch (error) {
-            return '';
-        }
-    }
-
-    async function slugToRussianTitle(url) {
-        const slug = getSlugFromUrl(url);
-        if (!slug) return '';
-        return await normalizeName(slug);
-    }
-
-    // ============================================================
-    // 3. ЗАПОЛНЕНИЕ ПОЛЕЙ
+    // 2. ЗАПОЛНЕНИЕ ПОЛЕЙ (только из реальных данных Worker'а)
     // ============================================================
     function fillIfEmpty(card, selector, value) {
         if (!card || value === undefined || value === null) return false;
@@ -135,7 +50,7 @@
     }
 
     // ============================================================
-    // 4. УВЕДОМЛЕНИЯ И ПЕРЕСЧЁТ
+    // 3. УВЕДОМЛЕНИЯ И ПЕРЕСЧЁТ
     // ============================================================
     function notify(message, type) {
         if (typeof window.showToast === 'function') {
@@ -158,7 +73,7 @@
     }
 
     // ============================================================
-    // 5. ЗАПРОС К CLOUDFLARE WORKER
+    // 4. ЗАПРОС К CLOUDFLARE WORKER
     // ============================================================
     async function requestJson(url, options) {
         const response = await fetch(url, options);
@@ -180,9 +95,40 @@
     }
 
     // ============================================================
-    // 6. ПОЛУЧЕНИЕ ДАННЫХ ТОВАРА
+    // 5. ЧИСТЫЙ ЗАПРОС ТОВАРА БЕЗ ЭВРИСТИКИ
+    // Возвращает объект product либо бросает ошибку (блокировка/недоступен).
+    // Никаких догадок из URL — это и есть «обычный парсинг без эвристики».
     // ============================================================
-    async function fillProductFields(product, card) {
+    async function fetchParsedProduct(url) {
+        if (!url) throw new Error('Ссылка не указана');
+        let parsedUrl;
+        try { parsedUrl = new URL(url); }
+        catch (e) { throw new Error('Некорректная ссылка на товар'); }
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+            throw new Error('Поддерживаются только HTTP и HTTPS ссылки');
+        }
+
+        const response = await requestJson(WORKER_URL + '/parse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: parsedUrl.href })
+        });
+
+        const product = response && response.product && typeof response.product === 'object' ? response.product : null;
+        if (!response.success || !product) {
+            // Блокировка / недоступен / не распознано — НЕ угадываем из ссылки.
+            const reason = response && response.error ? response.error : 'Страница недоступна для парсинга';
+            const err = new Error(reason);
+            err.blocked = true;
+            throw err;
+        }
+        return product;
+    }
+
+    // ============================================================
+    // 6. ЗАПОЛНЕНИЕ КАРТОЧКИ ПОЗИЦИИ ИЗ ДАННЫХ
+    // ============================================================
+    async function applyProductToCard(product, card) {
         const name = getFirstValue(product, ['name', 'title', 'productName', 'product_name']);
         const price = getFirstValue(product, ['price', 'currentPrice', 'current_price', 'amount']);
         const article = getFirstValue(product, ['article', 'sku', 'mpn', 'vendorCode', 'vendor_code', 'partNumber', 'part_number']);
@@ -202,38 +148,7 @@
     }
 
     // ============================================================
-    // 7. РЕЗЕРВНОЕ ЗАПОЛНЕНИЕ ИЗ URL
-    // ============================================================
-    async function fillFallbackName(card, fallbackName, url, error, fallbackSupplier) {
-        let anyFilled = false;
-
-        if (fallbackName) {
-            const normalizedName = await normalizeName(fallbackName);
-            if (fillIfEmpty(card, '.det-name', normalizedName)) {
-                anyFilled = true;
-            }
-        }
-
-        if (fallbackSupplier) {
-            if (fillIfEmpty(card, '.det-supplier', fallbackSupplier)) {
-                anyFilled = true;
-            }
-        }
-
-        card._parsedProductData = null;
-        card._parsedProductFallback = {
-            source: 'url',
-            url: url,
-            error: error ? error.message || String(error) : null,
-            supplier: fallbackSupplier
-        };
-
-        recalculateCard(card);
-        return anyFilled;
-    }
-
-    // ============================================================
-    // 8. ОСНОВНАЯ ФУНКЦИЯ
+    // 7. ОСНОВНАЯ ФУНКЦИЯ (обёртка для карточки позиции)
     // ============================================================
     async function parseLinkData(url, card) {
         if (!url || !card) {
@@ -241,100 +156,56 @@
             return false;
         }
 
-        if (card._parsedProductUrl === url && (card._parsedProductData || card._parsedProductFallback)) {
+        if (card._parsedProductUrl === url && card._parsedProductData) {
             notify('Данные по этой ссылке уже были обработаны.', 'info');
             return true;
         }
 
-        let parsedUrl;
+        let product;
         try {
-            parsedUrl = new URL(url);
+            product = await fetchParsedProduct(url);
         } catch (error) {
-            notify('Некорректная ссылка на товар.', 'error');
-            return false;
-        }
-
-        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-            notify('Поддерживаются только HTTP и HTTPS ссылки.', 'error');
-            return false;
-        }
-
-        const fallbackSupplier = getSupplierFromHostname(parsedUrl.hostname);
-        const fallbackName = await slugToRussianTitle(parsedUrl.href);
-
-        try {
-            const response = await requestJson(WORKER_URL + '/parse', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: parsedUrl.href })
-            });
-
-            const product = response && response.product && typeof response.product === 'object' ? response.product : null;
-
-            if (response.success && product) {
-                card._parsedProductData = product;
-                card._parsedProductUrl = url;
-
-                const fields = await fillProductFields(product, card);
-                const productName = getFirstValue(product, ['name', 'title', 'productName', 'product_name']);
-
-                if (!productName) {
-                    await fillFallbackName(card, fallbackName, parsedUrl.href, null, fallbackSupplier);
-                }
-
-                const anyFieldFilled = fields.nameFilled || fields.priceFilled || fields.articleFilled || fields.supplierFilled;
-                if (anyFieldFilled) {
-                    notify('Данные товара успешно получены.', 'success');
-                    return true;
-                }
-
-                const hasExistingData = ['.det-name', '.det-price', '.det-article', '.det-supplier'].some(selector => {
-                    const field = card.querySelector(selector);
-                    return field && String(field.value || '').trim();
-                });
-
-                if (hasExistingData) {
-                    notify('Данные получены. Заполненные вручную поля сохранены.', 'info');
-                    return true;
-                }
-
-                notify('Не удалось получить данные товара. Заполните поля вручную.', 'error');
-                return false;
-            }
-
+            // Эвристики больше нет: при блокировке/недоступности ничего из URL не заполняем.
             card._parsedProductUrl = url;
-            const filled = await fillFallbackName(card, fallbackName, parsedUrl.href, new Error('Worker failed'), fallbackSupplier);
-            notify(filled
-                ? 'Страница недоступна для парсинга. Данные восстановлены из ссылки (вкл. поставщика).'
-                : 'Не удалось получить данные. Ранее введённые значения сохранены.', 'info');
-            return Boolean(filled || fallbackName);
-
-        } catch (error) {
-            console.error('[LinkParser] Ошибка парсинга:', error);
-            card._parsedProductUrl = url;
-            const filled = await fillFallbackName(card, fallbackName, parsedUrl.href, error, fallbackSupplier);
-            if (filled) {
-                notify('Страница магазина недоступна. Наименование и поставщик заполнены из ссылки.', 'info');
-                return true;
-            }
-            const nameField = card.querySelector('.det-name');
-            if (nameField && String(nameField.value || '').trim()) {
-                notify('Страница недоступна. Ранее введённые данные сохранены.', 'info');
-                return true;
-            }
-            notify('Не удалось получить данные товара. Заполните поля вручную.', 'error');
+            card._parsedProductError = error.message || String(error);
+            notify('Не удалось получить данные: ' + (error.message || 'страница недоступна') + '. Заполните поля вручную или используйте ИИ‑анализ.', 'error');
             return false;
         }
+
+        card._parsedProductData = product;
+        card._parsedProductUrl = url;
+
+        const fields = await applyProductToCard(product, card);
+        const anyFieldFilled = fields.nameFilled || fields.priceFilled || fields.articleFilled || fields.supplierFilled;
+
+        if (anyFieldFilled) {
+            notify('Данные товара успешно получены.', 'success');
+            return true;
+        }
+
+        const hasExistingData = ['.det-name', '.det-price', '.det-article', '.det-supplier'].some(selector => {
+            const field = card.querySelector(selector);
+            return field && String(field.value || '').trim();
+        });
+
+        if (hasExistingData) {
+            notify('Данные получены. Заполненные вручную поля сохранены.', 'info');
+            return true;
+        }
+
+        notify('Не удалось получить данные товара. Заполните поля вручную.', 'error');
+        return false;
     }
 
     // ============================================================
-    // 9. ПУБЛИЧНЫЙ ИНТЕРФЕЙС
+    // 8. ПУБЛИЧНЫЙ ИНТЕРФЕЙС
     // ============================================================
+    window.LINK_PARSER_WORKER_URL = WORKER_URL;
+    window.fetchParsedProduct = fetchParsedProduct;
     window.parseLinkData = parseLinkData;
     window.LinkParser = {
         parseLinkData,
-        slugToRussianTitle,
-        getSlugFromUrl,
+        fetchParsedProduct,
         normalizeName
     };
 })();
