@@ -388,7 +388,7 @@ function openDataModal(id) {
 
   const modal = document.querySelector('#modal-data .modal');
   if (modal) modal.style.borderTop = `6px solid ${stage ? stage.color : '#64748b'}`;
-  syncSupplierColumns();
+  // ✅ ФИКС: удалён вызов несуществующей функции syncSupplierColumns();
   document.getElementById('modal-data').style.display = 'flex';
   setTimeout(function () { initResizableTable('data-detail-table'); }, 50);
 }
