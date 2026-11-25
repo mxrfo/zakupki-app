@@ -610,7 +610,7 @@ body {
 /* === Адаптив === */
 @media (max-width: 900px) {
   .app-layout { flex-direction: column; }
-  .sidebar { width: 100%; flex-direction: row; overflow-x: auto; padding: 0; border-right: none; border-bottom: 1px solid var(--border-color); }
+  .sidebar { width: 100%; flex-direction: row; overflow-x: auto; padding: 0; border-right: none; border-bottom: 1px solid var(--brand-blue); }
   .brand-text { padding: 16px; border-bottom: none; border-right: 2px solid var(--brand-blue); }
   .nav-tabs { flex-direction: row; padding: 8px; }
   .tab-btn { padding: 8px 12px; }
@@ -638,3 +638,108 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, .note-card, .modal, .modal-overlay, .admin-panel, .tab-btn, .btn, .fab-btn, .action-icon-btn, .step-panel.active { animation: none !important; transition: none !important; }
 }
+
+/* ============================================================
+   ИИ-ПАРСЕР: кнопки-иконки вместо поля ссылки + модалка анализа
+   (добавлено; старые .btn-parse/.btn-open-link не трогаем)
+   ============================================================ */
+
+/* Кнопки-иконки в карточке позиции и в таблице данных.
+   Иконки — inline-SVG (не эмодзи), чтобы не рендерились «квадратами»
+   в iframe Битрикса на Windows. */
+.btn-icon-link,
+.btn-icon-ai {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 36px;
+  height: 35px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .2s var(--ease), border-color .2s var(--ease), color .2s var(--ease), transform .1s var(--ease), box-shadow .2s var(--ease);
+}
+.btn-icon-link svg,
+.btn-icon-ai svg { width: 18px; height: 18px; }
+
+.btn-icon-link {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  color: #374151;
+}
+.btn-icon-link:hover { background: #e5e7eb; border-color: #9ca3af; }
+.btn-icon-link:disabled { opacity: .4; cursor: not-allowed; }
+
+.btn-icon-ai {
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #4338ca;
+}
+.btn-icon-ai:hover { background: #4338ca; border-color: #4338ca; color: #fff; box-shadow: 0 2px 6px rgba(67,56,202,.35); }
+.btn-icon-ai:active { transform: translateY(1px); }
+
+/* Скрытое поле ссылки не должно оставлять «серый блок» в wrapper */
+.link-input-wrapper .det-link[style*="display: none"],
+.link-input-wrapper .det-link[style*="display:none"],
+td .data-det-link[style*="display: none"],
+td .data-det-link[style*="display:none"] { display: none !important; }
+
+/* Модалка анализа */
+.modal-ai .modal { max-width: 540px; }
+.modal-ai .modal-header { border-top: 6px solid #8b5cf6; }
+.modal-ai .modal-header h2 { display: flex; align-items: center; gap: 10px; }
+.modal-ai .modal-header h2 svg { width: 22px; height: 22px; color: #8b5cf6; }
+.ai-hint { font-size: 13px; color: var(--text-muted); margin: 0 0 16px; line-height: 1.5; }
+.ai-label { display: block; font-weight: 700; margin-bottom: 6px; font-size: 13px; color: #334155; }
+.ai-field { margin-bottom: 16px; }
+
+/* Зона drag&drop для скриншота (в стиле .file-upload-label) */
+.ai-drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; padding: 22px; border: 2px dashed #cbd5e1; border-radius: 8px;
+  background: #f8fafc; cursor: pointer; text-align: center; color: #64748b; font-size: 13px;
+  transition: all .2s var(--ease); position: relative;
+}
+.ai-drop:hover, .ai-drop.dragover { border-color: #8b5cf6; color: #8b5cf6; background: #f5f3ff; }
+.ai-drop.has-file { border-style: solid; border-color: #10b981; color: #047857; background: #ecfdf5; }
+.ai-drop svg { width: 26px; height: 26px; }
+.ai-drop input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.ai-file-name { font-weight: 700; color: #0f172a; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Превью загруженного скриншота */
+.ai-preview { margin-top: 10px; display: none; }
+.ai-preview.show { display: block; }
+.ai-preview img { max-width: 100%; max-height: 160px; border-radius: 6px; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); }
+
+/* Поле ссылки */
+.ai-input {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px;
+  font-family: var(--font-family); font-size: 14px; outline: none; color: #0f172a; background: #fff;
+  transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
+}
+.ai-input:focus { border-color: #8b5cf6; box-shadow: 0 0 0 3px rgba(139,92,246,.12); }
+
+/* Радио-режимы */
+.ai-radio-group { display: flex; flex-direction: column; gap: 8px; }
+.ai-radio {
+  display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px;
+  padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px;
+  transition: all .2s var(--ease); color: var(--text-main);
+}
+.ai-radio:hover { border-color: #c7d2fe; background: #f5f3ff; }
+.ai-radio input { width: 16px; height: 16px; accent-color: #8b5cf6; cursor: pointer; flex-shrink: 0; }
+.ai-radio.selected { border-color: #8b5cf6; background: #f5f3ff; font-weight: 600; }
+
+/* Статус-блок */
+.ai-status { display: none; padding: 12px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 4px; line-height: 1.5; }
+.ai-status.show { display: block; }
+.ai-status.info { background: #f1f5f9; color: #0f172a; }
+.ai-status.ok { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.ai-status.err { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
+/* Кнопка анализа с акцентом под ИИ */
+.btn-ai-run { background: #8b5cf6; border-color: #8b5cf6; color: #fff; }
+.btn-ai-run:hover { background: #7c3aed; border-color: #7c3aed; }
+.btn-ai-run:disabled { opacity: .7; cursor: wait; }
