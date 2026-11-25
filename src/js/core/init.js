@@ -55,47 +55,47 @@ function getClientId() {
 
 function getCurrentHandlerUrl() { return window.location.href.split('?')[0].split('#')[0]; }
 
+// ФИКС: сверяемся с РЕАЛЬНО зарегистрированным placement (placement.get),
+// а не с локальным settings.lastHandlerUrl. Освобождаем слот unbind'ом ВСЕХ
+// handler точки (без HANDLER — удаляет все), затем bind текущего.
+// lastHandlerUrl пишем ТОЛЬКО при успехе bind — иначе был порочный круг.
 function ensureAppPlacement() {
   const current = getCurrentHandlerUrl();
-  const saved = (settings.lastHandlerUrl || '').trim();
-  
-  if (!saved) {
-    // Первый запуск или настройки были сброшены
-    bindNewPlacement(current);
-  } else if (saved !== current) {
-    // URL изменился (была пересборка с реальным изменением кода)
-    logAction('placement.unbind: удаляю старый handler ' + saved, 'info');
-    BX24.callMethod('placement.unbind', { PLACEMENT: 'REST_APP_URI', HANDLER: saved }, function (unbindRes) {
-      if (unbindRes.error() && !/not found|not binded|UNKNOWN/i.test(getApiErrorMessage(unbindRes))) {
-        logAction('placement.unbind: ' + getApiErrorMessage(unbindRes), 'error');
-      }
+  BX24.callMethod('placement.get', {}, function (res) {
+    if (res.error()) {
+      logAction('placement.get: ' + getApiErrorMessage(res), 'error');
+      return;
+    }
+    const list = res.data() || [];
+    const mine = list.filter(p => String(p.placement || '').toUpperCase() === 'REST_APP_URI');
+    const already = mine.some(p => p.handler === current);
+
+    if (already) {
+      logAction('placement: handler уже актуален (' + current + ')', 'info');
+      settings.lastHandlerUrl = current; saveSettingsToBoth();
+      return;
+    }
+
+    // Снимаем ВСЕ обработчики REST_APP_URI (в т.ч. залипший старый путь),
+    // чтобы bind нового не упал в ERROR_PLACEMENT_MAX_COUNT.
+    BX24.callMethod('placement.unbind', { PLACEMENT: 'REST_APP_URI' }, function (u) {
+      if (u.error()) logAction('placement.unbind: ' + getApiErrorMessage(u), 'info'); // не критично
       bindNewPlacement(current);
     });
-  } else {
-    // saved === current: всё уже привязано и актуально, ничего не делаем
-    logAction('placement: handler актуален (' + current + '), пропускаем', 'info');
-  }
+  });
 }
 
 function bindNewPlacement(current) {
-  logAction('placement.bind: привязываю новый handler ' + current, 'info');
+  logAction('placement.bind: привязываю handler ' + current, 'info');
   BX24.callMethod('placement.bind', { PLACEMENT: 'REST_APP_URI', HANDLER: current, TITLE: 'Закупки' }, function (bindRes) {
     if (bindRes.error()) {
-      const errStr = getApiErrorMessage(bindRes);
-      if (/already|binded/i.test(errStr)) {
-        logAction('placement.bind: уже зарегистрирован', 'info');
-        settings.lastHandlerUrl = current;
-        saveSettingsToBoth();
-      } else if (/UNKNOWN/i.test(errStr)) {
-        logAction('placement.bind: UNKNOWN — проверьте право "placement" в Интеграциях приложения и нажмите "Сохранить"', 'error');
-      } else {
-        logAction('placement.bind: ' + errStr, 'error');
-      }
-    } else {
-      logAction('placement.bind: успешно зарегистрирован', 'success');
-      settings.lastHandlerUrl = current;
-      saveSettingsToBoth();
+      // Показываем ПОЛНУЮ реальную ошибку (без маскировки под UNKNOWN).
+      logAction('placement.bind FAILED: ' + getApiErrorMessage(bindRes), 'error');
+      return; // НЕ пишем lastHandlerUrl при неудаче
     }
+    logAction('placement.bind: успешно зарегистрирован', 'success');
+    settings.lastHandlerUrl = current;
+    saveSettingsToBoth();
   });
 }
 

@@ -2,21 +2,23 @@
 // МОДУЛЬ: utils.js — Утилиты и хелперы
 // ============================================================
 
-// Надёжное получение текста ошибки из ответа BX24
+// Надёжное получение текста ошибки из ответа BX24.
+// ФИКС: раньше при пустом err.error подставлялся 'UNKNOWN' и реальная
+// error_description терялась (документация placement: код может прийти пустым).
+// Теперь ВСЕГДА показываем error_description целиком, а 'UNKNOWN' не используем.
 function getApiErrorMessage(res) {
-  if (!res || !res.error) return 'Неизвестная ошибка';
+  if (!res || typeof res.error !== 'function') return 'Неизвестная ошибка';
   const err = res.error();
   if (!err) return 'Неизвестная ошибка';
-  
-  // Битрикс может вернуть ошибку в разных форматах
+
+  const rawCode = (err.error != null ? String(err.error) : '') ||
+                  (err.code != null ? String(err.code) : '');
   const desc = err.error_description || err.errorDescription || err.description || '';
-  const code = err.error || err.code || 'UNKNOWN';
   const exception = err.errorException || err.exception || '';
-  
-  if (desc || exception) {
-    return `${code}: ${desc} ${exception}`.trim();
-  }
-  return `Код ошибки: ${code}`;
+
+  let msg = rawCode ? (rawCode + ': ' + desc) : (desc || 'Без кода и описания');
+  if (exception) msg += ' | ' + exception;
+  return msg.trim();
 }
 
 // ✅ Экранирование HTML для безопасного вывода в логи
@@ -30,7 +32,7 @@ function escapeHtml(str) {
 function logAction(message, type = 'info') {
   const timestamp = new Date().toLocaleTimeString('ru-RU');
   console.log(`[${timestamp}] ${type === 'error' ? '❌' : (type === 'success' ? '✅' : 'ℹ️')} ${message}`);
-  
+
   const logContainer = document.getElementById('log-content');
   if (logContainer) {
     const div = document.createElement('div');
@@ -38,7 +40,7 @@ function logAction(message, type = 'info') {
     div.innerHTML = `<span class="log-time">[${timestamp}]</span> ${escapeHtml(message)}`;
     logContainer.appendChild(div);
     logContainer.scrollTop = logContainer.scrollHeight;
-    
+
     // Ограничиваем количество строк логов, чтобы не перегружать DOM
     while (logContainer.children.length > 500) {
       logContainer.removeChild(logContainer.firstChild);
@@ -55,10 +57,10 @@ function showToast(message, type = 'info') {
     toast.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:12px 20px;border-radius:8px;color:#fff;font-weight:500;z-index:10001;opacity:0;transition:opacity 0.3s;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
     document.body.appendChild(toast);
   }
-  
+
   toast.textContent = message;
   toast.className = `toast show ${type}`;
-  
+
   setTimeout(() => {
     toast.classList.remove('show');
   }, 3000);
@@ -74,11 +76,11 @@ function cleanText(text) {
 function toggleLogPanel(force) {
   const panel = document.getElementById('log-panel');
   if (!panel) return;
-  
+
   const willOpen = (typeof force === 'boolean') ? force : !panel.classList.contains('open');
   panel.classList.toggle('open', willOpen);
   localStorage.setItem('purchase_log_open', willOpen ? '1' : '0');
-  
+
   const btn = document.querySelector('.btn-logs');
   if (btn) {
     btn.style.display = willOpen ? 'none' : 'flex';
