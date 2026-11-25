@@ -1,24 +1,24 @@
 // ============================================================
 // МОДУЛЬ: ai-parser.js — модалка анализа + кнопки-иконки вместо поля ссылки
-// Логика: обычный парсинг (без эвристики) через Worker /parse
-//          ИИ-анализ (скриншот/ссылка) через Worker /ai
+// Обычный парсинг (без эвристики) через Worker /parse
+// ИИ-анализ (скриншот/ссылка) через Worker /ai (Gemini, бесплатно)
 // Поле ссылки скрывается декоратором; 2 кнопки: 🔗 (переход) и 🪄 (модалка).
-// Значение ссылки сохраняется в скрытом input, поэтому submitCreateRequest /
-// submitData в forms.js читают .det-link / .data-det-link как раньше — не трогаем.
+// Значение ссылки сохраняется в скрытом input — submitCreateRequest/submitData
+// в forms.js читают .det-link / .data-det-link как раньше.
 // ============================================================
 (function () {
   'use strict';
 
   function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
+    );
   }
 
   function workerUrl() {
     return window.LINK_PARSER_WORKER_URL || 'https://zakupki-proxy.artemgvardin1.workers.dev';
   }
 
-  // ---------- 1. Создание модалки один раз ----------
   let _modalBuilt = false;
   function ensureModal() {
     if (_modalBuilt) return;
@@ -48,7 +48,7 @@
             <div style="margin-bottom:14px;">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
                 <input type="radio" name="ai-parse-mode" value="ai" checked>
-                <span>ИИ-анализ (BitrixGPT / Vision)</span>
+                <span>ИИ-анализ (Gemini, бесплатно)</span>
               </label>
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-top:6px;">
                 <input type="radio" name="ai-parse-mode" value="standard">
@@ -69,11 +69,10 @@
     _modalBuilt = true;
   }
 
-  // ---------- 2. Декоратор: скрыть поле ссылки, добавить 2 кнопки ----------
   function decorate(root) {
     if (!root || root.dataset.aiDecorated === '1') return;
     const isCard = !!root.querySelector('.link-input-wrapper');
-    const isTable = (root.tagName === 'TR');
+    const isTable = root.tagName === 'TR';
     if (!isCard && !isTable) return;
     root.dataset.aiDecorated = '1';
 
@@ -89,7 +88,6 @@
         `onclick="openLink(this)" ${v ? '' : 'disabled style="opacity:.4"'}>🔗</button>` +
         `<button type="button" class="btn-icon-ai" title="ИИ-анализ / парсинг" onclick="openAiParseModal(this)">🪄</button>`;
     } else {
-      // таблица данных: td с input.data-det-link
       const input = root.querySelector('.data-det-link');
       const td = input ? input.closest('td') : null;
       if (!td) return;
@@ -116,14 +114,12 @@
     const tbody = document.getElementById('data-detail-tbody');
     if (container) new MutationObserver(cb).observe(container, { childList: true, subtree: true });
     if (tbody) new MutationObserver(cb).observe(tbody, { childList: true, subtree: true });
-    // переименовать заголовок колонки "Ссылка" в таблице данных → "Действия"
-    document.querySelectorAll('#data-detail-table thead th').forEach(th => {
+    document.querySelectorAll('#data-detail-table thead th').forEach((th) => {
       if (th.textContent.trim().toLowerCase() === 'ссылка') th.textContent = 'Действия';
     });
     decorateAll();
   }
 
-  // ---------- 3. Открытие модалки ----------
   window.openAiParseModal = function (btn) {
     ensureModal();
     const root = btn.closest('.pos-card') || btn.closest('tr');
@@ -140,13 +136,12 @@
     document.getElementById('modal-ai-parse').style.display = 'flex';
   };
 
-  // ---------- 4. Применение результата к строке/карточке ----------
   async function applyParsed(root, data) {
-    const isTable = (root.tagName === 'TR');
+    const isTable = root.tagName === 'TR';
     const sel = {
       name: isTable ? '.data-det-name' : '.det-name',
       price: isTable ? '.data-det-price' : '.det-price',
-      supplier: isTable ? '.data-det-supplier' : '.det-supplier'
+      supplier: isTable ? '.data-det-supplier' : '.det-supplier',
     };
     const setIf = (s, val) => {
       if (val == null || String(val).trim() === '') return;
@@ -177,7 +172,6 @@
     });
   }
 
-  // ---------- 5. Запуск анализа ----------
   window.runAiParse = async function () {
     const target = window._aiParseTarget;
     if (!target) return;
@@ -203,22 +197,19 @@
     try {
       let data;
       if (mode === 'standard') {
-        // Обычный парсинг БЕЗ эвристики: при блокировке — ошибка, без догадок из URL.
         data = await window.fetchParsedProduct(url);
       } else {
-        // ИИ-анализ через Worker /ai (BitrixGPT/Vision на стороне Worker'а).
         const imageBase64 = fileInput.files.length ? await fileToBase64(fileInput.files[0]) : '';
         const res = await fetch(workerUrl() + '/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: url || null, imageBase64: imageBase64 || null })
+          body: JSON.stringify({ url: url || null, imageBase64: imageBase64 || null }),
         });
-        if (!res.ok) throw new Error('ИИ‑сервер вернул HTTP ' + res.status);
+        if (!res.ok) throw new Error('ИИ-сервер вернул HTTP ' + res.status);
         data = await res.json();
         if (data && data.error) throw new Error(data.error);
       }
 
-      // сохранить ссылку в скрытый input (на случай, если ввели только в модалке)
       if (url && target.input) {
         target.input.value = url;
         const openBtn = target.root.querySelector('.btn-icon-link');
@@ -241,12 +232,10 @@
     }
   };
 
-  // ---------- 6. Инициализация ----------
   function boot() {
     ensureModal();
     startObserver();
-    // повторить декорацию при открытии модалок данных/создания
-    ['modal-data', 'modal-create'].forEach(id => {
+    ['modal-data', 'modal-create'].forEach((id) => {
       const m = document.getElementById(id);
       if (m) new MutationObserver(decorateAll).observe(m, { attributes: true, attributeFilter: ['style'] });
     });
