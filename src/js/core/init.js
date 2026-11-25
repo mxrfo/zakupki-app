@@ -59,19 +59,21 @@ function ensureAppPlacement() {
   const current = getCurrentHandlerUrl();
   const saved = (settings.lastHandlerUrl || '').trim();
   
-  // settings.lastHandlerUrl — память конкретного браузера; она может расходиться с тем,
-  // что реально зарегистрировано в Битрикс после пересборки.
-  // Поэтому НЕ пропускаем вслепую при saved === current: bind идемпотентен
-  // (bindNewPlacement уже обрабатывает 'already binded'), а пропуск мог оставить
-  // placement на уже удалённой папке -> 404 на POST клика по кнопке.
-  if (saved && saved !== current) {
+  if (!saved) {
+    // Первый запуск или настройки были сброшены
+    bindNewPlacement(current);
+  } else if (saved !== current) {
+    // URL изменился (была пересборка с реальным изменением кода)
     logAction('placement.unbind: удаляю старый handler ' + saved, 'info');
     BX24.callMethod('placement.unbind', { PLACEMENT: 'REST_APP_URI', HANDLER: saved }, function (unbindRes) {
-      if (unbindRes.error() && !/not found|not binded|UNKNOWN/i.test(getApiErrorMessage(unbindRes))) logAction('placement.unbind: ' + getApiErrorMessage(unbindRes), 'error');
+      if (unbindRes.error() && !/not found|not binded|UNKNOWN/i.test(getApiErrorMessage(unbindRes))) {
+        logAction('placement.unbind: ' + getApiErrorMessage(unbindRes), 'error');
+      }
       bindNewPlacement(current);
     });
   } else {
-    bindNewPlacement(current); // перевязываем текущий (живой) handler всегда
+    // saved === current: всё уже привязано и актуально, ничего не делаем
+    logAction('placement: handler актуален (' + current + '), пропускаем', 'info');
   }
 }
 
@@ -80,12 +82,20 @@ function bindNewPlacement(current) {
   BX24.callMethod('placement.bind', { PLACEMENT: 'REST_APP_URI', HANDLER: current, TITLE: 'Закупки' }, function (bindRes) {
     if (bindRes.error()) {
       const errStr = getApiErrorMessage(bindRes);
-      if (/already|binded/i.test(errStr)) logAction('placement.bind: уже зарегистрирован', 'info');
-      else if (/UNKNOWN/i.test(errStr)) logAction('placement.bind: UNKNOWN — проверьте право "placement" в Интеграциях и пересохраните приложение', 'error');
-      else logAction('placement.bind: ' + errStr, 'error');
-    } else logAction('placement.bind: успешно зарегистрирован', 'success');
-    settings.lastHandlerUrl = current;
-    saveSettingsToBoth();
+      if (/already|binded/i.test(errStr)) {
+        logAction('placement.bind: уже зарегистрирован', 'info');
+        settings.lastHandlerUrl = current;
+        saveSettingsToBoth();
+      } else if (/UNKNOWN/i.test(errStr)) {
+        logAction('placement.bind: UNKNOWN — проверьте право "placement" в Интеграциях приложения и нажмите "Сохранить"', 'error');
+      } else {
+        logAction('placement.bind: ' + errStr, 'error');
+      }
+    } else {
+      logAction('placement.bind: успешно зарегистрирован', 'success');
+      settings.lastHandlerUrl = current;
+      saveSettingsToBoth();
+    }
   });
 }
 
