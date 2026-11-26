@@ -32,6 +32,8 @@ const JS_FILES_ORDER = [
   'src/js/core/config.js',
   'src/js/core/state.js',
   'src/js/core/utils.js',
+  // bot.js ДО api-модулей: они вызывают notifyUserViaBot / notifyGroupStatus
+  'src/js/api/bot.js',
   // API core (утилиты, от которых зависят все остальные)
   'src/js/api/core.js',
   // API модули
@@ -42,7 +44,7 @@ const JS_FILES_ORDER = [
   'src/js/api/scenarios.js',
   'src/js/api/sync.js',
   'src/js/api/url-handler.js',
-  // API cache (зависит от core)
+  // API cache
   'src/js/api/cache.js',
   // Логика и UI
   'src/js/logic/roles.js',
