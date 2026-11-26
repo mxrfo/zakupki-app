@@ -38,7 +38,7 @@ const JS_FILES_ORDER = [
   'src/js/logic/roles.js',
   'src/js/ui/dragdrop.js',
   'src/js/ui/render.js',
-  // Модалки, НЕ зависящие от forms.js
+  // Модалки (не зависят от forms)
   'src/js/ui/modals/core.js',
   'src/js/ui/modals/view.js',
   'src/js/ui/modals/action.js',
@@ -47,9 +47,13 @@ const JS_FILES_ORDER = [
   // Парсеры
   'src/js/ui/parsers/parsers/link-parser.js',
   'src/js/ui/parsers/parsers/ai-parser.js',
-  // Forms (нужен для модалок ниже)
-  'src/js/ui/forms.js',
-  // Модалки, зависящие от forms.js
+  // Forms — СТРОГО в этом порядке (по зависимостям)
+  'src/js/ui/forms/smart-parse.js',
+  'src/js/ui/forms/suggestions.js',
+  'src/js/ui/forms/positions.js',
+  'src/js/ui/forms/wizard.js',
+  'src/js/ui/forms/submit.js',
+  // Модалки, зависящие от forms
   'src/js/ui/modals/data.js',
   'src/js/ui/modals/upload.js',
   'src/js/ui/modals/edit-amount.js',
