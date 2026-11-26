@@ -3,15 +3,13 @@
 // Автоматическое заполнение полей позиции товара.
 //
 // ЛОГИКА:
-// - Режим "Автоматическое определение по ссылке": сначала быстрый запрос
-//   к Worker'у за метаданными страницы (7 сек). Если не удалось — fallback
-//   на ИИ (только ссылка, Worker сам прочитает метаданные).
-// - Режим "Анализ с помощью ИИ": сжимаем картинку (если есть) + ссылка → /ai
-//   Адаптивное сжатие: стартуем с высокого качества и снижаем до лимита payload.
+// - Режим "Автоматическое определение по ссылке": быстрый запрос к Worker'у
+//   за метаданными страницы (7 сек). Скидку НЕ определяет (только цена из мета-тега).
+// - Режим "Анализ с помощью ИИ": сжатый скриншот (+ссылка) → Worker → Gemini.
+//   Именно этот режим читает цену со скидкой со скриншота.
+// - Выбранный режим запоминается между открытиями модалки.
 // - Вставка из буфера (Ctrl+V) работает в любой момент, когда открыта модалка.
-// - Кнопка "Сохранить ссылку" в модалке — сохраняет ссылку без сканирования.
-//
-// Все тексты — понятные обычному пользователю (без "парсинг", "Gemini", "fallback").
+// - Кнопка "Сохранить ссылку" — сохраняет ссылку без сканирования.
 // ============================================================
 (function () {
   'use strict';
@@ -25,6 +23,8 @@
   var ICON_LINK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
   var ICON_AI = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg>';
   var ICON_UPLOAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+
+  var _lastMode = localStorage.getItem('ai_parse_mode_last') || 'standard';
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -59,8 +59,7 @@
           var dims = [AI_MAX_DIM, 640, 480, 400];
           var b64 = encode(dims[0], qualities[0]);
           var finalSize = b64.length / 1024;
-          
-          // Адаптивное сжатие: сначала снижаем качество, потом размер
+
           if (finalSize > AI_MAX_PAYLOAD_KB) {
             for (var q = 1; q < qualities.length && finalSize > AI_MAX_PAYLOAD_KB; q++) {
               b64 = encode(dims[0], qualities[q]);
@@ -73,13 +72,13 @@
               }
             }
           }
-          
-          // Финальная проверка
+
           if (finalSize > AI_MAX_PAYLOAD_KB) {
             console.warn('[AI-PARSER] Не удалось сжать до ' + AI_MAX_PAYLOAD_KB + ' КБ, текущий размер: ' + finalSize.toFixed(2) + ' КБ');
           }
-          
+
           URL.revokeObjectURL(objUrl);
+          b64._sizeKB = finalSize;
           resolve(b64);
         } catch (e) { URL.revokeObjectURL(objUrl); reject(e); }
       };
@@ -103,7 +102,7 @@
             '<button type="button" class="btn-close" onclick="closeModal(\'modal-ai-parse\')">&times;</button>' +
           '</div>' +
           '<div class="modal-body">' +
-            '<p class="ai-hint">💡 <b>Совет:</b> Сделайте снимок только области с товаром, ценой и логотипом (не всего экрана). Изображение будет сжато для надёжной отправки.</p>' +
+            '<p class="ai-hint">💡 <b>Совет:</b> Снимайте только область с товаром и ценой. <b>Цену со скидкой определяет только режим «Анализ с помощью ИИ»</b> по скриншоту — режим «по ссылке» читает цену из мета-тегов страницы и скидку не видит.</p>' +
             '<div class="ai-field">' +
               '<label class="ai-label">1. Изображение товара (опционально)</label>' +
               '<div class="ai-drop" id="ai-drop-zone">' +
@@ -161,6 +160,8 @@
     });
     document.querySelectorAll('.ai-radio input[name="ai-parse-mode"]').forEach(function (r) {
       r.addEventListener('change', function () {
+        _lastMode = r.value;
+        localStorage.setItem('ai_parse_mode_last', _lastMode);
         document.querySelectorAll('.ai-radio').forEach(function (l) { l.classList.remove('selected'); });
         if (r.closest('.ai-radio')) r.closest('.ai-radio').classList.add('selected');
       });
@@ -301,10 +302,13 @@
     setStatus('', 'none');
     document.getElementById('ai-parse-btn-text').innerText = 'Просканировать';
     document.getElementById('btn-run-ai-parse').disabled = false;
-    var stdRadio = document.querySelector('input[name="ai-parse-mode"][value="standard"]');
-    if (stdRadio) stdRadio.checked = true;
+
+    // Восстанавливаем ПОСЛЕДНИЙ выбранный режим, а не сбрасываем на standard
+    var radio = document.querySelector('input[name="ai-parse-mode"][value="' + _lastMode + '"]');
+    if (!radio) radio = document.querySelector('input[name="ai-parse-mode"][value="standard"]');
+    if (radio) radio.checked = true;
     document.querySelectorAll('.ai-radio').forEach(function (l) { l.classList.remove('selected'); });
-    if (stdRadio && stdRadio.closest('.ai-radio')) stdRadio.closest('.ai-radio').classList.add('selected');
+    if (radio && radio.closest('.ai-radio')) radio.closest('.ai-radio').classList.add('selected');
     document.getElementById('modal-ai-parse').style.display = 'flex';
   };
 
@@ -322,7 +326,7 @@
       name: isTable ? '.data-det-name' : '.det-name',
       price: isTable ? '.data-det-price' : '.det-price',
       supplier: isTable ? '.data-det-supplier' : '.det-supplier',
-      note: isTable ? null : '.det-note'  // в таблице данных колонки примечания нет
+      note: isTable ? null : '.det-note'
     };
     function setIf(s, val) {
       if (!s) return;
@@ -334,23 +338,22 @@
       }
     }
     setIf(sel.name, data.name || data.title);
-    // В поле цены — всегда обычная цена (без скидки)
     setIf(sel.price, data.price);
     setIf(sel.supplier, data.supplier);
 
-    // Цена со скидкой — дописываем в примечание (только для карточки позиции)
+    // Цена со скидкой → в примечание (только карточка позиции)
     if (sel.note && data.priceDiscounted != null) {
       var discPrice = parseFloat(data.priceDiscounted);
       var regularPrice = parseFloat(data.price);
-      // Пишем только если скидочная цена реально отличается от обычной
-      if (!isNaN(discPrice) && discPrice > 0 && discPrice !== regularPrice) {
+      if (!isNaN(discPrice) && discPrice > 0 && (isNaN(regularPrice) || discPrice !== regularPrice)) {
         var noteEl = root.querySelector(sel.note);
         if (noteEl) {
           var existing = String(noteEl.value || '').trim();
           var discountNote = 'Цена со скидкой: ' + discPrice + ' ₽';
-          var newNote = existing ? (existing + '; ' + discountNote) : discountNote;
-          noteEl.value = newNote;
-          noteEl.dispatchEvent(new Event('input', { bubbles: true }));
+          if (existing.indexOf('Цена со скидкой') === -1) {
+            noteEl.value = existing ? (existing + '; ' + discountNote) : discountNote;
+            noteEl.dispatchEvent(new Event('input', { bubbles: true }));
+          }
         }
       }
     }
@@ -361,11 +364,11 @@
       var p2 = root.querySelector('.det-price'); if (p2) window.calculateRowTotal(p2);
     }
   }
-  
+
   function fetchWithTimeout(url, options, ms) {
     var ctrl = new AbortController();
     var timer = setTimeout(function () { ctrl.abort(); }, ms);
-    return fetch(url, Object.assign({}, options, { 
+    return fetch(url, Object.assign({}, options, {
       signal: ctrl.signal,
       cache: 'no-store'
     }))
@@ -406,7 +409,7 @@
 
     if (mode === 'standard') {
       setStatus('⏳ Пробую получить данные по ссылке (таймаут ' + (PARSE_TIMEOUT_MS / 1000) + ' с)...', 'info');
-      
+
       var parsePromise = fetchWithTimeout(workerUrl() + '/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -420,7 +423,7 @@
       });
 
       parsePromise.then(function (result) {
-        setStatus('✅ Данные получены автоматически', 'ok');
+        setStatus('✅ Данные получены по ссылке (скидку этот режим не определяет)', 'ok');
         if (url && target.input) {
           target.input.value = url;
           var openBtn = target.root.querySelector('.btn-icon-link');
@@ -428,7 +431,7 @@
           if (typeof window.updateLinkBtnState === 'function') window.updateLinkBtnState(target.root);
         }
         applyParsed(target.root, result.data);
-        if (typeof window.showToast === 'function') window.showToast('Данные заполнены автоматически', 'success');
+        if (typeof window.showToast === 'function') window.showToast('Данные заполнены по ссылке', 'success');
         window.closeModal('modal-ai-parse');
       }).catch(function (err) {
         if (!url) {
@@ -437,10 +440,10 @@
           return;
         }
         setStatus('⏳ Не удалось получить данные по ссылке. Пробую анализ через ИИ...', 'info');
-        
+
         var params = new URLSearchParams();
         params.append('url', url);
-        
+
         sendToAi(params, AI_TIMEOUT_MS).then(function (data) {
           if (url && target.input) {
             target.input.value = url;
@@ -449,21 +452,21 @@
             if (typeof window.updateLinkBtnState === 'function') window.updateLinkBtnState(target.root);
           }
           applyParsed(target.root, data || {});
-          
+
           if (data && (data.name || data.price || data.supplier)) {
             var missingFields = [];
             if (!data.price) missingFields.push('цена');
             if (!data.name) missingFields.push('название');
-            
+
             if (missingFields.length > 0) {
-              setStatus('⚠️ Не удалось определить: ' + missingFields.join(', ') + '. Загрузите изображение товара для точного заполнения.', 'err');
+              setStatus('⚠️ Не удалось определить: ' + missingFields.join(', ') + '. Загрузите скриншот для точного заполнения.', 'err');
               btn.disabled = false; btnText.innerText = 'Повторить';
             } else {
               if (typeof window.showToast === 'function') window.showToast('Данные заполнены через ИИ', 'success');
               window.closeModal('modal-ai-parse');
             }
           } else {
-            setStatus('⚠️ Не удалось получить данные по ссылке. Загрузите изображение товара.', 'err');
+            setStatus('⚠️ Не удалось получить данные по ссылке. Загрузите скриншот товара.', 'err');
             btn.disabled = false; btnText.innerText = 'Повторить';
           }
         }).catch(function (aiErr) {
@@ -486,20 +489,21 @@
     }
 
     var prep = _aiFile ? compressImageToBase64(_aiFile) : Promise.resolve('');
-    setStatus(_aiFile ? '⏳ Обрабатываю изображение...' : '⏳ Отправляю ссылку на анализ...', 'info');
+    setStatus(_aiFile ? '⏳ Сжимаю изображение...' : '⏳ Отправляю ссылку на анализ...', 'info');
 
     prep.then(function (imageBase64) {
       var params = new URLSearchParams();
       if (url) params.append('url', url);
       if (imageBase64) params.append('imageBase64', imageBase64);
-      
+
       var payloadSizeKB = (params.toString().length / 1024).toFixed(2);
-      console.log('[AI-PARSER] Отправка как x-www-form-urlencoded, размер:', payloadSizeKB, 'KB');
-      
+      console.log('[AI-PARSER] Отправка, размер payload:', payloadSizeKB, 'KB');
+      setStatus('⏳ Отправляю на анализ (размер ' + payloadSizeKB + ' КБ)...', 'info');
+
       if (payloadSizeKB > AI_MAX_PAYLOAD_KB) {
         console.warn('[AI-PARSER] ВНИМАНИЕ: Размер превышает ' + AI_MAX_PAYLOAD_KB + ' КБ, возможен блок антивируса!');
       }
-      
+
       return sendToAi(params, AI_TIMEOUT_MS);
     }).then(function (data) {
       if (url && target.input) {
@@ -509,14 +513,14 @@
         if (typeof window.updateLinkBtnState === 'function') window.updateLinkBtnState(target.root);
       }
       applyParsed(target.root, data || {});
-      
+
       if (data && (data.name || data.price || data.supplier)) {
         var missingFields = [];
         if (!data.price) missingFields.push('цена');
         if (!data.name) missingFields.push('название');
-        
+
         if (missingFields.length > 0) {
-          setStatus('⚠️ Не удалось определить: ' + missingFields.join(', ') + '. Загрузите изображение товара для точного заполнения.', 'err');
+          setStatus('⚠️ Не удалось определить: ' + missingFields.join(', ') + '. Снимите область с ценой крупнее и повторите.', 'err');
           btn.disabled = false; btnText.innerText = 'Повторить';
         } else {
           if (typeof window.showToast === 'function') window.showToast('Данные заполнены через ИИ', 'success');
