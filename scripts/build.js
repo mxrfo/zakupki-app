@@ -32,9 +32,19 @@ const JS_FILES_ORDER = [
   'src/js/core/config.js',
   'src/js/core/state.js',
   'src/js/core/utils.js',
-  'src/js/api/bot.js',
-  'src/js/api/api.js',
+  // API core (утилиты, от которых зависят все остальные)
+  'src/js/api/core.js',
+  // API модули
+  'src/js/api/notifications.js',
+  'src/js/api/group-status.js',
+  'src/js/api/absence.js',
+  'src/js/api/delegate.js',
+  'src/js/api/scenarios.js',
+  'src/js/api/sync.js',
+  'src/js/api/url-handler.js',
+  // API cache (зависит от core)
   'src/js/api/cache.js',
+  // Логика и UI
   'src/js/logic/roles.js',
   'src/js/ui/dragdrop.js',
   'src/js/ui/render.js',
@@ -47,7 +57,7 @@ const JS_FILES_ORDER = [
   // Парсеры
   'src/js/ui/parsers/parsers/link-parser.js',
   'src/js/ui/parsers/parsers/ai-parser.js',
-  // Forms — СТРОГО в этом порядке (по зависимостям)
+  // Forms
   'src/js/ui/forms/smart-parse.js',
   'src/js/ui/forms/suggestions.js',
   'src/js/ui/forms/positions.js',
