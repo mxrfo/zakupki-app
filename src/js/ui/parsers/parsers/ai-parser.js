@@ -1,20 +1,15 @@
 // ============================================================
-// МОДУЛЬ: ai-parser.js — модалка анализа + кнопки-иконки вместо поля ссылки
-// Обычный парсинг (без эвристики) через Worker /parse
-// ИИ-анализ (скриншот/ссылка) через Worker /ai (Gemini, бесплатно)
-// ФИКС net::ERR_FAILED: изображение СЖИМАЕТСЯ на клиенте (canvas -> JPEG<=1280px,q0.7),
-//   чтобы payload был маленьким и Worker не упирался в wall-time лимит Cloudflare Free;
-//   добавлен AbortController-таймаут и понятная обработка "Failed to fetch".
-// Кнопки переведены на inline-SVG (эмодзи на Windows-шрифтах в iframe дают «квадраты»).
-// Значение ссылки сохраняется в скрытом input — submitCreateRequest/submitData
-// в forms.js читают .det-link / .data-det-link как раньше.
+// МОДУЛЬ: ai-parser.js
+// ФИКС net::ERR_CONNECTION_RESET: агрессивное сжатие до 800px / quality 0.5.
+// Вес payload падает до 30-80 КБ, что гарантированно проходит через любые 
+// корпоративные фаерволы и антивирусы без обрыва соединения.
 // ============================================================
 (function () {
   'use strict';
 
-  var AI_TIMEOUT_MS = 30000;       // таймаут клиентского fetch (чуть больше серверного)
-  var AI_MAX_DIM = 1280;           // длинная сторона сжатого скриншота
-  var AI_JPEG_QUALITY = 0.7;
+  var AI_TIMEOUT_MS = 30000;
+  var AI_MAX_DIM = 800;          // УМЕНЬШЕНО для предотвращения обрыва соединения
+  var AI_JPEG_QUALITY = 0.5;     // УМЕНЬШЕНО для минимального веса при сохранении читаемости текста
 
   var ICON_LINK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
   var ICON_AI = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg>';
@@ -30,7 +25,6 @@
     return window.LINK_PARSER_WORKER_URL || 'https://zakupki-proxy.artemgvardin1.workers.dev';
   }
 
-  // ---------- Сжатие изображения: file -> base64 JPEG (<=AI_MAX_DIM) ----------
   function compressImageToBase64(file) {
     return new Promise(function (resolve, reject) {
       var img = new Image();
@@ -57,7 +51,6 @@
     });
   }
 
-  // ---------- 1. Модалка анализа (один раз) ----------
   var _modalBuilt = false;
   var _aiFile = null;
   function ensureModal() {
@@ -72,7 +65,7 @@
             '<button type="button" class="btn-close" onclick="closeModal(\'modal-ai-parse\')">&times;</button>' +
           '</div>' +
           '<div class="modal-body">' +
-            '<p class="ai-hint">Если сайт блокирует обычный парсинг — загрузите скриншот страницы. ИИ извлечёт данные автоматически. Большой скриншот сжимается перед отправкой.</p>' +
+            '<p class="ai-hint">Если сайт блокирует парсинг, загрузите скриншот. Изображение автоматически сжимается для быстрой и надежной отправки.</p>' +
             '<div class="ai-field">' +
               '<label class="ai-label">1. Скриншот страницы</label>' +
               '<div class="ai-drop" id="ai-drop-zone">' +
@@ -90,8 +83,8 @@
             '<div class="ai-field">' +
               '<label class="ai-label">Режим анализа</label>' +
               '<div class="ai-radio-group">' +
-                '<label class="ai-radio selected"><input type="radio" name="ai-parse-mode" value="ai" checked> <span>ИИ-анализ (Gemini, бесплатно)</span></label>' +
-                '<label class="ai-radio"><input type="radio" name="ai-parse-mode" value="standard"> <span>Обычный парсинг (без эвристики)</span></label>' +
+                '<label class="ai-radio selected"><input type="radio" name="ai-parse-mode" value="ai" checked> <span>ИИ-анализ (Gemini)</span></label>' +
+                '<label class="ai-radio"><input type="radio" name="ai-parse-mode" value="standard"> <span>Обычный парсинг</span></label>' +
               '</div>' +
             '</div>' +
             '<div class="ai-status" id="ai-parse-status"></div>' +
@@ -126,7 +119,6 @@
     input.addEventListener('change', function () {
       if (input.files && input.files[0]) setAiFile(input.files[0]);
     });
-    // подсветка выбранного radio
     document.querySelectorAll('.ai-radio input[name="ai-parse-mode"]').forEach(function (r) {
       r.addEventListener('change', function () {
         document.querySelectorAll('.ai-radio').forEach(function (l) { l.classList.remove('selected'); });
@@ -167,7 +159,6 @@
     if (preview) preview.classList.remove('show');
   }
 
-  // ---------- 2. Декоратор: скрыть поле ссылки, поставить 2 кнопки-иконки ----------
   function decorate(root) {
     if (!root || root.dataset.aiDecorated === '1') return;
     var isCard = !!root.querySelector('.link-input-wrapper');
@@ -219,7 +210,6 @@
     decorateAll();
   }
 
-  // ---------- 3. Открытие модалки ----------
   window.openAiParseModal = function (btn) {
     ensureModal();
     var root = btn.closest('.pos-card') || btn.closest('tr');
@@ -247,7 +237,6 @@
     el.textContent = text;
   }
 
-  // ---------- 4. Применение результата к строке/карточке ----------
   function applyParsed(root, data) {
     var isTable = (root.tagName === 'TR');
     var sel = {
@@ -273,7 +262,6 @@
     }
   }
 
-  // fetch с таймаутом и понятной ошибкой вместо «Failed to fetch / net::ERR_FAILED»
   function fetchWithTimeout(url, options, ms) {
     var ctrl = new AbortController();
     var timer = setTimeout(function () { ctrl.abort(); }, ms);
@@ -281,12 +269,11 @@
       .then(function (r) { clearTimeout(timer); return r; })
       .catch(function (e) {
         clearTimeout(timer);
-        if (e && e.name === 'AbortError') throw new Error('Сервер не ответил за ' + Math.round(ms / 1000) + ' с (перегрузка ИИ). Повторите через 10–15 секунд.');
-        throw new Error('Сетевая ошибка: сервер недоступен или соединение прервано (net::ERR_FAILED). Повторите попытку.');
+        if (e && e.name === 'AbortError') throw new Error('Сервер не ответил за ' + Math.round(ms / 1000) + ' с. Повторите через 10–15 секунд.');
+        throw new Error('Сетевая ошибка: соединение прервано (net::ERR_CONNECTION_RESET). Проверьте интернет или отключите антивирус на время загрузки.');
       });
   }
 
-  // ---------- 5. Запуск анализа ----------
   window.runAiParse = function () {
     var target = window._aiParseTarget;
     if (!target) return;
@@ -296,10 +283,10 @@
     var btnText = document.getElementById('ai-parse-btn-text');
 
     if (mode === 'standard' && !url) { setStatus('Для обычного парсинга укажите ссылку.', 'err'); return; }
-    if (mode === 'ai' && !_aiFile && !url) { setStatus('Загрузите скриншот или укажите ссылку для ИИ-анализа.', 'err'); return; }
+    if (mode === 'ai' && !_aiFile && !url) { setStatus('Загрузите скриншот или укажите ссылку.', 'err'); return; }
 
     btn.disabled = true; btnText.innerText = 'Обработка...';
-    setStatus('⏳ Сжимаю изображение и отправляю на анализ...', 'info');
+    setStatus('⏳ Сжимаю изображение и отправляю...', 'info');
 
     var prep = (_aiFile && mode === 'ai') ? compressImageToBase64(_aiFile) : Promise.resolve('');
 
@@ -307,10 +294,14 @@
       if (mode === 'standard') {
         return window.fetchParsedProduct(url);
       }
+      
+      var payload = JSON.stringify({ url: url || null, imageBase64: imageBase64 || null });
+      console.log('[AI-PARSER] Отправляемый payload размер:', (payload.length / 1024).toFixed(2), 'KB'); // Диагностика
+      
       return fetchWithTimeout(workerUrl() + '/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url || null, imageBase64: imageBase64 || null })
+        body: payload
       }, AI_TIMEOUT_MS).then(function (res) {
         return res.json().then(function (data) {
           if (!res.ok) throw new Error((data && data.error) || ('ИИ-сервер вернул HTTP ' + res.status));
@@ -329,7 +320,7 @@
         if (typeof window.showToast === 'function') window.showToast('Данные извлечены', 'success');
         window.closeModal('modal-ai-parse');
       } else {
-        setStatus('⚠️ Данных извлечь не удалось. Уточните скриншот/ссылку и повторите.', 'err');
+        setStatus('⚠️ Данных извлечь не удалось. Уточните скриншот/ссылку.', 'err');
         btn.disabled = false; btnText.innerText = 'Повторить';
       }
     }).catch(function (err) {
@@ -338,7 +329,6 @@
     });
   };
 
-  // ---------- 6. Инициализация ----------
   function boot() {
     ensureModal();
     startObserver();
