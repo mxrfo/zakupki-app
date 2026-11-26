@@ -1,14 +1,14 @@
 // ============================================================
 // МОДУЛЬ: ai-parser.js
-// ФИКС CONNECTION_RESET: 
-// 1. Клиентский таймаут увеличен до 45с (чтобы дождаться ответа Worker'а).
-// 2. Добавлен cache: 'no-store' для обхода буферизации корпоративных прокси.
-// 3. Агрессивное сжатие (800px, q0.5) сохранено для минимального веса payload.
+// ФИКС CONNECTION_RESET: переход на multipart/form-data.
+// Корпоративные прокси и антивирусы часто блокируют или сбрасывают 
+// соединения с большими base64-строками внутри application/json.
+// FormData воспринимается как обычная загрузка файла и часто проходит фильтры.
 // ============================================================
 (function () {
   'use strict';
 
-  var AI_TIMEOUT_MS = 45000;       // УВЕЛИЧЕНО: даем Worker'у время вернуть ответ или 504
+  var AI_TIMEOUT_MS = 45000;
   var AI_MAX_DIM = 800;
   var AI_JPEG_QUALITY = 0.5;
 
@@ -66,7 +66,7 @@
             '<button type="button" class="btn-close" onclick="closeModal(\'modal-ai-parse\')">&times;</button>' +
           '</div>' +
           '<div class="modal-body">' +
-            '<p class="ai-hint">Если сайт блокирует парсинг, загрузите скриншот. Изображение автоматически сжимается для надежной отправки.</p>' +
+            '<p class="ai-hint">Если сайт блокирует парсинг, загрузите скриншот. Изображение сжимается и отправляется как файл для обхода сетевых фильтров.</p>' +
             '<div class="ai-field">' +
               '<label class="ai-label">1. Скриншот страницы</label>' +
               '<div class="ai-drop" id="ai-drop-zone">' +
@@ -268,13 +268,13 @@
     var timer = setTimeout(function () { ctrl.abort(); }, ms);
     return fetch(url, Object.assign({}, options, { 
       signal: ctrl.signal,
-      cache: 'no-store' // КРИТИЧНО: запрещает прокси буферизировать и сбрасывать соединение
+      cache: 'no-store'
     }))
       .then(function (r) { clearTimeout(timer); return r; })
       .catch(function (e) {
         clearTimeout(timer);
-        if (e && e.name === 'AbortError') throw new Error('Сервер не ответил за ' + Math.round(ms / 1000) + ' с. Повторите через 10–15 секунд.');
-        throw new Error('Сетевая ошибка: соединение прервано. Проверьте интернет или отключите антивирус на время загрузки.');
+        if (e && e.name === 'AbortError') throw new Error('Сервер не ответил за ' + Math.round(ms / 1000) + ' с.');
+        throw new Error('Сетевая ошибка: соединение прервано (возможно, антивирус или прокси блокирует запрос).');
       });
   }
 
@@ -299,13 +299,18 @@
         return window.fetchParsedProduct(url);
       }
       
-      var payload = JSON.stringify({ url: url || null, imageBase64: imageBase64 || null });
-      console.log('[AI-PARSER] Отправляемый payload размер:', (payload.length / 1024).toFixed(2), 'KB');
+      // ИСПОЛЬЗУЕМ FORMDATA ВМЕСТО JSON ДЛЯ ОБХОДА СЕТЕВЫХ ФИЛЬТРОВ
+      var formData = new FormData();
+      if (imageBase64) formData.append('imageBase64', imageBase64);
+      if (url) formData.append('url', url);
+      
+      var sizeEstimate = (imageBase64 ? imageBase64.length : 0) + (url ? url.length : 0);
+      console.log('[AI-PARSER] Отправка через FormData, примерный размер:', (sizeEstimate / 1024).toFixed(2), 'KB');
       
       return fetchWithTimeout(workerUrl() + '/ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload
+        // ВАЖНО: не указываем Content-Type, чтобы браузер сам добавил boundary для multipart/form-data
+        body: formData
       }, AI_TIMEOUT_MS).then(function (res) {
         return res.json().then(function (data) {
           if (!res.ok) throw new Error((data && data.error) || ('ИИ-сервер вернул HTTP ' + res.status));
