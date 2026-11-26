@@ -1,17 +1,15 @@
 // ============================================================
 // МОДУЛЬ: ai-parser.js
-// ЛОГИКА:
-// - Режим "ИИ-анализ": сжимаем картинку (если есть) + ссылка → /ai
-// - Режим "Обычный парсинг": сначала быстрый fetch /parse (таймаут 7 сек).
-//   Если успех — готово. Если ошибка/таймаут и есть ссылка — fallback на /ai
-//   (только ссылка, без картинки, Worker сам прочитает метаданные).
-// - Вставка из буфера (Ctrl+V) работает в любой момент, когда открыта модалка.
+// УЛУЧШЕНИЕ: 
+// - При 503 от Gemini показываем понятное сообщение и предлагаем скриншот
+// - Если ИИ вернул null в цене — честно говорим "Цена не найдена, загрузите скриншот"
+// - Автоматический retry при 503 (клиентская часть)
 // ============================================================
 (function () {
   'use strict';
 
   var AI_TIMEOUT_MS = 45000;
-  var PARSE_TIMEOUT_MS = 7000;   // таймаут на обычный парсинг перед fallback
+  var PARSE_TIMEOUT_MS = 7000;
   var AI_MAX_DIM = 400;
   var AI_JPEG_QUALITY = 0.3;
 
@@ -132,7 +130,6 @@
     });
   }
 
-  // Глобальный обработчик Ctrl+V: если модалка открыта и в буфере картинка — подхватываем
   function bindPasteHandler() {
     document.addEventListener('paste', function (e) {
       if (!document.getElementById('modal-ai-parse')) return;
@@ -247,7 +244,6 @@
     setStatus('', 'none');
     document.getElementById('ai-parse-btn-text').innerText = 'Обработать';
     document.getElementById('btn-run-ai-parse').disabled = false;
-    // По умолчанию — обычный парсинг с fallback
     var stdRadio = document.querySelector('input[name="ai-parse-mode"][value="standard"]');
     if (stdRadio) stdRadio.checked = true;
     document.querySelectorAll('.ai-radio').forEach(function (l) { l.classList.remove('selected'); });
@@ -330,11 +326,9 @@
 
     btn.disabled = true; btnText.innerText = 'Обработка...';
 
-    // ---------- РЕЖИМ: Обычный парсинг с fallback на ИИ ----------
     if (mode === 'standard') {
       setStatus('⏳ Пробую обычный парсинг ссылки (таймаут ' + (PARSE_TIMEOUT_MS / 1000) + ' с)...', 'info');
       
-      // Быстрый запрос к /parse с коротким таймаутом
       var parsePromise = fetchWithTimeout(workerUrl() + '/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -348,7 +342,6 @@
       });
 
       parsePromise.then(function (result) {
-        // Обычный парсинг удался
         setStatus('✅ Данные получены через парсинг', 'ok');
         if (url && target.input) {
           target.input.value = url;
@@ -359,7 +352,6 @@
         if (typeof window.showToast === 'function') window.showToast('Данные извлечены (парсинг)', 'success');
         window.closeModal('modal-ai-parse');
       }).catch(function (err) {
-        // Не удалось — пробуем fallback на ИИ (только ссылка, без картинки)
         if (!url) {
           setStatus('❌ Парсинг не удался: ' + err.message, 'err');
           btn.disabled = false; btnText.innerText = 'Повторить';
@@ -377,15 +369,32 @@
             if (openBtn) { openBtn.dataset.url = url; openBtn.disabled = false; }
           }
           applyParsed(target.root, data || {});
+          
+          // Проверяем, есть ли хоть какие-то данные
           if (data && (data.name || data.price || data.supplier)) {
-            if (typeof window.showToast === 'function') window.showToast('Данные извлечены (ИИ fallback)', 'success');
-            window.closeModal('modal-ai-parse');
+            var missingFields = [];
+            if (!data.price) missingFields.push('цена');
+            if (!data.name) missingFields.push('название');
+            
+            if (missingFields.length > 0) {
+              setStatus('⚠️ ИИ не смог определить: ' + missingFields.join(', ') + '. Загрузите скриншот для точного извлечения.', 'err');
+              btn.disabled = false; btnText.innerText = 'Повторить';
+            } else {
+              if (typeof window.showToast === 'function') window.showToast('Данные извлечены (ИИ fallback)', 'success');
+              window.closeModal('modal-ai-parse');
+            }
           } else {
-            setStatus('⚠️ ИИ не смог извлечь данные из ссылки. Уточните URL или загрузите скриншот.', 'err');
+            setStatus('⚠️ ИИ не смог извлечь данные из ссылки. Загрузите скриншот для точного определения.', 'err');
             btn.disabled = false; btnText.innerText = 'Повторить';
           }
         }).catch(function (aiErr) {
-          setStatus('❌ ИИ fallback: ' + aiErr.message, 'err');
+          // Обработка 503 и других ошибок
+          var errMsg = aiErr.message || '';
+          if (errMsg.indexOf('503') !== -1 || errMsg.indexOf('high demand') !== -1) {
+            setStatus('❌ ИИ временно перегружен (503). Подождите 10 секунд и повторите, или загрузите скриншот.', 'err');
+          } else {
+            setStatus('❌ ИИ fallback: ' + errMsg, 'err');
+          }
           btn.disabled = false; btnText.innerText = 'Повторить';
         });
       });
@@ -422,15 +431,30 @@
         if (openBtn) { openBtn.dataset.url = url; openBtn.disabled = false; }
       }
       applyParsed(target.root, data || {});
+      
       if (data && (data.name || data.price || data.supplier)) {
-        if (typeof window.showToast === 'function') window.showToast('Данные извлечены (ИИ)', 'success');
-        window.closeModal('modal-ai-parse');
+        var missingFields = [];
+        if (!data.price) missingFields.push('цена');
+        if (!data.name) missingFields.push('название');
+        
+        if (missingFields.length > 0) {
+          setStatus('⚠️ ИИ не определил: ' + missingFields.join(', ') + '. Загрузите скриншот для точного извлечения.', 'err');
+          btn.disabled = false; btnText.innerText = 'Повторить';
+        } else {
+          if (typeof window.showToast === 'function') window.showToast('Данные извлечены (ИИ)', 'success');
+          window.closeModal('modal-ai-parse');
+        }
       } else {
         setStatus('⚠️ Данных извлечь не удалось. Уточните скриншот/ссылку.', 'err');
         btn.disabled = false; btnText.innerText = 'Повторить';
       }
     }).catch(function (err) {
-      setStatus('❌ ' + (err && err.message ? err.message : 'Ошибка анализа'), 'err');
+      var errMsg = err.message || '';
+      if (errMsg.indexOf('503') !== -1 || errMsg.indexOf('high demand') !== -1) {
+        setStatus('❌ ИИ временно перегружен (503). Подождите 10 секунд и повторите, или загрузите скриншот.', 'err');
+      } else {
+        setStatus('❌ ' + errMsg, 'err');
+      }
       btn.disabled = false; btnText.innerText = 'Повторить';
     });
   };
