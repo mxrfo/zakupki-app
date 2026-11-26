@@ -18,9 +18,9 @@
 
   var AI_TIMEOUT_MS = 45000;
   var PARSE_TIMEOUT_MS = 7000;
-  var AI_MAX_DIM = 1024;
+  var AI_MAX_DIM = 800;
   var AI_JPEG_QUALITY = 0.85;
-  var AI_MAX_PAYLOAD_KB = 24;
+  var AI_MAX_PAYLOAD_KB = 18;
 
   var ICON_LINK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
   var ICON_AI = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg>';
@@ -55,19 +55,30 @@
             ctx.drawImage(img, 0, 0, cw, ch);
             return String(canvas.toDataURL('image/jpeg', quality)).split(',')[1] || '';
           }
-          var qualities = [AI_JPEG_QUALITY, 0.7, 0.6, 0.5, 0.4, 0.3];
-          var dims = [AI_MAX_DIM, 768, 640];
+          var qualities = [AI_JPEG_QUALITY, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2];
+          var dims = [AI_MAX_DIM, 640, 480, 400];
           var b64 = encode(dims[0], qualities[0]);
-          if (b64.length / 1024 > AI_MAX_PAYLOAD_KB) {
-            for (var q = 1; q < qualities.length && b64.length / 1024 > AI_MAX_PAYLOAD_KB; q++) {
+          var finalSize = b64.length / 1024;
+          
+          // Адаптивное сжатие: сначала снижаем качество, потом размер
+          if (finalSize > AI_MAX_PAYLOAD_KB) {
+            for (var q = 1; q < qualities.length && finalSize > AI_MAX_PAYLOAD_KB; q++) {
               b64 = encode(dims[0], qualities[q]);
+              finalSize = b64.length / 1024;
             }
-            for (var d = 1; d < dims.length && b64.length / 1024 > AI_MAX_PAYLOAD_KB; d++) {
-              for (var q2 = 0; q2 < qualities.length && b64.length / 1024 > AI_MAX_PAYLOAD_KB; q2++) {
+            for (var d = 1; d < dims.length && finalSize > AI_MAX_PAYLOAD_KB; d++) {
+              for (var q2 = 0; q2 < qualities.length && finalSize > AI_MAX_PAYLOAD_KB; q2++) {
                 b64 = encode(dims[d], qualities[q2]);
+                finalSize = b64.length / 1024;
               }
             }
           }
+          
+          // Финальная проверка
+          if (finalSize > AI_MAX_PAYLOAD_KB) {
+            console.warn('[AI-PARSER] Не удалось сжать до ' + AI_MAX_PAYLOAD_KB + ' КБ, текущий размер: ' + finalSize.toFixed(2) + ' КБ');
+          }
+          
           URL.revokeObjectURL(objUrl);
           resolve(b64);
         } catch (e) { URL.revokeObjectURL(objUrl); reject(e); }
@@ -310,9 +321,11 @@
     var sel = {
       name: isTable ? '.data-det-name' : '.det-name',
       price: isTable ? '.data-det-price' : '.det-price',
-      supplier: isTable ? '.data-det-supplier' : '.det-supplier'
+      supplier: isTable ? '.data-det-supplier' : '.det-supplier',
+      note: isTable ? null : '.det-note'  // в таблице данных колонки примечания нет
     };
     function setIf(s, val) {
+      if (!s) return;
       if (val == null || String(val).trim() === '') return;
       var el = root.querySelector(s);
       if (el && !String(el.value || '').trim()) {
@@ -321,15 +334,34 @@
       }
     }
     setIf(sel.name, data.name || data.title);
+    // В поле цены — всегда обычная цена (без скидки)
     setIf(sel.price, data.price);
     setIf(sel.supplier, data.supplier);
+
+    // Цена со скидкой — дописываем в примечание (только для карточки позиции)
+    if (sel.note && data.priceDiscounted != null) {
+      var discPrice = parseFloat(data.priceDiscounted);
+      var regularPrice = parseFloat(data.price);
+      // Пишем только если скидочная цена реально отличается от обычной
+      if (!isNaN(discPrice) && discPrice > 0 && discPrice !== regularPrice) {
+        var noteEl = root.querySelector(sel.note);
+        if (noteEl) {
+          var existing = String(noteEl.value || '').trim();
+          var discountNote = 'Цена со скидкой: ' + discPrice + ' ₽';
+          var newNote = existing ? (existing + '; ' + discountNote) : discountNote;
+          noteEl.value = newNote;
+          noteEl.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+    }
+
     if (isTable && typeof window.calculateDataRowTotal === 'function') {
       var p1 = root.querySelector('.data-det-price'); if (p1) window.calculateDataRowTotal(p1);
     } else if (!isTable && typeof window.calculateRowTotal === 'function') {
       var p2 = root.querySelector('.det-price'); if (p2) window.calculateRowTotal(p2);
     }
   }
-
+  
   function fetchWithTimeout(url, options, ms) {
     var ctrl = new AbortController();
     var timer = setTimeout(function () { ctrl.abort(); }, ms);
