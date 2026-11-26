@@ -519,7 +519,7 @@ function addDetailRow(data) {
         <div class="form-group pg-qty">
           <label>Кол-во</label>
           <div class="unit-input">
-            <input type="number" class="det-qty" step="1" placeholder="1" value="${escapeHtml(String(qtyVal))}" oninput="calculateRowTotal(this)">
+            <input type="number" class="det-qty" step="1" placeholder="0" value="${escapeHtml(String(qtyVal))}" oninput="calculateRowTotal(this)">
             <span class="unit">шт.</span>
           </div>
         </div>
