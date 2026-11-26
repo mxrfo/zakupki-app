@@ -18,7 +18,7 @@
   var PARSE_TIMEOUT_MS = 7000;
   var AI_MAX_DIM = 800;
   var AI_JPEG_QUALITY = 0.85;
-  var AI_MAX_PAYLOAD_KB = 18;
+  var AI_MAX_PAYLOAD_KB = 16;
 
   var ICON_LINK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
   var ICON_AI = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg>';
@@ -339,18 +339,24 @@
     setIf(sel.price, data.price);
     setIf(sel.supplier, data.supplier);
 
-    if (sel.note && data.priceDiscounted != null) {
-      var discPrice = parseFloat(data.priceDiscounted);
-      var regularPrice = parseFloat(data.price);
-      if (!isNaN(discPrice) && discPrice > 0 && (isNaN(regularPrice) || discPrice !== regularPrice)) {
-        var noteEl = root.querySelector(sel.note);
-        if (noteEl) {
-          var existing = String(noteEl.value || '').trim();
-          var discountNote = 'Цена со скидкой: ' + discPrice + ' ₽';
-          if (existing.indexOf('Цена со скидкой') === -1) {
-            noteEl.value = existing ? (existing + '; ' + discountNote) : discountNote;
-            noteEl.dispatchEvent(new Event('input', { bubbles: true }));
+    // В примечание — выгода: сначала текстовое описание, иначе старая логика со второй ценой
+    if (sel.note) {
+      var noteEl = root.querySelector(sel.note);
+      if (noteEl) {
+        var existing = String(noteEl.value || '').trim();
+        var noteText = '';
+        if (data.discountNote && String(data.discountNote).trim()) {
+          noteText = 'Выгода: ' + String(data.discountNote).trim();
+        } else if (data.priceDiscounted != null) {
+          var discPrice = parseFloat(data.priceDiscounted);
+          var regularPrice = parseFloat(data.price);
+          if (!isNaN(discPrice) && discPrice > 0 && (isNaN(regularPrice) || discPrice !== regularPrice)) {
+            noteText = 'Цена со скидкой: ' + discPrice + ' ₽';
           }
+        }
+        if (noteText && existing.indexOf('Выгода:') === -1 && existing.indexOf('Цена со скидкой') === -1) {
+          noteEl.value = existing ? (existing + '; ' + noteText) : noteText;
+          noteEl.dispatchEvent(new Event('input', { bubbles: true }));
         }
       }
     }
