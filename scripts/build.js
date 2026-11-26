@@ -91,61 +91,6 @@ function injectBuildId(content, buildId) {
   return content.replace(re, `let APP_BUILD_ID = '${buildId}';`);
 }
 
-async function buildRussianSpellCheckerSeparate() {
-  const dictionaryPath = path.join(process.cwd(), 'node_modules', 'dictionary-ru');
-  const affPath = path.join(dictionaryPath, 'index.aff');
-  const dicPath = path.join(dictionaryPath, 'index.dic');
-
-  if (!fs.existsSync(affPath) || !fs.existsSync(dicPath)) {
-    console.warn('⚠️ Файлы Hunspell не найдены. Проверка орфографии отключена.');
-    return false;
-  }
-
-  console.log('📖 Читаю русский словарь Hunspell...');
-  const aff = fs.readFileSync(affPath, 'utf8');
-  const dic = fs.readFileSync(dicPath, 'utf8');
-
-  const contents = `
-import nspell from 'nspell';
-const spell = nspell({
-    aff: ${JSON.stringify(aff)},
-    dic: ${JSON.stringify(dic)}
-});
-window.RussianSpellChecker = {
-    correct(word) {
-        try {
-            const normalizedWord = String(word).toLowerCase().trim();
-            if (!normalizedWord) return false;
-            return spell.correct(normalizedWord);
-        } catch (error) {
-            console.warn('[RussianSpellChecker] Ошибка проверки:', word, error);
-            return false;
-        }
-    }
-};
-`;
-
-  const result = await esbuild.build({
-    stdin: { contents, resolveDir: process.cwd(), sourcefile: 'russian-spell-checker-entry.js', loader: 'js' },
-    bundle: true,
-    platform: 'browser',
-    format: 'iife',
-    target: ['es2018'],
-    minify: true,
-    write: false,
-  });
-
-  if (!result.outputFiles || !result.outputFiles.length) {
-    throw new Error('Не удалось собрать русский словарь Hunspell.');
-  }
-
-  const spellCheckerCode = result.outputFiles[0].text;
-  const spellCheckerPath = path.join(process.cwd(), 'dist', 'spellchecker.js');
-  fs.writeFileSync(spellCheckerPath, spellCheckerCode, 'utf8');
-  console.log(`✅ Hunspell собран: dist/spellchecker.js (${(spellCheckerCode.length / 1024).toFixed(1)} КБ)`);
-  return true;
-}
-
 function replaceCssLink(html, css) {
   const cssLinkPattern = /<link\b(?=[^>]*\bhref\s*=\s*["'][^"']*styles\.css(?:\?[^"']*)?["'])[^>]*>/i;
   if (!cssLinkPattern.test(html)) {
@@ -187,11 +132,6 @@ async function createZip() {
 
     archive.file(OUTPUT_HTML, { name: 'index.html', date: FIXED_ENTRY_DATE });
 
-    const spellCheckerPath = path.join(process.cwd(), 'dist', 'spellchecker.js');
-    if (fs.existsSync(spellCheckerPath)) {
-      archive.file(spellCheckerPath, { name: 'spellchecker.js', date: FIXED_ENTRY_DATE });
-    }
-
     archive.finalize().catch(reject);
   });
 }
@@ -209,8 +149,6 @@ async function build() {
   } else {
     console.warn(`⚠️ CSS-файл не найден: ${CSS_FILE}`);
   }
-
-  await buildRussianSpellCheckerSeparate();
 
   let js = '';
 
