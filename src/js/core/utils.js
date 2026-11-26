@@ -166,7 +166,7 @@ function getDeadlineDisplay(dateStr) {
   else if (diffDays <= (settings.deadlineYellowDays || 7)) color = '#f59e0b';
 
   if (color) {
-    return `<span style="color:${color}; font-weight:600;">${dateText}</span>`;
+    return `<span class="date-colored" style="color:${color};">${dateText}</span>`;
   }
   return dateText;
 }

@@ -525,7 +525,7 @@ function addDetailRow(data) {
         <div class="form-group pg-qty">
           <label>Кол-во</label>
           <div class="unit-input">
-            <input type="number" class="det-qty" step="1" placeholder="1" value="${escapeHtml(String(qtyVal))}" oninput="calculateRowTotal(this)">
+            <input type="number" class="det-qty" step="1" placeholder="0" value="${escapeHtml(String(qtyVal))}" oninput="calculateRowTotal(this)">
             <span class="unit">шт.</span>
           </div>
         </div>
@@ -535,7 +535,7 @@ function addDetailRow(data) {
           <button type="button" class="btn-icon-ai" title="Анализ страницы" onclick="openAiParseModal(this)">${ICON_AI}</button>
         </div>
         <!-- Скрытое поле для ссылки (нужно для submitCreateRequest) -->
-        <input type="url" class="det-link" style="display:none" value="${escapeHtml(linkVal)}">
+        <input type="url" class="det-link link-hidden" style="display:none" value="${escapeHtml(linkVal)}">
       </div>
       <details class="pos-extra"${hasExtra ? ' open' : ''}>
         <summary>Дополнительно: поставщик, артикул, примечание</summary>
@@ -842,7 +842,7 @@ function addDataDetailRow() {
     `<td><input type="text" class="data-det-total" readonly></td>` +
     `<td><input type="text" class="data-det-supplier"></td>` +
     `<td><input type="url" class="data-det-link"></td>` +
-    `<td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
+    `<td class="text-center" style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
   document.getElementById('data-detail-tbody').appendChild(tr);
 }
 

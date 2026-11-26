@@ -202,7 +202,7 @@
       var label = root.querySelector('.pg-link label');
       if (label) label.style.display = 'none';
       wrapper.innerHTML =
-        '<input type="url" class="det-link" style="display:none" value="' + esc(v) + '">' +
+        '<input type="url" class="det-link link-hidden" value="' + esc(v) + '">' +
         '<button type="button" class="btn-icon-link" title="Открыть ссылку" data-url="' + esc(v) + '" ' +
         'onclick="openLink(this)" ' + (v ? '' : 'disabled') + '>' + ICON_LINK + '</button>' +
         '<button type="button" class="btn-icon-ai" title="Автоматическое заполнение" onclick="openAiParseModal(this)">' + ICON_AI + '</button>';
@@ -212,7 +212,7 @@
       if (!td) return;
       var tv = tinput.value || '';
       td.innerHTML =
-        '<input type="url" class="data-det-link" style="display:none" value="' + esc(tv) + '">' +
+        '<input type="url" class="data-det-link link-hidden" value="' + esc(tv) + '">' +
         '<button type="button" class="btn-icon-link" title="Открыть ссылку" data-url="' + esc(tv) + '" ' +
         'onclick="openLink(this)" ' + (tv ? '' : 'disabled') + '>' + ICON_LINK + '</button>' +
         '<button type="button" class="btn-icon-ai" title="Автоматическое заполнение" onclick="openAiParseModal(this)">' + ICON_AI + '</button>';

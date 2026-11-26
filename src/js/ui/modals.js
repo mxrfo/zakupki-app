@@ -224,14 +224,14 @@ function openViewModal(id) {
   const combinedDirText = resolveCombinedDir(item) || '—';
   const canSeeInvoice = !(activeTab === 'all' && currentRole !== 'admin' && currentRole !== 'econ');
 
-  let html = `${isPostponed ? `<div class="note-badge postponed" style="margin-bottom:15px;">Отложено до: ${new Date(postponeDate).toLocaleDateString('ru-RU')}</div>` : ''}
+  let html = `${isPostponed ? `<div class="note-badge postponed mt-15">Отложено до: ${new Date(postponeDate).toLocaleDateString('ru-RU')}</div>` : ''}
     <div class="view-meta-block">
       <div class="view-dates-row">
         <div class="view-date-item"><div class="view-date-label">Дата создания</div><div class="view-date-value">${createdDate}</div></div>
         <div class="view-date-item"><div class="view-date-label">Крайний срок</div><div class="view-date-value">${deadlineDisplay}</div></div>
       </div>
       <div class="view-meta-cards">
-        <div class="view-meta-card"><div class="view-meta-card-label">Заказчик</div><div class="view-meta-card-value">${creatorName} <span style="font-weight:400; color:#64748b;">(${creatorDept})</span></div></div>
+        <div class="view-meta-card"><div class="view-meta-card-label">Заказчик</div><div class="view-meta-card-value">${creatorName} <span class="text-secondary">(${creatorDept})</span></div></div>
         ${currentRole !== 'manager' ? `<div class="view-meta-card"><div class="view-meta-card-label">Исполнитель</div><div class="view-meta-card-value">${deptName}</div></div>` : ''}
         ${managerName !== '—' ? `<div class="view-meta-card"><div class="view-meta-card-label">Менеджер</div><div class="view-meta-card-value">${managerName}</div></div>` : ''}
         ${combinedDirText !== '—' ? `<div class="view-meta-card"><div class="view-meta-card-label">Раздел/Напр</div><div class="view-meta-card-value">${combinedDirText}</div></div>` : ''}
@@ -239,10 +239,10 @@ function openViewModal(id) {
     </div>
     <div class="view-content-block">
       <div><div class="view-short-desc-label">Что нужно закупить (Кратко):</div><div class="view-short-desc-value">${shortDesc}</div></div>
-      <div class="view-details-divider" style="display:flex; gap:20px; flex-wrap:wrap;">
+      <div class="view-details-divider calc-details-row">
         <div><span class="view-details-label">Сумма товаров:</span> <b>${formatMoney(productAmount)}</b></div>
         <div><span class="view-details-label">Сумма доставки:</span> <b>${formatMoney(deliveryAmount)}</b></div>
-        <div style="color:var(--brand-blue); font-size:16px; font-weight:800;"><span class="view-details-label" style="color:var(--brand-blue);">ИТОГО:</span> ${formatMoney(totalAmount)}</div>
+        <div class="calc-total"><span class="view-details-label calc-total-label">ИТОГО:</span> ${formatMoney(totalAmount)}</div>
       </div>`;
 
   const names = item[actualFields.detailName] || [];
@@ -255,13 +255,13 @@ function openViewModal(id) {
 
   if (hasDetails) {
     html += `<div class="view-details-divider"><div class="view-details-label">Детализация:</div><div class="detail-table-wrapper"><table class="detail-table"><thead><tr>` +
-      `<th style="width: 22%;">Наименование</th>` +
-      `<th style="width: 16%;">Цель</th>` +
-      `<th style="width: 18%;">Цена за 1 шт. без учета доставки</th>` +
-      `<th style="width: 9%;">Кол-во</th>` +
-      `<th style="width: 12%;">Всего</th>` +
-      `<th style="width: 13%;">Поставщик</th>` +
-      `<th style="width: 10%;">Ссылка</th>` +
+      `<th class="col-view-name">Наименование</th>` +
+      `<th class="col-view-purpose">Цель</th>` +
+      `<th class="col-view-price">Цена за 1 шт. без учета доставки</th>` +
+      `<th class="col-view-qty">Кол-во</th>` +
+      `<th class="col-view-total">Всего</th>` +
+      `<th class="col-view-supplier">Поставщик</th>` +
+      `<th class="col-view-link">Ссылка</th>` +
       `</tr></thead><tbody>`;
       
     const arrN = Array.isArray(names) ? names : [names];
@@ -288,22 +288,22 @@ function openViewModal(id) {
     }
     html += `</tbody></table></div></div>`;
   } else {
-    html += `<div class="view-details-divider"><p style="color:#64748b; font-style: italic;">Детализация не заполнена.</p></div>`;
+    html += `<div class="view-details-divider"><p class="text-italic-muted">Детализация не заполнена.</p></div>`;
   }
   html += `</div>`;
 
   const fileInfo = getFileInfo(item, actualFields.fileInvoice);
   if (fileInfo && fileInfo.url && canSeeInvoice) {
-    html += `<h3 style="font-size:14px; margin-top:20px;">Файлы:</h3><a class="file-attachment" href="${fileInfo.url}" target="_blank">${fileInfo.name}</a>`;
+    html += `<h3 class="modal-h3">Файлы:</h3><a class="file-attachment" href="${fileInfo.url}" target="_blank">${fileInfo.name}</a>`;
   }
   if (econComment) {
-    html += `<div class="note-comment-box" style="margin-top:20px;"><b>Комментарий (${commentAuthorName}):</b> ${econComment}</div>`;
+    html += `<div class="note-comment-box mt-20"><b>Комментарий (${commentAuthorName}):</b> ${econComment}</div>`;
   }
   
   const histField = actualFields.delegateHistory;
   const hist = (histField && item[histField]) ? String(item[histField]) : '';
   if (hist) {
-    html += `<div class="note-comment-box" style="margin-top:20px; background:#fffbeb;"><b>История делегирований:</b><div style="white-space:pre-wrap; font-size:12px;">${escapeHtml(hist)}</div></div>`;
+    html += `<div class="note-comment-box comment-box-highlight mt-20"><b>История делегирований:</b><div class="text-pre-wrap">${escapeHtml(hist)}</div></div>`;
   }
 
   document.getElementById('view-body').innerHTML = html;
@@ -366,7 +366,7 @@ function openDataModal(id) {
       `<td><input type="text" class="data-det-total" value="${totalVal ? totalVal.toFixed(2) : ''}" readonly></td>` +
       `<td><input type="text" class="data-det-supplier" value="${arrS[i] || ''}"></td>` +
       `<td><input type="url" class="data-det-link" value="${arrL[i] || ''}"></td>` +
-      `<td style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
+      `<td class="text-center" style="text-align:center;"><button type="button" class="btn-remove-row" onclick="this.closest('tr').remove();">&times;</button></td>`;
     tbody.appendChild(tr);
   }
 
@@ -469,7 +469,7 @@ function openActionModal(id, type) {
   } else if (type === 'send_to_rework') {
     title.innerText = 'Отправить на доработку'; 
     label.innerText = 'Комментарий — что исправить (обязательно)';
-    btnHtml += `<button type="submit" class="btn" style="background:#f59e0b; border-color:#f59e0b; color:#fff;">Отправить на доработку</button>`;
+    btnHtml += `<button type="submit" class="btn btn-rework">Отправить на доработку</button>`;
   } else if (type === 'reject_terms') {
     title.innerText = 'Отклонить условия'; 
     label.innerText = 'Причина отказа';

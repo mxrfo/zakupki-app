@@ -10,13 +10,13 @@ window.addEventListener('unhandledrejection', function (ev) {
 function setLoadingStep(step, total) {
   const container = document.getElementById('app-container');
   const pct = Math.round((step / total) * 100);
-  container.innerHTML = `<div class="loading" style="grid-column: 1/-1;"><div style="margin-bottom:12px;">Загрузка данных... ${pct}%</div><div style="width:300px; height:6px; background:#e2e8f0; border-radius:3px; margin:0 auto; overflow:hidden;"><div style="width:${pct}%; height:100%; background:var(--brand-blue); transition:width 0.3s;"></div></div></div>`;
+  container.innerHTML = `<div class="loading loading-full"><div style="margin-bottom:12px;">Загрузка данных... ${pct}%</div><div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%;"></div></div></div>`;
 }
 
 function showNoAuthError() {
   const container = document.getElementById('app-container');
   if (!container) return;
-  container.innerHTML = `<div class="error-box" style="text-align:center; padding:32px; max-width:560px; margin:0 auto;"><h3 style="margin-top:0;">Откройте приложение через портал Битрикс24</h3><p style="line-height:1.5;">Вы перешли по прямой ссылке на файл приложения (домен <code>cdn-*.bitrix24.ru</code>). В этом режиме нет авторизации портала.</p><button class="btn btn-primary" onclick="tryRedirectToPortal()" style="margin-top:8px;">Перейти в Битрикс24</button></div>`;
+  container.innerHTML = `<div class="error-box error-center"><h3 class="mt-0">Откройте приложение через портал Битрикс24</h3><p style="line-height:1.5;">Вы перешли по прямой ссылке на файл приложения (домен <code>cdn-*.bitrix24.ru</code>). В этом режиме нет авторизации портала.</p><button class="btn btn-primary mt-8" onclick="tryRedirectToPortal()">Перейти в Битрикс24</button></div>`;
   logAction('BX24.init не выполнился — приложение открыто без авторизации портала', 'error');
 }
 

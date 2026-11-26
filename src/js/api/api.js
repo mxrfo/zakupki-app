@@ -1,5 +1,5 @@
 // ============================================================
-// МОДУЛЬ: api.js — Обёртки над BX24 API
+// МОДУЛЬ: js/api.js — Обёртки над BX24 API
 // ============================================================
 let b24Ready = false;
 var deleteInProgress = {};
@@ -484,7 +484,7 @@ function loadAllData() {
   if (loadAllDataInProgress) { logAction('Загрузка уже идёт', 'info'); return; }
   loadAllDataInProgress = true;
   logAction('Загрузка списка закупок...', 'info');
-  if (items.length === 0) document.getElementById('app-container').innerHTML = '<div class="loading" style="grid-column: 1/-1;">Загрузка данных...</div>';
+  if (items.length === 0) document.getElementById('app-container').innerHTML = '<div class="loading loading-full">Загрузка данных...</div>';
   BX24.callMethod('crm.item.list', { entityTypeId: ENTITY_TYPE_ID, select: ['*', 'UF_*'] }, function (res) {
     loadAllDataInProgress = false;
     if (res.error()) { document.getElementById('app-container').innerHTML = '<div class="error-box">Ошибка: ' + getApiErrorMessage(res) + '</div>'; return; }

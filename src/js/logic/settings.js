@@ -51,9 +51,9 @@ function renderBotStatus() {
   box.innerHTML = `
     <div class="bot-stat"><span class="bot-stat-label">ID бота</span><span class="bot-stat-value">${botId}</span></div>
     <div class="bot-stat"><span class="bot-stat-label">Последний диалог</span><span class="bot-stat-value">${chatId}</span></div>
-    <div class="bot-stat"><span class="bot-stat-label">Последняя доставка</span><span class="bot-stat-value" style="color:${ok ? '#10b981' : '#ef4444'}">${res} @ ${ts}</span></div>
-    <div class="bot-stat"><span class="bot-stat-label">Handler</span><span class="bot-stat-value" style="word-break:break-all;">${getBotHandlerUrl() || '—'}</span></div>
-    <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+    <div class="bot-stat"><span class="bot-stat-label">Последняя доставка</span><span class="bot-stat-value" style="color:${ok ? '#4dff47' : '#ff524c'}">${res} @ ${ts}</span></div>
+    <div class="bot-stat"><span class="bot-stat-label">Handler</span><span class="bot-stat-value text-word-break">${getBotHandlerUrl() || '—'}</span></div>
+    <div class="flex-row-sm">
       <button type="button" class="btn btn-sm btn-primary" onclick="forceCreateGroupChat()">Проверить групповой чат</button>
     </div>
   `;
@@ -70,7 +70,6 @@ function resetBotChat() {
   setTimeout(function () { location.reload(); }, 800);
 }
 
-// ✅ Тест теперь проверяет ОБЕ ветки: личную и групповую
 function testBotSend() {
   const uid = parseInt(currentUser.ID);
   logAction('Тестовая отправка (личная) пользователю ' + uid + '...', 'info');
