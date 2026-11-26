@@ -78,7 +78,6 @@
           }
 
           URL.revokeObjectURL(objUrl);
-          b64._sizeKB = finalSize;
           resolve(b64);
         } catch (e) { URL.revokeObjectURL(objUrl); reject(e); }
       };
@@ -102,7 +101,7 @@
             '<button type="button" class="btn-close" onclick="closeModal(\'modal-ai-parse\')">&times;</button>' +
           '</div>' +
           '<div class="modal-body">' +
-            '<p class="ai-hint">💡 <b>Совет:</b> Снимайте только область с товаром и ценой. <b>Цену со скидкой определяет только режим «Анализ с помощью ИИ»</b> по скриншоту — режим «по ссылке» читает цену из мета-тегов страницы и скидку не видит.</p>' +
+            '<p class="ai-hint">💡 <b>Совет:</b> Снимайте только область с товаром и ценой (не весь экран). <b>Цену со скидкой определяет только режим «Анализ с помощью ИИ»</b> по скриншоту; режим «по ссылке» читает цену из мета-тегов и скидку не видит.</p>' +
             '<div class="ai-field">' +
               '<label class="ai-label">1. Изображение товара (опционально)</label>' +
               '<div class="ai-drop" id="ai-drop-zone">' +
@@ -303,7 +302,6 @@
     document.getElementById('ai-parse-btn-text').innerText = 'Просканировать';
     document.getElementById('btn-run-ai-parse').disabled = false;
 
-    // Восстанавливаем ПОСЛЕДНИЙ выбранный режим, а не сбрасываем на standard
     var radio = document.querySelector('input[name="ai-parse-mode"][value="' + _lastMode + '"]');
     if (!radio) radio = document.querySelector('input[name="ai-parse-mode"][value="standard"]');
     if (radio) radio.checked = true;
@@ -341,7 +339,6 @@
     setIf(sel.price, data.price);
     setIf(sel.supplier, data.supplier);
 
-    // Цена со скидкой → в примечание (только карточка позиции)
     if (sel.note && data.priceDiscounted != null) {
       var discPrice = parseFloat(data.priceDiscounted);
       var regularPrice = parseFloat(data.price);
