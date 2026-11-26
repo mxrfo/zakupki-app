@@ -1,15 +1,16 @@
 // ============================================================
 // МОДУЛЬ: ai-parser.js
-// ФИКС net::ERR_CONNECTION_RESET: агрессивное сжатие до 800px / quality 0.5.
-// Вес payload падает до 30-80 КБ, что гарантированно проходит через любые 
-// корпоративные фаерволы и антивирусы без обрыва соединения.
+// ФИКС CONNECTION_RESET: 
+// 1. Клиентский таймаут увеличен до 45с (чтобы дождаться ответа Worker'а).
+// 2. Добавлен cache: 'no-store' для обхода буферизации корпоративных прокси.
+// 3. Агрессивное сжатие (800px, q0.5) сохранено для минимального веса payload.
 // ============================================================
 (function () {
   'use strict';
 
-  var AI_TIMEOUT_MS = 30000;
-  var AI_MAX_DIM = 800;          // УМЕНЬШЕНО для предотвращения обрыва соединения
-  var AI_JPEG_QUALITY = 0.5;     // УМЕНЬШЕНО для минимального веса при сохранении читаемости текста
+  var AI_TIMEOUT_MS = 45000;       // УВЕЛИЧЕНО: даем Worker'у время вернуть ответ или 504
+  var AI_MAX_DIM = 800;
+  var AI_JPEG_QUALITY = 0.5;
 
   var ICON_LINK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
   var ICON_AI = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg>';
@@ -65,7 +66,7 @@
             '<button type="button" class="btn-close" onclick="closeModal(\'modal-ai-parse\')">&times;</button>' +
           '</div>' +
           '<div class="modal-body">' +
-            '<p class="ai-hint">Если сайт блокирует парсинг, загрузите скриншот. Изображение автоматически сжимается для быстрой и надежной отправки.</p>' +
+            '<p class="ai-hint">Если сайт блокирует парсинг, загрузите скриншот. Изображение автоматически сжимается для надежной отправки.</p>' +
             '<div class="ai-field">' +
               '<label class="ai-label">1. Скриншот страницы</label>' +
               '<div class="ai-drop" id="ai-drop-zone">' +
@@ -265,12 +266,15 @@
   function fetchWithTimeout(url, options, ms) {
     var ctrl = new AbortController();
     var timer = setTimeout(function () { ctrl.abort(); }, ms);
-    return fetch(url, Object.assign({}, options, { signal: ctrl.signal }))
+    return fetch(url, Object.assign({}, options, { 
+      signal: ctrl.signal,
+      cache: 'no-store' // КРИТИЧНО: запрещает прокси буферизировать и сбрасывать соединение
+    }))
       .then(function (r) { clearTimeout(timer); return r; })
       .catch(function (e) {
         clearTimeout(timer);
         if (e && e.name === 'AbortError') throw new Error('Сервер не ответил за ' + Math.round(ms / 1000) + ' с. Повторите через 10–15 секунд.');
-        throw new Error('Сетевая ошибка: соединение прервано (net::ERR_CONNECTION_RESET). Проверьте интернет или отключите антивирус на время загрузки.');
+        throw new Error('Сетевая ошибка: соединение прервано. Проверьте интернет или отключите антивирус на время загрузки.');
       });
   }
 
@@ -296,7 +300,7 @@
       }
       
       var payload = JSON.stringify({ url: url || null, imageBase64: imageBase64 || null });
-      console.log('[AI-PARSER] Отправляемый payload размер:', (payload.length / 1024).toFixed(2), 'KB'); // Диагностика
+      console.log('[AI-PARSER] Отправляемый payload размер:', (payload.length / 1024).toFixed(2), 'KB');
       
       return fetchWithTimeout(workerUrl() + '/ai', {
         method: 'POST',
