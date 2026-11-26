@@ -1,9 +1,9 @@
 // ============================================================
 // МОДУЛЬ: ai-parser.js
-// ФИКС CONNECTION_RESET: переход на multipart/form-data.
-// Корпоративные прокси и антивирусы часто блокируют или сбрасывают 
-// соединения с большими base64-строками внутри application/json.
-// FormData воспринимается как обычная загрузка файла и часто проходит фильтры.
+// ФИКС CONNECTION_RESET: отправка "сырого" бинарного JPEG.
+// Корпоративные DPI и антивирусы часто блокируют base64 в JSON/FormData.
+// Отправка чистого image/jpeg воспринимается как стандартная загрузка 
+// файла и гарантированно проходит через сетевые фильтры.
 // ============================================================
 (function () {
   'use strict';
@@ -26,7 +26,8 @@
     return window.LINK_PARSER_WORKER_URL || 'https://zakupki-proxy.artemgvardin1.workers.dev';
   }
 
-  function compressImageToBase64(file) {
+  // Сжимаем и возвращаем Blob (бинарные данные), а не base64-строку
+  function compressImageToBlob(file) {
     return new Promise(function (resolve, reject) {
       var img = new Image();
       var objUrl = URL.createObjectURL(file);
@@ -43,8 +44,10 @@
           ctx.fillRect(0, 0, cw, ch);
           ctx.drawImage(img, 0, 0, cw, ch);
           URL.revokeObjectURL(objUrl);
-          var dataUrl = canvas.toDataURL('image/jpeg', AI_JPEG_QUALITY);
-          resolve(String(dataUrl).split(',')[1] || '');
+          canvas.toBlob(function(blob) {
+            if (blob) resolve(blob);
+            else reject(new Error('Не удалось создать Blob'));
+          }, 'image/jpeg', AI_JPEG_QUALITY);
         } catch (e) { URL.revokeObjectURL(objUrl); reject(e); }
       };
       img.onerror = function () { URL.revokeObjectURL(objUrl); reject(new Error('Файл не является изображением или повреждён')); };
@@ -66,7 +69,7 @@
             '<button type="button" class="btn-close" onclick="closeModal(\'modal-ai-parse\')">&times;</button>' +
           '</div>' +
           '<div class="modal-body">' +
-            '<p class="ai-hint">Если сайт блокирует парсинг, загрузите скриншот. Изображение сжимается и отправляется как файл для обхода сетевых фильтров.</p>' +
+            '<p class="ai-hint">Если сайт блокирует парсинг, загрузите скриншот. Изображение отправляется как бинарный файл для гарантированного обхода сетевых фильтров.</p>' +
             '<div class="ai-field">' +
               '<label class="ai-label">1. Скриншот страницы</label>' +
               '<div class="ai-drop" id="ai-drop-zone">' +
@@ -274,7 +277,7 @@
       .catch(function (e) {
         clearTimeout(timer);
         if (e && e.name === 'AbortError') throw new Error('Сервер не ответил за ' + Math.round(ms / 1000) + ' с.');
-        throw new Error('Сетевая ошибка: соединение прервано (возможно, антивирус или прокси блокирует запрос).');
+        throw new Error('Сетевая ошибка: соединение прервано. Попробуйте отключить антивирус на время загрузки или используйте другой режим.');
       });
   }
 
@@ -292,25 +295,23 @@
     btn.disabled = true; btnText.innerText = 'Обработка...';
     setStatus('⏳ Сжимаю изображение и отправляю...', 'info');
 
-    var prep = (_aiFile && mode === 'ai') ? compressImageToBase64(_aiFile) : Promise.resolve('');
+    var prep = (_aiFile && mode === 'ai') ? compressImageToBlob(_aiFile) : Promise.resolve(null);
 
-    prep.then(function (imageBase64) {
+    prep.then(function (imageBlob) {
       if (mode === 'standard') {
         return window.fetchParsedProduct(url);
       }
       
-      // ИСПОЛЬЗУЕМ FORMDATA ВМЕСТО JSON ДЛЯ ОБХОДА СЕТЕВЫХ ФИЛЬТРОВ
-      var formData = new FormData();
-      if (imageBase64) formData.append('imageBase64', imageBase64);
-      if (url) formData.append('url', url);
+      // Формируем URL с параметром ссылки, а тело запроса — чистый бинарный JPEG
+      var fetchUrl = workerUrl() + '/ai';
+      if (url) fetchUrl += '?url=' + encodeURIComponent(url);
       
-      var sizeEstimate = (imageBase64 ? imageBase64.length : 0) + (url ? url.length : 0);
-      console.log('[AI-PARSER] Отправка через FormData, примерный размер:', (sizeEstimate / 1024).toFixed(2), 'KB');
+      console.log('[AI-PARSER] Отправка сырого JPEG, размер:', (imageBlob.size / 1024).toFixed(2), 'KB');
       
-      return fetchWithTimeout(workerUrl() + '/ai', {
+      return fetchWithTimeout(fetchUrl, {
         method: 'POST',
-        // ВАЖНО: не указываем Content-Type, чтобы браузер сам добавил boundary для multipart/form-data
-        body: formData
+        headers: { 'Content-Type': 'image/jpeg' }, // Сетевой экран видит обычную загрузку картинки
+        body: imageBlob
       }, AI_TIMEOUT_MS).then(function (res) {
         return res.json().then(function (data) {
           if (!res.ok) throw new Error((data && data.error) || ('ИИ-сервер вернул HTTP ' + res.status));
