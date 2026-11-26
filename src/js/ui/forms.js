@@ -458,7 +458,8 @@ function updatePositionNumbers() {
     if (num) num.textContent = 'Позиция ' + (idx + 1);
   });
 }
-
+const ICON_LINK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+const ICON_AI = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg>';
 // ✅ ОБНОВЛЕННАЯ функция добавления строки (Порядок полей + Кнопка парсера + Data-атрибуты чипсов)
 function addDetailRow(data) {
   data = data || {};
@@ -482,7 +483,7 @@ function addDetailRow(data) {
   const totalVal = (parseFloat(priceVal) * parseFloat(qtyVal)) || 0;
   const totalTxt = totalVal > 0 ? totalVal.toFixed(2) + ' ₽' : '0.00 ₽';
 
-  const hasExtra = !!(supplierVal || articleVal || purposeVal || noteVal);
+  const hasExtra = !!(supplierVal || articleVal || noteVal);
 
   const purposeChips = _topPurposes.length
     ? '<div class="chip-row"><span class="chip-hint">Частые варианты</span>' +
@@ -509,6 +510,11 @@ function addDetailRow(data) {
           <input type="text" class="det-name" value="${escapeHtml(nameVal)}" placeholder="Что закупаем"
             oninput="onDetNameInput(this)" onblur="smartParseItemLine(this); hideSuggestions();" onpaste="handleItemsPaste(event)">
         </div>
+        <div class="form-group pg-purpose">
+          <label>Цель использования</label>
+          <input type="text" class="det-purpose" value="${escapeHtml(purposeVal)}" placeholder="">
+          ${purposeChips}
+        </div>
         <div class="form-group pg-price">
           <label>Цена с НДС</label>
           <div class="unit-input">
@@ -519,28 +525,21 @@ function addDetailRow(data) {
         <div class="form-group pg-qty">
           <label>Кол-во</label>
           <div class="unit-input">
-            <input type="number" class="det-qty" step="1" placeholder="0" value="${escapeHtml(String(qtyVal))}" oninput="calculateRowTotal(this)">
+            <input type="number" class="det-qty" step="1" placeholder="1" value="${escapeHtml(String(qtyVal))}" oninput="calculateRowTotal(this)">
             <span class="unit">шт.</span>
           </div>
         </div>
-        <div class="form-group pg-link">
-          <label>Ссылка</label>
-          <div class="link-input-wrapper">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            <input type="url" class="det-link" placeholder="https://..." value="${escapeHtml(linkVal)}" oninput="updateOpenLink(this)">
-            <button type="button" class="btn-parse" onclick="handleLinkParse(this)" title="Заполнить название, цену и поставщика из ссылки">Анализ</button>
-            <button type="button" class="btn-open-link" onclick="openLink(this)" title="Открыть товар в магазине" disabled>↗</button>
-          </div>
+        <div class="pg-actions">
+          <button type="button" class="btn-icon-link" title="Открыть ссылку" data-url="${escapeHtml(linkVal)}" 
+            onclick="openLink(this)" ${linkVal ? '' : 'disabled'}>${ICON_LINK}</button>
+          <button type="button" class="btn-icon-ai" title="Анализ страницы" onclick="openAiParseModal(this)">${ICON_AI}</button>
         </div>
+        <!-- Скрытое поле для ссылки (нужно для submitCreateRequest) -->
+        <input type="url" class="det-link" style="display:none" value="${escapeHtml(linkVal)}">
       </div>
       <details class="pos-extra"${hasExtra ? ' open' : ''}>
-        <summary>Дополнительно: цель, поставщик, артикул, примечание</summary>
+        <summary>Дополнительно: поставщик, артикул, примечание</summary>
         <div class="pos-grid">
-          <div class="form-group pg-purpose">
-            <label>Цель использования</label>
-            <input type="text" class="det-purpose" value="${escapeHtml(purposeVal)}" placeholder="">
-            ${purposeChips}
-          </div>
           <div class="form-group pg-supplier">
             <label>Поставщик</label>
             <input type="text" class="det-supplier" value="${escapeHtml(supplierVal)}" placeholder="Например: Ozon">
@@ -559,8 +558,6 @@ function addDetailRow(data) {
     </div>`;
 
   container.appendChild(details);
-  const linkEl = details.querySelector('.det-link');
-  if (linkEl) updateOpenLink(linkEl);
   updatePositionNumbers();
   renderEmptyState();
 }
