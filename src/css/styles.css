@@ -616,6 +616,30 @@ body {
 }
 .pg-actions .btn-icon-ai:hover { background: #4338ca; border-color: #4338ca; color: #fff; }
 
+/* Кнопка «Добавить / Изменить ссылку» в позиции */
+.btn-link-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid var(--brand-blue);
+  color: var(--brand-blue);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .2s var(--ease);
+}
+.btn-link-action:hover { background: #eff6ff; }
+.btn-link-action.has-link { background: #f0fdf4; border-color: #16a34a; color: #15803d; }
+.btn-link-action.has-link:hover { background: #dcfce7; }
+
+/* Кнопка «Сохранить ссылку» в модалке */
+.btn-link-save { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+.btn-link-save:hover { background: #e2e8f0; }
+
 /* Старое поле ссылки в карточке (скрыто, значение сохраняется для submitCreateRequest) */
 .pos-main .det-link[style*="display:none"],
 .pos-main .det-link[style*="display: none"] { display: none !important; }

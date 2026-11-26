@@ -34,6 +34,17 @@ function updatePositionNumbers() {
   });
 }
 
+function updateLinkBtnState(card) {
+  if (!card) return;
+  const linkEl = card.querySelector('.det-link') || card.querySelector('.data-det-link');
+  const btn = card.querySelector('.btn-link-action');
+  if (!btn) return;
+  const has = linkEl && String(linkEl.value || '').trim();
+  btn.classList.toggle('has-link', !!has);
+  const txt = btn.querySelector('.bl-txt');
+  if (txt) txt.textContent = has ? 'Изменить ссылку' : 'Добавить ссылку';
+}
+
 function addDetailRow(data) {
   data = data || {};
   const container = document.getElementById('purchase-items-container');
@@ -103,9 +114,11 @@ function addDetailRow(data) {
           </div>
         </div>
         <div class="pg-actions">
+          <button type="button" class="btn-link-action ${linkVal ? 'has-link' : ''}" onclick="openAiParseModal(this)">
+            <span class="bl-txt">${linkVal ? 'Изменить ссылку' : 'Добавить ссылку'}</span>
+          </button>
           <button type="button" class="btn-icon-link" title="Открыть ссылку" data-url="${escapeHtml(linkVal)}" 
             onclick="openLink(this)" ${linkVal ? '' : 'disabled'}>${ICON_LINK}</button>
-          <button type="button" class="btn-icon-ai" title="Автоматическое заполнение" onclick="openAiParseModal(this)">${ICON_AI}</button>
         </div>
         <input type="url" class="det-link link-hidden" value="${escapeHtml(linkVal)}">
       </div>
@@ -279,6 +292,7 @@ function initResizableTable(tableId) {
 window.renderEmptyState = renderEmptyState;
 window.removeDetailRow = removeDetailRow;
 window.updatePositionNumbers = updatePositionNumbers;
+window.updateLinkBtnState = updateLinkBtnState;
 window.addDetailRow = addDetailRow;
 window.calculateRowTotal = calculateRowTotal;
 window.calculateAllTotals = calculateAllTotals;
