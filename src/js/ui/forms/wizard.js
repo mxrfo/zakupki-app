@@ -124,8 +124,7 @@ function renderCreateSummary() {
       <div class="review-item"><div class="review-label">Позиций закупки</div><div class="review-value">${posCount === 0 ? 'детализация не заполнена' : posCount}</div></div>
       <div class="review-item full"><div class="review-label">Краткое описание</div><div class="review-value">${escapeHtml(shortDesc)}</div></div>
       <div class="review-item full"><div class="review-label">Сумма позиций (без доставки)</div><div class="review-value amount">${sumText}</div></div>
-    </div>
-    <div class="review-note">Проверьте данные перед сохранением. После сохранения запрос уйдёт в работу.</div>`;
+    </div>`;
 }
 
 function openCreateModal() {

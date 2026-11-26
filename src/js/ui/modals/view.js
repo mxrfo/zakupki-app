@@ -58,6 +58,8 @@ function openViewModal(id) {
   const qtys = item[actualFields.detailQty] || [];
   const links = item[actualFields.detailLink] || [];
   const suppliers = item[actualFields.detailSupplier] || [];
+  const arrArtRaw = actualFields.detailArticle ? (item[actualFields.detailArticle] || []) : [];
+  const arrNoteRaw = actualFields.detailNote ? (item[actualFields.detailNote] || []) : [];
   const hasDetails = names.some(n => n && n.trim() !== '');
 
   if (hasDetails) {
@@ -68,6 +70,8 @@ function openViewModal(id) {
       `<th class="col-view-qty">Кол-во</th>` +
       `<th class="col-view-total">Всего</th>` +
       `<th class="col-view-supplier">Поставщик</th>` +
+      `<th class="col-view-article">Артикул</th>` +
+      `<th class="col-view-note">Примечание</th>` +
       `<th class="col-view-link">Ссылка</th>` +
       `</tr></thead><tbody>`;
 
@@ -77,20 +81,24 @@ function openViewModal(id) {
     const arrQ = Array.isArray(qtys) ? qtys : [qtys];
     const arrL = Array.isArray(links) ? links : [links];
     const arrS = Array.isArray(suppliers) ? suppliers : [suppliers];
-    const maxLen = Math.max(arrN.length, arrP.length, arrQ.length, arrL.length, arrPr.length, arrS.length);
+    const arrArt = Array.isArray(arrArtRaw) ? arrArtRaw : [arrArtRaw];
+    const arrNote = Array.isArray(arrNoteRaw) ? arrNoteRaw : [arrNoteRaw];
+    const maxLen = Math.max(arrN.length, arrP.length, arrQ.length, arrL.length, arrPr.length, arrS.length, arrArt.length, arrNote.length);
 
     for (let i = 0; i < maxLen; i++) {
       const rowPrice = parseAmount(arrPr[i]) || 0;
       const rowQty = parseAmount(arrQ[i]) || 0;
       const rowTotal = rowPrice * rowQty;
       html += `<tr>
-        <td>${arrN[i] || ''}</td>
+        <td class="cell-name">${arrN[i] || ''}</td>
         <td>${arrP[i] || ''}</td>
         <td>${rowPrice > 0 ? rowPrice.toFixed(2) : ''}</td>
         <td>${arrQ[i] || ''}</td>
         <td>${rowTotal > 0 ? rowTotal.toFixed(2) : ''}</td>
         <td>${arrS[i] || ''}</td>
-        <td>${arrL[i] ? `<a href="${arrL[i]}" target="_blank">Ссылка</a>` : ''}</td>
+        <td>${arrArt[i] || ''}</td>
+        <td class="cell-note">${arrNote[i] || ''}</td>
+        <td>${arrL[i] ? `<a class="file-link" href="${arrL[i]}" target="_blank">Открыть</a>` : ''}</td>
       </tr>`;
     }
     html += `</tbody></table></div></div>`;
