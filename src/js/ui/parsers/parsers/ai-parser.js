@@ -1,12 +1,17 @@
 // ============================================================
 // МОДУЛЬ: ai-parser.js
-// УЛУЧШЕНИЕ: если обычный парсинг ссылки не удался (блокировка),
-// автоматически пробуем отправить ссылку в Gemini для анализа структуры URL.
+// ЛОГИКА:
+// - Режим "ИИ-анализ": сжимаем картинку (если есть) + ссылка → /ai
+// - Режим "Обычный парсинг": сначала быстрый fetch /parse (таймаут 7 сек).
+//   Если успех — готово. Если ошибка/таймаут и есть ссылка — fallback на /ai
+//   (только ссылка, без картинки, Worker сам прочитает метаданные).
+// - Вставка из буфера (Ctrl+V) работает в любой момент, когда открыта модалка.
 // ============================================================
 (function () {
   'use strict';
 
   var AI_TIMEOUT_MS = 45000;
+  var PARSE_TIMEOUT_MS = 7000;   // таймаут на обычный парсинг перед fallback
   var AI_MAX_DIM = 400;
   var AI_JPEG_QUALITY = 0.3;
 
@@ -66,10 +71,10 @@
           '<div class="modal-body">' +
             '<p class="ai-hint">💡 <b>Совет:</b> Сделайте скриншот только области с товаром, ценой и логотипом (не всего экрана). Изображение сожмётся до ~5-11 КБ, но ИИ отлично читает такой текст.</p>' +
             '<div class="ai-field">' +
-              '<label class="ai-label">1. Скриншот страницы</label>' +
+              '<label class="ai-label">1. Скриншот страницы (опционально)</label>' +
               '<div class="ai-drop" id="ai-drop-zone">' +
                 ICON_UPLOAD +
-                '<span id="ai-drop-text">Перетащите или выберите изображение</span>' +
+                '<span id="ai-drop-text">Перетащите, выберите или вставьте из буфера (Ctrl+V)</span>' +
                 '<div class="ai-file-name" id="ai-file-name"></div>' +
                 '<input type="file" id="ai-file-input" accept="image/png,image/jpeg,image/webp">' +
               '</div>' +
@@ -82,8 +87,8 @@
             '<div class="ai-field">' +
               '<label class="ai-label">Режим анализа</label>' +
               '<div class="ai-radio-group">' +
-                '<label class="ai-radio selected"><input type="radio" name="ai-parse-mode" value="ai" checked> <span>ИИ-анализ (Gemini)</span></label>' +
-                '<label class="ai-radio"><input type="radio" name="ai-parse-mode" value="standard"> <span>Обычный парсинг (с fallback на ИИ)</span></label>' +
+                '<label class="ai-radio"><input type="radio" name="ai-parse-mode" value="ai"> <span>ИИ-анализ (Gemini)</span></label>' +
+                '<label class="ai-radio selected"><input type="radio" name="ai-parse-mode" value="standard" checked> <span>Обычный парсинг (с fallback на ИИ)</span></label>' +
               '</div>' +
             '</div>' +
             '<div class="ai-status" id="ai-parse-status"></div>' +
@@ -91,13 +96,14 @@
           '<div class="modal-footer">' +
             '<button type="button" class="btn" onclick="closeModal(\'modal-ai-parse\')">Отмена</button>' +
             '<button type="button" class="btn btn-ai-run" id="btn-run-ai-parse" onclick="runAiParse()">' +
-              '<span id="ai-parse-btn-text">Анализировать</span>' +
+              '<span id="ai-parse-btn-text">Обработать</span>' +
             '</button>' +
           '</div>' +
         '</div>' +
       '</div>';
     document.body.appendChild(wrap.firstElementChild);
     bindModalEvents();
+    bindPasteHandler();
     _modalBuilt = true;
   }
 
@@ -113,7 +119,7 @@
     });
     drop.addEventListener('drop', function (e) {
       var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) setAiFile(f);
+      if (f && f.type.indexOf('image/') === 0) setAiFile(f);
     });
     input.addEventListener('change', function () {
       if (input.files && input.files[0]) setAiFile(input.files[0]);
@@ -123,6 +129,26 @@
         document.querySelectorAll('.ai-radio').forEach(function (l) { l.classList.remove('selected'); });
         if (r.closest('.ai-radio')) r.closest('.ai-radio').classList.add('selected');
       });
+    });
+  }
+
+  // Глобальный обработчик Ctrl+V: если модалка открыта и в буфере картинка — подхватываем
+  function bindPasteHandler() {
+    document.addEventListener('paste', function (e) {
+      if (!document.getElementById('modal-ai-parse')) return;
+      if (document.getElementById('modal-ai-parse').style.display === 'none') return;
+      var items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image/') === 0) {
+          var file = items[i].getAsFile();
+          if (file) {
+            setAiFile(file);
+            setStatus('✅ Изображение вставлено из буфера: ' + file.name, 'ok');
+          }
+          break;
+        }
+      }
     });
   }
 
@@ -219,12 +245,13 @@
     document.getElementById('ai-url-input').value = url;
     clearAiFile();
     setStatus('', 'none');
-    document.getElementById('ai-parse-btn-text').innerText = 'Анализировать';
+    document.getElementById('ai-parse-btn-text').innerText = 'Обработать';
     document.getElementById('btn-run-ai-parse').disabled = false;
-    document.querySelector('input[name="ai-parse-mode"][value="ai"]').checked = true;
+    // По умолчанию — обычный парсинг с fallback
+    var stdRadio = document.querySelector('input[name="ai-parse-mode"][value="standard"]');
+    if (stdRadio) stdRadio.checked = true;
     document.querySelectorAll('.ai-radio').forEach(function (l) { l.classList.remove('selected'); });
-    var aiRadio = document.querySelector('input[name="ai-parse-mode"][value="ai"]');
-    if (aiRadio && aiRadio.closest('.ai-radio')) aiRadio.closest('.ai-radio').classList.add('selected');
+    if (stdRadio && stdRadio.closest('.ai-radio')) stdRadio.closest('.ai-radio').classList.add('selected');
     document.getElementById('modal-ai-parse').style.display = 'flex';
   };
 
@@ -271,22 +298,17 @@
       .then(function (r) { clearTimeout(timer); return r; })
       .catch(function (e) {
         clearTimeout(timer);
-        if (e && e.name === 'AbortError') throw new Error('Сервер не ответил за ' + Math.round(ms / 1000) + ' с.');
-        throw new Error('Сетевая ошибка: ' + e.message);
+        if (e && e.name === 'AbortError') throw new Error('timeout');
+        throw new Error('network:' + (e.message || 'failed'));
       });
   }
 
-  // Отправка ссылки в ИИ (fallback, если обычный парсинг не удался)
-  function tryAiWithUrlOnly(url) {
-    setStatus('⏳ Обычный парсинг не удался. Пробую анализ ссылки через ИИ...', 'info');
-    var params = new URLSearchParams();
-    params.append('url', url);
-    
+  function sendToAi(params, timeoutMs) {
     return fetchWithTimeout(workerUrl() + '/ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString()
-    }, AI_TIMEOUT_MS).then(function (res) {
+    }, timeoutMs).then(function (res) {
       return res.json().then(function (data) {
         if (!res.ok) throw new Error((data && data.error) || ('ИИ-сервер вернул HTTP ' + res.status));
         if (data && data.error) throw new Error(data.error);
@@ -307,23 +329,80 @@
     if (mode === 'ai' && !_aiFile && !url) { setStatus('Загрузите скриншот или укажите ссылку.', 'err'); return; }
 
     btn.disabled = true; btnText.innerText = 'Обработка...';
-    setStatus('⏳ Сжимаю изображение и отправляю...', 'info');
 
-    var prep = (_aiFile && mode === 'ai') ? compressImageToBase64(_aiFile) : Promise.resolve('');
+    // ---------- РЕЖИМ: Обычный парсинг с fallback на ИИ ----------
+    if (mode === 'standard') {
+      setStatus('⏳ Пробую обычный парсинг ссылки (таймаут ' + (PARSE_TIMEOUT_MS / 1000) + ' с)...', 'info');
+      
+      // Быстрый запрос к /parse с коротким таймаутом
+      var parsePromise = fetchWithTimeout(workerUrl() + '/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url })
+      }, PARSE_TIMEOUT_MS).then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error((data && data.error) || ('HTTP ' + res.status));
+          if (!data || !data.success || !data.product) throw new Error('Пустой ответ');
+          return { source: 'parse', data: data.product };
+        });
+      });
+
+      parsePromise.then(function (result) {
+        // Обычный парсинг удался
+        setStatus('✅ Данные получены через парсинг', 'ok');
+        if (url && target.input) {
+          target.input.value = url;
+          var openBtn = target.root.querySelector('.btn-icon-link');
+          if (openBtn) { openBtn.dataset.url = url; openBtn.disabled = false; }
+        }
+        applyParsed(target.root, result.data);
+        if (typeof window.showToast === 'function') window.showToast('Данные извлечены (парсинг)', 'success');
+        window.closeModal('modal-ai-parse');
+      }).catch(function (err) {
+        // Не удалось — пробуем fallback на ИИ (только ссылка, без картинки)
+        if (!url) {
+          setStatus('❌ Парсинг не удался: ' + err.message, 'err');
+          btn.disabled = false; btnText.innerText = 'Повторить';
+          return;
+        }
+        setStatus('⏳ Парсинг не удался (' + err.message + '). Пробую ИИ-анализ ссылки...', 'info');
+        
+        var params = new URLSearchParams();
+        params.append('url', url);
+        
+        sendToAi(params, AI_TIMEOUT_MS).then(function (data) {
+          if (url && target.input) {
+            target.input.value = url;
+            var openBtn = target.root.querySelector('.btn-icon-link');
+            if (openBtn) { openBtn.dataset.url = url; openBtn.disabled = false; }
+          }
+          applyParsed(target.root, data || {});
+          if (data && (data.name || data.price || data.supplier)) {
+            if (typeof window.showToast === 'function') window.showToast('Данные извлечены (ИИ fallback)', 'success');
+            window.closeModal('modal-ai-parse');
+          } else {
+            setStatus('⚠️ ИИ не смог извлечь данные из ссылки. Уточните URL или загрузите скриншот.', 'err');
+            btn.disabled = false; btnText.innerText = 'Повторить';
+          }
+        }).catch(function (aiErr) {
+          setStatus('❌ ИИ fallback: ' + aiErr.message, 'err');
+          btn.disabled = false; btnText.innerText = 'Повторить';
+        });
+      });
+      return;
+    }
+
+    // ---------- РЕЖИМ: ИИ-анализ ----------
+    if (!_aiFile && !url) {
+      setStatus('Загрузите скриншот или укажите ссылку.', 'err');
+      btn.disabled = false; btnText.innerText = 'Обработать';
+      return;
+    }
+
+    var prep = _aiFile ? compressImageToBase64(_aiFile) : Promise.resolve('');
+    setStatus(_aiFile ? '⏳ Сжимаю изображение и отправляю...' : '⏳ Отправляю ссылку на ИИ-анализ...', 'info');
 
     prep.then(function (imageBase64) {
-      if (mode === 'standard') {
-        // Сначала пробуем обычный парсинг
-        return window.fetchParsedProduct(url).catch(function (err) {
-          // Если не удалось, пробуем ИИ с ссылкой
-          if (url) {
-            return tryAiWithUrlOnly(url);
-          }
-          throw err;
-        });
-      }
-      
-      // Режим ИИ: отправляем картинку + ссылку (если есть)
       var params = new URLSearchParams();
       if (url) params.append('url', url);
       if (imageBase64) params.append('imageBase64', imageBase64);
@@ -331,17 +410,11 @@
       var payloadSizeKB = (params.toString().length / 1024).toFixed(2);
       console.log('[AI-PARSER] Отправка как x-www-form-urlencoded, размер:', payloadSizeKB, 'KB');
       
-      return fetchWithTimeout(workerUrl() + '/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString()
-      }, AI_TIMEOUT_MS).then(function (res) {
-        return res.json().then(function (data) {
-          if (!res.ok) throw new Error((data && data.error) || ('ИИ-сервер вернул HTTP ' + res.status));
-          if (data && data.error) throw new Error(data.error);
-          return data;
-        });
-      });
+      if (payloadSizeKB > 12) {
+        console.warn('[AI-PARSER] ВНИМАНИЕ: Размер превышает 12 КБ, возможен блок антивируса!');
+      }
+      
+      return sendToAi(params, AI_TIMEOUT_MS);
     }).then(function (data) {
       if (url && target.input) {
         target.input.value = url;
@@ -350,7 +423,7 @@
       }
       applyParsed(target.root, data || {});
       if (data && (data.name || data.price || data.supplier)) {
-        if (typeof window.showToast === 'function') window.showToast('Данные извлечены', 'success');
+        if (typeof window.showToast === 'function') window.showToast('Данные извлечены (ИИ)', 'success');
         window.closeModal('modal-ai-parse');
       } else {
         setStatus('⚠️ Данных извлечь не удалось. Уточните скриншот/ссылку.', 'err');
