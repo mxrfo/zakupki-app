@@ -70,9 +70,15 @@ const JS_FILES_ORDER = [
   'src/js/ui/modals/upload.js',
   'src/js/ui/modals/edit-amount.js',
   'src/js/ui/modals/past.js',
-  // Логика и инициализация
+  // Логика настроек (по вкладкам)
+  'src/js/logic/settings/core.js',
+  'src/js/logic/settings/roles.js',
+  'src/js/logic/settings/crm.js',
+  'src/js/logic/settings/deps.js',
+  'src/js/logic/settings/absence.js',
+  'src/js/logic/settings/bot.js',
+  // Остальная логика и инициализация
   'src/js/logic/actions.js',
-  'src/js/logic/settings.js',
   'src/js/core/init.js',
 ];
 

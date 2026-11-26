@@ -2,8 +2,13 @@ node_modules/
 dist/
 *.zip
 .env
+.env.local
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 .idea/
 .vscode/
 *.log
+npm-debug.log*
+backup/
