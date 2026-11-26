@@ -1,15 +1,14 @@
 // ============================================================
 // МОДУЛЬ: ai-parser.js
-// ФИКС лимита 10-12 КБ: экстремальное сжатие (400px, quality 0.3).
-// Гарантирует прохождение через корпоративный Kaspersky Web Anti-Virus.
-// Формат отправки: application/x-www-form-urlencoded (наиболее безопасный для прокси).
+// УЛУЧШЕНИЕ: если обычный парсинг ссылки не удался (блокировка),
+// автоматически пробуем отправить ссылку в Gemini для анализа структуры URL.
 // ============================================================
 (function () {
   'use strict';
 
   var AI_TIMEOUT_MS = 45000;
-  var AI_MAX_DIM = 400;          // РАДИКАЛЬНО УМЕНЬШЕНО для гарантированного веса < 10 КБ
-  var AI_JPEG_QUALITY = 0.3;     // Агрессивное сжатие (ИИ всё ещё отлично читает текст при 0.3)
+  var AI_MAX_DIM = 400;
+  var AI_JPEG_QUALITY = 0.3;
 
   var ICON_LINK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
   var ICON_AI = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg>';
@@ -33,20 +32,14 @@
         try {
           var w = img.naturalWidth, h = img.naturalHeight;
           if (!w || !h) { URL.revokeObjectURL(objUrl); return reject(new Error('Не удалось прочитать изображение')); }
-          
-          // Масштабируем так, чтобы максимальная сторона была 400px
           var scale = Math.min(1, AI_MAX_DIM / Math.max(w, h));
           var cw = Math.round(w * scale), ch = Math.round(h * scale);
-          
           var canvas = document.createElement('canvas');
           canvas.width = cw; canvas.height = ch;
           var ctx = canvas.getContext('2d');
-          
-          // Белый фон на случай прозрачных PNG
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, cw, ch);
           ctx.drawImage(img, 0, 0, cw, ch);
-          
           URL.revokeObjectURL(objUrl);
           var dataUrl = canvas.toDataURL('image/jpeg', AI_JPEG_QUALITY);
           resolve(String(dataUrl).split(',')[1] || '');
@@ -71,7 +64,7 @@
             '<button type="button" class="btn-close" onclick="closeModal(\'modal-ai-parse\')">&times;</button>' +
           '</div>' +
           '<div class="modal-body">' +
-            '<p class="ai-hint">💡 <b>Совет:</b> Для гарантированного прохождения через корпоративный антивирус сделайте скриншот <b>только области с товаром, ценой и логотипом</b> (не всего экрана). Изображение будет сильно сжато (до ~5-8 КБ), но ИИ отлично читает такой текст.</p>' +
+            '<p class="ai-hint">💡 <b>Совет:</b> Сделайте скриншот только области с товаром, ценой и логотипом (не всего экрана). Изображение сожмётся до ~5-11 КБ, но ИИ отлично читает такой текст.</p>' +
             '<div class="ai-field">' +
               '<label class="ai-label">1. Скриншот страницы</label>' +
               '<div class="ai-drop" id="ai-drop-zone">' +
@@ -90,7 +83,7 @@
               '<label class="ai-label">Режим анализа</label>' +
               '<div class="ai-radio-group">' +
                 '<label class="ai-radio selected"><input type="radio" name="ai-parse-mode" value="ai" checked> <span>ИИ-анализ (Gemini)</span></label>' +
-                '<label class="ai-radio"><input type="radio" name="ai-parse-mode" value="standard"> <span>Обычный парсинг</span></label>' +
+                '<label class="ai-radio"><input type="radio" name="ai-parse-mode" value="standard"> <span>Обычный парсинг (с fallback на ИИ)</span></label>' +
               '</div>' +
             '</div>' +
             '<div class="ai-status" id="ai-parse-status"></div>' +
@@ -283,6 +276,25 @@
       });
   }
 
+  // Отправка ссылки в ИИ (fallback, если обычный парсинг не удался)
+  function tryAiWithUrlOnly(url) {
+    setStatus('⏳ Обычный парсинг не удался. Пробую анализ ссылки через ИИ...', 'info');
+    var params = new URLSearchParams();
+    params.append('url', url);
+    
+    return fetchWithTimeout(workerUrl() + '/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    }, AI_TIMEOUT_MS).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error((data && data.error) || ('ИИ-сервер вернул HTTP ' + res.status));
+        if (data && data.error) throw new Error(data.error);
+        return data;
+      });
+    });
+  }
+
   window.runAiParse = function () {
     var target = window._aiParseTarget;
     if (!target) return;
@@ -295,26 +307,29 @@
     if (mode === 'ai' && !_aiFile && !url) { setStatus('Загрузите скриншот или укажите ссылку.', 'err'); return; }
 
     btn.disabled = true; btnText.innerText = 'Обработка...';
-    setStatus('⏳ Сжимаю изображение до <10 КБ и отправляю...', 'info');
+    setStatus('⏳ Сжимаю изображение и отправляю...', 'info');
 
     var prep = (_aiFile && mode === 'ai') ? compressImageToBase64(_aiFile) : Promise.resolve('');
 
     prep.then(function (imageBase64) {
       if (mode === 'standard') {
-        return window.fetchParsedProduct(url);
+        // Сначала пробуем обычный парсинг
+        return window.fetchParsedProduct(url).catch(function (err) {
+          // Если не удалось, пробуем ИИ с ссылкой
+          if (url) {
+            return tryAiWithUrlOnly(url);
+          }
+          throw err;
+        });
       }
       
-      // Отправляем как x-www-form-urlencoded (самый безопасный формат для прокси)
+      // Режим ИИ: отправляем картинку + ссылку (если есть)
       var params = new URLSearchParams();
       if (url) params.append('url', url);
       if (imageBase64) params.append('imageBase64', imageBase64);
       
       var payloadSizeKB = (params.toString().length / 1024).toFixed(2);
-      console.log('[AI-PARSER] Отправка как x-www-form-urlencoded, итоговый размер:', payloadSizeKB, 'KB');
-      
-      if (payloadSizeKB > 12) {
-        console.warn('[AI-PARSER] ВНИМАНИЕ: Размер превышает 12 КБ, возможен блок антивируса!');
-      }
+      console.log('[AI-PARSER] Отправка как x-www-form-urlencoded, размер:', payloadSizeKB, 'KB');
       
       return fetchWithTimeout(workerUrl() + '/ai', {
         method: 'POST',
