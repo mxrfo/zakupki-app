@@ -1,9 +1,15 @@
 // ============================================================
 // МОДУЛЬ: ai-parser.js
-// УЛУЧШЕНИЕ: 
-// - При 503 от Gemini показываем понятное сообщение и предлагаем скриншот
-// - Если ИИ вернул null в цене — честно говорим "Цена не найдена, загрузите скриншот"
-// - Автоматический retry при 503 (клиентская часть)
+// Автоматическое заполнение полей позиции товара.
+//
+// ЛОГИКА:
+// - Режим "Автоматическое определение по ссылке": сначала быстрый запрос
+//   к Worker'у за метаданными страницы (7 сек). Если не удалось — fallback
+//   на ИИ (только ссылка, Worker сам прочитает метаданные).
+// - Режим "Анализ с помощью ИИ": сжимаем картинку (если есть) + ссылка → /ai
+// - Вставка из буфера (Ctrl+V) работает в любой момент, когда открыта модалка.
+//
+// Все тексты — понятные обычному пользователю (без "парсинг", "Gemini", "fallback").
 // ============================================================
 (function () {
   'use strict';
@@ -55,6 +61,7 @@
 
   var _modalBuilt = false;
   var _aiFile = null;
+
   function ensureModal() {
     if (_modalBuilt) return;
     if (document.getElementById('modal-ai-parse')) { _modalBuilt = true; return; }
@@ -63,13 +70,13 @@
       '<div id="modal-ai-parse" class="modal-overlay modal-ai" style="display:none;">' +
         '<div class="modal">' +
           '<div class="modal-header">' +
-            '<h2>' + ICON_AI + ' Умный анализ страницы</h2>' +
+            '<h2>' + ICON_AI + ' Автоматическое заполнение</h2>' +
             '<button type="button" class="btn-close" onclick="closeModal(\'modal-ai-parse\')">&times;</button>' +
           '</div>' +
           '<div class="modal-body">' +
-            '<p class="ai-hint">💡 <b>Совет:</b> Сделайте скриншот только области с товаром, ценой и логотипом (не всего экрана). Изображение сожмётся до ~5-11 КБ, но ИИ отлично читает такой текст.</p>' +
+            '<p class="ai-hint">💡 <b>Совет:</b> Сделайте снимок только области с товаром, ценой и логотипом (не всего экрана). Изображение сожмётся до ~5-11 КБ, но система отлично читает такой текст.</p>' +
             '<div class="ai-field">' +
-              '<label class="ai-label">1. Скриншот страницы (опционально)</label>' +
+              '<label class="ai-label">1. Изображение товара (опционально)</label>' +
               '<div class="ai-drop" id="ai-drop-zone">' +
                 ICON_UPLOAD +
                 '<span id="ai-drop-text">Перетащите, выберите или вставьте из буфера (Ctrl+V)</span>' +
@@ -79,14 +86,14 @@
               '<div class="ai-preview" id="ai-preview"><img id="ai-preview-img" alt="превью"></div>' +
             '</div>' +
             '<div class="ai-field">' +
-              '<label class="ai-label" for="ai-url-input">2. Ссылка на страницу (опционально)</label>' +
+              '<label class="ai-label" for="ai-url-input">2. Ссылка на товар (опционально)</label>' +
               '<input type="url" id="ai-url-input" class="ai-input" placeholder="https://...">' +
             '</div>' +
             '<div class="ai-field">' +
-              '<label class="ai-label">Режим анализа</label>' +
+              '<label class="ai-label">Способ получения данных</label>' +
               '<div class="ai-radio-group">' +
-                '<label class="ai-radio"><input type="radio" name="ai-parse-mode" value="ai"> <span>ИИ-анализ (Gemini)</span></label>' +
-                '<label class="ai-radio selected"><input type="radio" name="ai-parse-mode" value="standard" checked> <span>Обычный парсинг (с fallback на ИИ)</span></label>' +
+                '<label class="ai-radio"><input type="radio" name="ai-parse-mode" value="ai"> <span>Анализ с помощью ИИ</span></label>' +
+                '<label class="ai-radio selected"><input type="radio" name="ai-parse-mode" value="standard" checked> <span>Автоматическое определение по ссылке</span></label>' +
               '</div>' +
             '</div>' +
             '<div class="ai-status" id="ai-parse-status"></div>' +
@@ -94,7 +101,7 @@
           '<div class="modal-footer">' +
             '<button type="button" class="btn" onclick="closeModal(\'modal-ai-parse\')">Отмена</button>' +
             '<button type="button" class="btn btn-ai-run" id="btn-run-ai-parse" onclick="runAiParse()">' +
-              '<span id="ai-parse-btn-text">Обработать</span>' +
+              '<span id="ai-parse-btn-text">Заполнить</span>' +
             '</button>' +
           '</div>' +
         '</div>' +
@@ -198,7 +205,7 @@
         '<input type="url" class="det-link" style="display:none" value="' + esc(v) + '">' +
         '<button type="button" class="btn-icon-link" title="Открыть ссылку" data-url="' + esc(v) + '" ' +
         'onclick="openLink(this)" ' + (v ? '' : 'disabled') + '>' + ICON_LINK + '</button>' +
-        '<button type="button" class="btn-icon-ai" title="ИИ-анализ / парсинг" onclick="openAiParseModal(this)">' + ICON_AI + '</button>';
+        '<button type="button" class="btn-icon-ai" title="Автоматическое заполнение" onclick="openAiParseModal(this)">' + ICON_AI + '</button>';
     } else {
       var tinput = root.querySelector('.data-det-link');
       var td = tinput ? tinput.closest('td') : null;
@@ -208,7 +215,7 @@
         '<input type="url" class="data-det-link" style="display:none" value="' + esc(tv) + '">' +
         '<button type="button" class="btn-icon-link" title="Открыть ссылку" data-url="' + esc(tv) + '" ' +
         'onclick="openLink(this)" ' + (tv ? '' : 'disabled') + '>' + ICON_LINK + '</button>' +
-        '<button type="button" class="btn-icon-ai" title="ИИ-анализ / парсинг" onclick="openAiParseModal(this)">' + ICON_AI + '</button>';
+        '<button type="button" class="btn-icon-ai" title="Автоматическое заполнение" onclick="openAiParseModal(this)">' + ICON_AI + '</button>';
     }
   }
 
@@ -242,7 +249,7 @@
     document.getElementById('ai-url-input').value = url;
     clearAiFile();
     setStatus('', 'none');
-    document.getElementById('ai-parse-btn-text').innerText = 'Обработать';
+    document.getElementById('ai-parse-btn-text').innerText = 'Заполнить';
     document.getElementById('btn-run-ai-parse').disabled = false;
     var stdRadio = document.querySelector('input[name="ai-parse-mode"][value="standard"]');
     if (stdRadio) stdRadio.checked = true;
@@ -306,7 +313,7 @@
       body: params.toString()
     }, timeoutMs).then(function (res) {
       return res.json().then(function (data) {
-        if (!res.ok) throw new Error((data && data.error) || ('ИИ-сервер вернул HTTP ' + res.status));
+        if (!res.ok) throw new Error((data && data.error) || ('Сервер вернул HTTP ' + res.status));
         if (data && data.error) throw new Error(data.error);
         return data;
       });
@@ -321,13 +328,14 @@
     var btn = document.getElementById('btn-run-ai-parse');
     var btnText = document.getElementById('ai-parse-btn-text');
 
-    if (mode === 'standard' && !url) { setStatus('Для обычного парсинга укажите ссылку.', 'err'); return; }
-    if (mode === 'ai' && !_aiFile && !url) { setStatus('Загрузите скриншот или укажите ссылку.', 'err'); return; }
+    if (mode === 'standard' && !url) { setStatus('Укажите ссылку на товар.', 'err'); return; }
+    if (mode === 'ai' && !_aiFile && !url) { setStatus('Загрузите изображение или укажите ссылку.', 'err'); return; }
 
     btn.disabled = true; btnText.innerText = 'Обработка...';
 
+    // ---------- РЕЖИМ: Автоматическое определение по ссылке ----------
     if (mode === 'standard') {
-      setStatus('⏳ Пробую обычный парсинг ссылки (таймаут ' + (PARSE_TIMEOUT_MS / 1000) + ' с)...', 'info');
+      setStatus('⏳ Пробую получить данные по ссылке (таймаут ' + (PARSE_TIMEOUT_MS / 1000) + ' с)...', 'info');
       
       var parsePromise = fetchWithTimeout(workerUrl() + '/parse', {
         method: 'POST',
@@ -342,22 +350,22 @@
       });
 
       parsePromise.then(function (result) {
-        setStatus('✅ Данные получены через парсинг', 'ok');
+        setStatus('✅ Данные получены автоматически', 'ok');
         if (url && target.input) {
           target.input.value = url;
           var openBtn = target.root.querySelector('.btn-icon-link');
           if (openBtn) { openBtn.dataset.url = url; openBtn.disabled = false; }
         }
         applyParsed(target.root, result.data);
-        if (typeof window.showToast === 'function') window.showToast('Данные извлечены (парсинг)', 'success');
+        if (typeof window.showToast === 'function') window.showToast('Данные заполнены автоматически', 'success');
         window.closeModal('modal-ai-parse');
       }).catch(function (err) {
         if (!url) {
-          setStatus('❌ Парсинг не удался: ' + err.message, 'err');
+          setStatus('❌ Не удалось получить данные: ' + err.message, 'err');
           btn.disabled = false; btnText.innerText = 'Повторить';
           return;
         }
-        setStatus('⏳ Парсинг не удался (' + err.message + '). Пробую ИИ-анализ ссылки...', 'info');
+        setStatus('⏳ Не удалось получить данные по ссылке. Пробую анализ через ИИ...', 'info');
         
         var params = new URLSearchParams();
         params.append('url', url);
@@ -370,30 +378,28 @@
           }
           applyParsed(target.root, data || {});
           
-          // Проверяем, есть ли хоть какие-то данные
           if (data && (data.name || data.price || data.supplier)) {
             var missingFields = [];
             if (!data.price) missingFields.push('цена');
             if (!data.name) missingFields.push('название');
             
             if (missingFields.length > 0) {
-              setStatus('⚠️ ИИ не смог определить: ' + missingFields.join(', ') + '. Загрузите скриншот для точного извлечения.', 'err');
+              setStatus('⚠️ Не удалось определить: ' + missingFields.join(', ') + '. Загрузите изображение товара для точного заполнения.', 'err');
               btn.disabled = false; btnText.innerText = 'Повторить';
             } else {
-              if (typeof window.showToast === 'function') window.showToast('Данные извлечены (ИИ fallback)', 'success');
+              if (typeof window.showToast === 'function') window.showToast('Данные заполнены через ИИ', 'success');
               window.closeModal('modal-ai-parse');
             }
           } else {
-            setStatus('⚠️ ИИ не смог извлечь данные из ссылки. Загрузите скриншот для точного определения.', 'err');
+            setStatus('⚠️ Не удалось получить данные по ссылке. Загрузите изображение товара.', 'err');
             btn.disabled = false; btnText.innerText = 'Повторить';
           }
         }).catch(function (aiErr) {
-          // Обработка 503 и других ошибок
           var errMsg = aiErr.message || '';
           if (errMsg.indexOf('503') !== -1 || errMsg.indexOf('high demand') !== -1) {
-            setStatus('❌ ИИ временно перегружен (503). Подождите 10 секунд и повторите, или загрузите скриншот.', 'err');
+            setStatus('❌ Сервис временно перегружен. Подождите 10 секунд и повторите, или загрузите изображение.', 'err');
           } else {
-            setStatus('❌ ИИ fallback: ' + errMsg, 'err');
+            setStatus('❌ Не удалось получить данные: ' + errMsg, 'err');
           }
           btn.disabled = false; btnText.innerText = 'Повторить';
         });
@@ -401,15 +407,15 @@
       return;
     }
 
-    // ---------- РЕЖИМ: ИИ-анализ ----------
+    // ---------- РЕЖИМ: Анализ с помощью ИИ ----------
     if (!_aiFile && !url) {
-      setStatus('Загрузите скриншот или укажите ссылку.', 'err');
-      btn.disabled = false; btnText.innerText = 'Обработать';
+      setStatus('Загрузите изображение или укажите ссылку.', 'err');
+      btn.disabled = false; btnText.innerText = 'Заполнить';
       return;
     }
 
     var prep = _aiFile ? compressImageToBase64(_aiFile) : Promise.resolve('');
-    setStatus(_aiFile ? '⏳ Сжимаю изображение и отправляю...' : '⏳ Отправляю ссылку на ИИ-анализ...', 'info');
+    setStatus(_aiFile ? '⏳ Обрабатываю изображение...' : '⏳ Отправляю ссылку на анализ...', 'info');
 
     prep.then(function (imageBase64) {
       var params = new URLSearchParams();
@@ -438,20 +444,20 @@
         if (!data.name) missingFields.push('название');
         
         if (missingFields.length > 0) {
-          setStatus('⚠️ ИИ не определил: ' + missingFields.join(', ') + '. Загрузите скриншот для точного извлечения.', 'err');
+          setStatus('⚠️ Не удалось определить: ' + missingFields.join(', ') + '. Загрузите изображение товара для точного заполнения.', 'err');
           btn.disabled = false; btnText.innerText = 'Повторить';
         } else {
-          if (typeof window.showToast === 'function') window.showToast('Данные извлечены (ИИ)', 'success');
+          if (typeof window.showToast === 'function') window.showToast('Данные заполнены через ИИ', 'success');
           window.closeModal('modal-ai-parse');
         }
       } else {
-        setStatus('⚠️ Данных извлечь не удалось. Уточните скриншот/ссылку.', 'err');
+        setStatus('⚠️ Не удалось получить данные. Уточните изображение или ссылку.', 'err');
         btn.disabled = false; btnText.innerText = 'Повторить';
       }
     }).catch(function (err) {
       var errMsg = err.message || '';
       if (errMsg.indexOf('503') !== -1 || errMsg.indexOf('high demand') !== -1) {
-        setStatus('❌ ИИ временно перегружен (503). Подождите 10 секунд и повторите, или загрузите скриншот.', 'err');
+        setStatus('❌ Сервис временно перегружен. Подождите 10 секунд и повторите, или загрузите изображение.', 'err');
       } else {
         setStatus('❌ ' + errMsg, 'err');
       }
