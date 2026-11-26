@@ -56,9 +56,9 @@ const JS_FILES_ORDER = [
   'src/js/ui/modals/action.js',
   'src/js/ui/modals/delegate.js',
   'src/js/ui/modals/executor.js',
-  // Парсеры
-  'src/js/ui/parsers/parsers/link-parser.js',
-  'src/js/ui/parsers/parsers/ai-parser.js',
+  // Парсеры (без двойной вложенности)
+  'src/js/ui/parsers/link-parser.js',
+  'src/js/ui/parsers/ai-parser.js',
   // Forms
   'src/js/ui/forms/smart-parse.js',
   'src/js/ui/forms/suggestions.js',
