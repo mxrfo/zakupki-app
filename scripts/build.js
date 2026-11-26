@@ -38,10 +38,23 @@ const JS_FILES_ORDER = [
   'src/js/logic/roles.js',
   'src/js/ui/dragdrop.js',
   'src/js/ui/render.js',
-  'src/js/ui/modals.js',
+  // Модалки, НЕ зависящие от forms.js
+  'src/js/ui/modals/core.js',
+  'src/js/ui/modals/view.js',
+  'src/js/ui/modals/action.js',
+  'src/js/ui/modals/delegate.js',
+  'src/js/ui/modals/executor.js',
+  // Парсеры
   'src/js/ui/parsers/parsers/link-parser.js',
   'src/js/ui/parsers/parsers/ai-parser.js',
+  // Forms (нужен для модалок ниже)
   'src/js/ui/forms.js',
+  // Модалки, зависящие от forms.js
+  'src/js/ui/modals/data.js',
+  'src/js/ui/modals/upload.js',
+  'src/js/ui/modals/edit-amount.js',
+  'src/js/ui/modals/past.js',
+  // Логика и инициализация
   'src/js/logic/actions.js',
   'src/js/logic/settings.js',
   'src/js/core/init.js',

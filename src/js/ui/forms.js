@@ -679,57 +679,6 @@ async function parseVseinstrumentiCart(url, card) {
 }
 
 /* ============================================================
-   МОДАЛКА "ВЫБРАТЬ ИЗ ПРОШЛЫХ"
-   ============================================================ */
-function openPastItemsModal() {
-  buildItemSuggestions();
-  const search = document.getElementById('past-search');
-  if (search) search.value = '';
-  renderPastItems();
-  document.getElementById('modal-past').style.display = 'flex';
-}
-
-function renderPastItems() {
-  const list = document.getElementById('past-list');
-  if (!list) return;
-  const q = (document.getElementById('past-search').value || '').trim().toLowerCase();
-  const all = buildItemSuggestions();
-  const filtered = q ? all.filter(function (r) { return r.name.toLowerCase().indexOf(q) !== -1 || (r.supplier || '').toLowerCase().indexOf(q) !== -1; }) : all;
-  if (!filtered.length) {
-    list.innerHTML = '<div class="past-empty">Ничего не найдено. Добавьте первую позицию вручную — она появится в истории после сохранения.</div>';
-    return;
-  }
-  list.innerHTML = filtered.map(function (r, idx) {
-    return `<label class="past-row">
-      <input type="checkbox" class="past-check" data-idx="${idx}">
-      <div class="past-info">
-        <div class="past-name">${escapeHtml(r.name)}</div>
-        <div class="past-meta">${r.price > 0 ? '<span class="p-price">' + r.price.toFixed(2) + ' ₽</span>' : ''}${r.supplier ? ' · ' + escapeHtml(r.supplier) : ''}${r.purpose ? ' · ' + escapeHtml(r.purpose) : ''}</div>
-      </div>
-      <span class="past-count">${r.count}×</span>
-    </label>`;
-  }).join('');
-  list._filtered = filtered;
-}
-
-function addSelectedPastItems() {
-  const list = document.getElementById('past-list');
-  const checks = list.querySelectorAll('.past-check:checked');
-  if (!checks.length) return showToast('Выберите хотя бы одну позицию', 'error');
-  checks.forEach(function (ch) {
-    const rec = list._filtered[+ch.dataset.idx];
-    addDetailRow({
-      name: rec.name, link: rec.link || '', qty: rec.qty || '', price: rec.price || '',
-      supplier: rec.supplier || '', purpose: rec.purpose || ''
-    });
-  });
-  closeModal('modal-past');
-  showToast('Добавлено позиций: ' + checks.length, 'success');
-  calculateAllTotals();
-  maybeAutoFillShortDesc();
-}
-
-/* ============================================================
    ОТКРЫТИЕ МОДАЛОК
    ============================================================ */
 function openCreateModal() {
@@ -863,20 +812,6 @@ function updateFileName(input) {
     display.innerText = 'Нажмите, чтобы выбрать файл';
     display.style.color = '#0f172a';
   }
-}
-
-function submitDelegate(e) {
-  e.preventDefault();
-  const id = document.getElementById('delegate-id').value;
-  const toUserId = document.getElementById('delegate-to').value;
-  const note = document.getElementById('delegate-note').value.trim();
-  if (!toUserId) return showToast('Выберите сотрудника', 'error');
-  const btn = document.getElementById('btn-delegate-save');
-  if (btn) { btn.disabled = true; btn.innerText = 'Делегирование...'; }
-  delegatePurchase(parseInt(id), parseInt(toUserId), note, function (ok) {
-    if (btn) { btn.disabled = false; btn.innerText = 'Делегировать'; }
-    if (ok) closeModal('modal-delegate');
-  });
 }
 
 function submitCreateRequest(e) {
@@ -1062,68 +997,4 @@ function submitData(e) {
       loadAllData();
     }
   });
-}
-
-function submitEditAmount(e) {
-  e.preventDefault();
-  const id = document.getElementById('edit-amount-id').value;
-  const amount = document.getElementById('edit-amount-value').value;
-  const fields = { [actualFields.amountProduct]: amount ? parseFloat(amount) : 0 };
-  logAction('Обновление суммы...', 'info');
-  BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: id, fields: fields }, (res) => {
-    if (res.error()) { logAction('Ошибка: ' + getApiErrorMessage(res), 'error'); showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); }
-    else { logAction('Сумма обновлена', 'success'); showToast('Сумма обновлена'); closeModal('modal-edit-amount'); invalidateSuggestions(); loadAllData(); }
-  });
-}
-
-function submitUpload(e) {
-  e.preventDefault();
-  const id = document.getElementById('upload-id').value;
-  const fileInput = document.getElementById('upload-file');
-  const deadline = document.getElementById('upload-deadline').value;
-  const item = items.find(i => i.id == id);
-  const existingFile = item ? getFileInfo(item, actualFields.fileInvoice) : null;
-  const hasNewFile = fileInput.files.length > 0;
-  if (!hasNewFile && !existingFile) return showToast('Выберите файл счёта', 'error');
-
-  const doUpdate = (filePayload) => {
-    const targetStageId = getStageIdByName('обработка');
-    const fields = { [actualFields.deadlinePay]: deadline };
-    if (filePayload) fields[actualFields.fileInvoice] = filePayload;
-    if (targetStageId) fields.stageId = targetStageId;
-    logAction('Сохранение счёта...', 'info');
-    BX24.callMethod('crm.item.update', { entityTypeId: ENTITY_TYPE_ID, id: id, fields: fields }, (res) => {
-      if (res.error()) { logAction('Ошибка загрузки счёта: ' + getApiErrorMessage(res), 'error'); showToast('Ошибка: ' + getApiErrorMessage(res), 'error'); return; }
-      logAction('Счёт загружен', 'success');
-      if (item) {
-        if (filePayload) item[actualFields.fileInvoice] = filePayload;
-        item[actualFields.deadlinePay] = deadline;
-        if (targetStageId) item.stageId = targetStageId;
-      }
-      BX24.callMethod('crm.item.get', { entityTypeId: ENTITY_TYPE_ID, id: parseInt(id), select: ['*', 'UF_*'] }, function (gRes) {
-        if (!gRes.error() && gRes.data() && gRes.data().item && item) {
-          const fresh = gRes.data().item;
-          try { item[actualFields.fileInvoice] = fresh[actualFields.fileInvoice]; } catch (e) { }
-        }
-        try { const econId = resolveDeptHeadId(item, true); if (econId) notifyInvoiceUploaded(econId, item); } catch (e) { logAction('Ошибка уведомления по счёту: ' + e.message, 'error'); }
-        try { groupStatusNotify(item, 'invoice_received'); } catch (e) { logAction('Ошибка группового статуса по счёту: ' + e.message, 'error'); }
-        closeModal('modal-upload');
-        invalidateSuggestions();
-        loadAllData();
-      });
-    });
-  };
-
-  if (hasNewFile) {
-    const file = fileInput.files[0];
-    logAction('Чтение файла...', 'info');
-    const reader = new FileReader();
-    reader.onload = function (evt) {
-      const base64 = evt.target.result.split(',')[1];
-      doUpdate([[file.name, base64]]);
-    };
-    reader.readAsDataURL(file);
-  } else {
-    doUpdate(null);
-  }
 }
