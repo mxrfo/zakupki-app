@@ -181,3 +181,33 @@ function getFileInfo(item, fileFieldCode) {
   const name = file.name || file.originalName || 'Файл';
   return { url, name };
 }
+
+// Переключение темы
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('purchase_theme', next);
+  updateThemeIcons();
+}
+
+function updateThemeIcons() {
+  const theme = document.documentElement.getAttribute('data-theme');
+  const sun = document.querySelector('.icon-sun');
+  const moon = document.querySelector('.icon-moon');
+  if (sun && moon) {
+    sun.classList.toggle('hidden', theme === 'dark');
+    moon.classList.toggle('hidden', theme === 'light');
+  }
+}
+
+// Восстановление темы при загрузке
+(function() {
+  const savedTheme = localStorage.getItem('purchase_theme') || 'light';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', updateThemeIcons);
+  } else {
+    updateThemeIcons();
+  }
+})();

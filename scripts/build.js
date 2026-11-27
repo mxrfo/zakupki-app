@@ -32,11 +32,8 @@ const JS_FILES_ORDER = [
   'src/js/core/config.js',
   'src/js/core/state.js',
   'src/js/core/utils.js',
-  // bot.js ДО api-модулей: они вызывают notifyUserViaBot / notifyGroupStatus
   'src/js/api/bot.js',
-  // API core (утилиты, от которых зависят все остальные)
   'src/js/api/core.js',
-  // API модули
   'src/js/api/notifications.js',
   'src/js/api/group-status.js',
   'src/js/api/absence.js',
@@ -44,40 +41,32 @@ const JS_FILES_ORDER = [
   'src/js/api/scenarios.js',
   'src/js/api/sync.js',
   'src/js/api/url-handler.js',
-  // API cache
   'src/js/api/cache.js',
-  // Логика и UI
   'src/js/logic/roles.js',
   'src/js/ui/dragdrop.js',
   'src/js/ui/render.js',
-  // Модалки (не зависят от forms)
   'src/js/ui/modals/core.js',
   'src/js/ui/modals/view.js',
   'src/js/ui/modals/action.js',
   'src/js/ui/modals/delegate.js',
   'src/js/ui/modals/executor.js',
-  // Парсеры (без двойной вложенности)
   'src/js/ui/parsers/link-parser.js',
   'src/js/ui/parsers/ai-parser.js',
-  // Forms
   'src/js/ui/forms/smart-parse.js',
   'src/js/ui/forms/suggestions.js',
   'src/js/ui/forms/positions.js',
   'src/js/ui/forms/wizard.js',
   'src/js/ui/forms/submit.js',
-  // Модалки, зависящие от forms
   'src/js/ui/modals/data.js',
   'src/js/ui/modals/upload.js',
   'src/js/ui/modals/edit-amount.js',
   'src/js/ui/modals/past.js',
-  // Логика настроек (по вкладкам)
   'src/js/logic/settings/core.js',
   'src/js/logic/settings/roles.js',
   'src/js/logic/settings/crm.js',
   'src/js/logic/settings/deps.js',
   'src/js/logic/settings/absence.js',
   'src/js/logic/settings/bot.js',
-  // Остальная логика и инициализация
   'src/js/logic/actions.js',
   'src/js/core/init.js',
 ];
@@ -95,6 +84,44 @@ function injectBuildId(content, buildId) {
     return content;
   }
   return content.replace(re, `let APP_BUILD_ID = '${buildId}';`);
+}
+
+/**
+ * Рекурсивно разворачивает все @import в CSS-файле.
+ * @param {string} filePath - путь к CSS-файлу
+ * @param {Set<string>} visited - защита от циклических импортов
+ * @returns {string} - CSS с инлайновыми @import
+ */
+function inlineCssImports(filePath, visited = new Set()) {
+  const resolved = path.resolve(filePath);
+  if (visited.has(resolved)) {
+    console.warn(`⚠️ Циклический импорт CSS: ${filePath}`);
+    return '';
+  }
+  visited.add(resolved);
+
+  if (!fs.existsSync(resolved)) {
+    console.warn(`⚠️ CSS-файл не найден: ${filePath}`);
+    return `/* MISSING: ${filePath} */`;
+  }
+
+  let content = fs.readFileSync(resolved, 'utf8');
+  const dir = path.dirname(resolved);
+
+  // Регулярка для @import 'file.css' / @import "file.css" / @import url('file.css')
+  const importRe = /@import\s+(?:url\()?\s*(['"])([^'"]+)\1\s*\)?\s*;/g;
+
+  content = content.replace(importRe, (match, quote, importPath) => {
+    // Пропускаем внешние URL (http/https)
+    if (/^(https?:)?\/\//i.test(importPath)) {
+      return match;
+    }
+    const importFile = path.resolve(dir, importPath);
+    const inlined = inlineCssImports(importFile, visited);
+    return `\n/* ===== BEGIN ${importPath} ===== */\n${inlined}\n/* ===== END ${importPath} ===== */\n`;
+  });
+
+  return content;
 }
 
 function replaceCssLink(html, css) {
@@ -150,8 +177,9 @@ async function build() {
 
   let css = '';
   if (fs.existsSync(CSS_FILE)) {
-    css = fs.readFileSync(CSS_FILE, 'utf8');
-    console.log(`✅ CSS загружен: ${CSS_FILE} (${(css.length / 1024).toFixed(1)} КБ)`);
+    // РАЗВЁРТЫВАЕМ @import рекурсивно
+    css = inlineCssImports(CSS_FILE);
+    console.log(`✅ CSS собран с инлайновыми @import: ${CSS_FILE} (${(css.length / 1024).toFixed(1)} КБ)`);
   } else {
     console.warn(`⚠️ CSS-файл не найден: ${CSS_FILE}`);
   }

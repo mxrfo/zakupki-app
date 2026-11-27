@@ -1,0 +1,301 @@
+/* ============================================================
+   CSS CUSTOM PROPERTIES — ТОКЕНЫ ДИЗАЙН-СИСТЕМЫ
+   Альтернатива · Закупки v7 (modern enterprise, glass)
+   ============================================================ */
+
+:root {
+  /* ── БРЕНД ── */
+  --brand: #003594;                    /* Pantone 661 C */
+  --brand-hover: #002570;              /* Тёмнее по AA */
+  --brand-active: #001a52;             /* Active/pressed */
+  --brand-light: #E6EDFB;              /* 10% прозрачности для фонов */
+  --brand-soft: #C5D5F5;               /* 25% для hover-состояний */
+
+  /* ── AI-АКЦЕНТ (единственное исключение из 60/30/10) ── */
+  --accent-ai: #7c3aed;
+  --accent-ai-hover: #6d28d9;
+  --accent-ai-soft: #EDE9FE;
+  --accent-ai-text: #5B21B6;
+
+  /* ── НЕЙТРАЛЬНЫЕ ── */
+  --gray: #BDBFC1;                     /* Pantone 877 C */
+  --gray-light: #F1F5F9;
+  --gray-soft: #F8FAFC;
+
+  /* ── ФОН И ПОВЕРХНОСТИ ── */
+  --bg-body: #F5F7FA;
+  --bg-card: #FFFFFF;
+  --bg-elevated: #FFFFFF;              /* Модалки, дропдауты */
+  --bg-input: #FFFFFF;
+  --bg-input-disabled: #F1F5F9;
+  --bg-subtle: #F8FAFC;                /* Подложки секций/заголовков */
+  --bg-hover: #F1F5F9;                 /* Hover строк/кнопок */
+
+  /* ── ТЕКСТ ── */
+  --text-main: #0F172A;
+  --text-muted: #64748B;
+  --text-disabled: #94A3B8;
+  --text-inverse: #FFFFFF;
+
+  /* ── РАЗДЕЛИТЕЛИ ── */
+  --border: #E2E8F0;
+  --border-strong: #CBD5E1;
+  --border-focus: var(--brand);
+
+  /* ── ТЕНИ ── */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 6px rgba(15, 23, 42, 0.07);
+  --shadow-lg: 0 10px 15px rgba(15, 23, 42, 0.1);
+  --shadow-overlay: 0 20px 25px rgba(15, 23, 42, 0.12);
+  --shadow: var(--shadow-sm);          /* Алиас для компонентов */
+
+  /* ── СКРИМ (оверлей модалок) ── */
+  --scrim: rgba(15, 23, 42, 0.45);
+
+  /* ── СТЕКЛО (modern enterprise) ── */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg-strong: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --blur: saturate(1.4) blur(14px);
+
+  /* ── СКРУГЛЕНИЯ ── */
+  --radius-sm: 4px;                    /* Бейджи, чипы */
+  --radius-btn: 6px;                   /* Кнопки */
+  --radius-card: 8px;                  /* Карточки */
+  --radius-modal: 10px;                /* Модалки */
+  --radius-input: 6px;                 /* Поля ввода */
+
+  /* ── СТАТУСНЫЕ ТОКЕНЫ (пастельный фон + контрастный текст) ── */
+  /* neutral — серый */
+  --status-neutral-bg: #F1F5F9;
+  --status-neutral-text: #475569;
+  --status-neutral-border: #E2E8F0;
+
+  /* info — голубой */
+  --status-info-bg: #E0F2FE;
+  --status-info-text: #0369A1;
+  --status-info-border: #BAE6FD;
+
+  /* success — зелёный */
+  --status-success-bg: #DCFCE7;
+  --status-success-text: #15803D;
+  --status-success-border: #BBF7D0;
+
+  /* warning — жёлтый/оранжевый */
+  --status-warning-bg: #FEF3C7;
+  --status-warning-text: #92400E;
+  --status-warning-border: #FDE68A;
+
+  /* danger — красный */
+  --status-danger-bg: #FEE2E2;
+  --status-danger-text: #B91C1C;
+  --status-danger-border: #FECACA;
+
+  /* brand — синий */
+  --status-brand-bg: var(--brand-light);
+  --status-brand-text: var(--brand);
+  --status-brand-border: var(--brand-soft);
+
+  /* violet — AI */
+  --status-violet-bg: var(--accent-ai-soft);
+  --status-violet-text: #5B21B6;
+  --status-violet-border: #DDD6FE;
+
+  /* gray — альтернативный нейтральный */
+  --status-gray-bg: #F8FAFC;
+  --status-gray-text: #64748B;
+  --status-gray-border: #E2E8F0;
+
+  /* Алиасы st-* (короткие, используются в компонентах) */
+  --st-neutral-bg: var(--status-neutral-bg);
+  --st-neutral-text: var(--status-neutral-text);
+  --st-info-bg: var(--status-info-bg);
+  --st-info-text: var(--status-info-text);
+  --st-success-bg: var(--status-success-bg);
+  --st-success-text: var(--status-success-text);
+  --st-warning-bg: var(--status-warning-bg);
+  --st-warning-text: var(--status-warning-text);
+  --st-danger-bg: var(--status-danger-bg);
+  --st-danger-text: var(--status-danger-text);
+  --st-brand-bg: var(--status-brand-bg);
+  --st-brand-text: var(--status-brand-text);
+  --st-violet-bg: var(--status-violet-bg);
+  --st-violet-text: var(--status-violet-text);
+
+  /* ── ТИПОГРАФИКА ── */
+  --font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Arial', sans-serif;
+  --font-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
+
+  /* Размеры */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 18px;
+  --text-3xl: 20px;
+
+  /* Веса */
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+  --font-extrabold: 800;
+
+  /* Межстрочные интервалы */
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  /* ── ОТСТУПЫ ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── Z-INDEX ШКАЛА ── */
+  --z-base: 1;
+  --z-dropdown: 1000;
+  --z-sticky: 1010;
+  --z-overlay: 1020;
+  --z-modal: 1030;
+  --z-modal-stack: 1040;             /* Вложенные модалки */
+  --z-toast: 1050;
+  --z-fab: 1060;
+
+  /* ── АНИМАЦИИ ── */
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);   /* Стандарт Material */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);   /* Быстрый вход (decelerate) */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* Лёгкий overshoot */
+
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+
+  /* Алиасы для компонентов (не менять имена — на них завязаны cards/table/forms/...) */
+  --ease: var(--ease-default);
+  --dur: var(--duration-normal);
+  --dur-1: var(--duration-fast);
+  --dur-2: var(--duration-normal);
+  --dur-3: var(--duration-slow);
+
+  /* ── TOUCH TARGETS (мобильные) ── */
+  --touch-target: 44px;
+
+  /* ── SAFE AREA (FAB, нижняя навигация) ── */
+  --safe-area-bottom: 80px;
+
+  /* ── BREAKPOINTS (для JS, не для CSS media queries) ── */
+  --breakpoint-mobile: 480px;
+  --breakpoint-tablet: 767px;
+  --breakpoint-narrow: 999px;
+  --breakpoint-compact: 1199px;
+  --breakpoint-desktop: 1200px;
+
+  /* ── КОНТЕЙНЕРЫ BX24 ── */
+  --bx24-narrow: 988px;
+  --bx24-wide: 1650px;
+}
+
+/* ============================================================
+   ТЁМНАЯ ТЕМА
+   ============================================================ */
+
+[data-theme="dark"] {
+  /* ── БРЕНД (светлый оттенок 661C по AA) ── */
+  --brand: #4C7FD9;
+  --brand-hover: #5B8DEF;
+  --brand-active: #6B9DF5;
+  --brand-light: #1E2A4A;
+  --brand-soft: #2A3A5C;
+
+  /* ── AI-АКЦЕНТ ── */
+  --accent-ai: #A78BFA;
+  --accent-ai-hover: #C4B5FD;
+  --accent-ai-soft: #2E1065;
+  --accent-ai-text: #C4B5FD;
+
+  /* ── НЕЙТРАЛЬНЫЕ ── */
+  --gray: #475569;
+  --gray-light: #1E293B;
+  --gray-soft: #0F172A;
+
+  /* ── ФОН И ПОВЕРХНОСТИ ── */
+  --bg-body: #0B1220;
+  --bg-card: #151E2E;
+  --bg-elevated: #1E293B;
+  --bg-input: #1E293B;
+  --bg-input-disabled: #0F172A;
+  --bg-subtle: #1E293B;
+  --bg-hover: #243044;
+
+  /* ── ТЕКСТ ── */
+  --text-main: #E2E8F0;
+  --text-muted: #94A3B8;
+  --text-disabled: #64748B;
+  --text-inverse: #0F172A;
+
+  /* ── РАЗДЕЛИТЕЛИ ── */
+  --border: #243044;
+  --border-strong: #334155;
+  --border-focus: var(--brand);
+
+  /* ── ТЕНИ ── */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.6);
+  --shadow-overlay: 0 20px 25px rgba(0, 0, 0, 0.7);
+  --shadow: var(--shadow-sm);
+
+  /* ── СКРИМ ── */
+  --scrim: rgba(0, 0, 0, 0.7);
+
+  /* ── СТЕКЛО ── */
+  --glass-bg: rgba(21, 30, 46, 0.72);
+  --glass-bg-strong: rgba(21, 30, 46, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+
+  /* ── СТАТУСНЫЕ ТОКЕНЫ (тёмная тема) ── */
+  --status-neutral-bg: #1E293B;
+  --status-neutral-text: #CBD5E1;
+  --status-neutral-border: #334155;
+
+  --status-info-bg: #0C4A6E;
+  --status-info-text: #7DD3FC;
+  --status-info-border: #075985;
+
+  --status-success-bg: #064E3B;
+  --status-success-text: #6EE7B7;
+  --status-success-border: #065F46;
+
+  --status-warning-bg: #78350F;
+  --status-warning-text: #FCD34D;
+  --status-warning-border: #92400E;
+
+  --status-danger-bg: #7F1D1D;
+  --status-danger-text: #FCA5A5;
+  --status-danger-border: #991B1B;
+
+  --status-brand-bg: var(--brand-light);
+  --status-brand-text: var(--brand);
+  --status-brand-border: var(--brand-soft);
+
+  --status-violet-bg: var(--accent-ai-soft);
+  --status-violet-text: #C4B5FD;
+  --status-violet-border: #4C1D95;
+
+  --status-gray-bg: #0F172A;
+  --status-gray-text: #94A3B8;
+  --status-gray-border: #1E293B;
+}

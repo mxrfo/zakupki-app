@@ -1,0 +1,18 @@
+/* ============================================================
+   ТОСТЫ
+   ============================================================ */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  padding: 12px 18px; border-radius: var(--radius-btn);
+  color: #fff; font-weight: 600; font-size: 14px;
+  box-shadow: var(--shadow-lg);
+  display: flex; align-items: center; gap: 8px;
+  opacity: 0; transform: translateY(8px); pointer-events: none;
+  transition: opacity .2s var(--ease), transform .2s var(--ease);
+  z-index: 1400;
+}
+.toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.toast svg { width: 16px; height: 16px; flex-shrink: 0; }
+.toast.success { background: var(--st-success-text); }
+.toast.error { background: var(--st-danger-text); }
+.toast.info { background: var(--brand); }

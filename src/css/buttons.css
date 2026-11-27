@@ -1,0 +1,356 @@
+/* ============================================================
+   BUTTONS — ВСЕ ТИПЫ КНОПОК
+   Альтернатива · Закупки v7
+   ============================================================ */
+
+/* ── БАЗОВАЯ КНОПКА ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-family: var(--font-family);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--duration-fast) var(--ease-default);
+  min-height: 36px;
+  text-decoration: none;
+  line-height: 1;
+}
+
+.btn:hover {
+  background: var(--bg-body);
+  border-color: var(--border-strong);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ── PRIMARY ── */
+.btn-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--text-inverse);
+}
+
+.btn-primary:hover {
+  background: var(--brand-hover);
+  border-color: var(--brand-hover);
+  color: var(--text-inverse);
+}
+
+.btn-primary:active {
+  background: var(--brand-active);
+  border-color: var(--brand-active);
+}
+
+/* ── SECONDARY (default) ── */
+.btn-secondary {
+  background: var(--bg-card);
+  border-color: var(--border);
+  color: var(--text-main);
+}
+
+/* ── GHOST ── */
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-main);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-body);
+  border-color: transparent;
+}
+
+/* ── DANGER ── */
+.btn-danger {
+  background: var(--status-danger-bg);
+  border-color: var(--status-danger-border);
+  color: var(--status-danger-text);
+}
+
+.btn-danger:hover {
+  background: var(--status-danger-text);
+  border-color: var(--status-danger-text);
+  color: var(--text-inverse);
+}
+
+/* ── SUCCESS ── */
+.btn-success {
+  background: var(--status-success-bg);
+  border-color: var(--status-success-border);
+  color: var(--status-success-text);
+}
+
+.btn-success:hover {
+  background: var(--status-success-text);
+  border-color: var(--status-success-text);
+  color: var(--text-inverse);
+}
+
+/* ── WARNING (доработка) ── */
+.btn-warning {
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
+  color: var(--status-warning-text);
+}
+
+.btn-warning:hover {
+  background: var(--status-warning-text);
+  border-color: var(--status-warning-text);
+  color: var(--text-inverse);
+}
+
+/* ── DARK (менеджерские действия) ── */
+.btn-dark {
+  background: var(--text-main);
+  border-color: var(--text-main);
+  color: var(--text-inverse);
+}
+
+.btn-dark:hover {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+/* ── AI (фиолетовый) ── */
+.btn-ai {
+  background: var(--accent-ai);
+  border-color: var(--accent-ai);
+  color: var(--text-inverse);
+}
+
+.btn-ai:hover {
+  background: var(--accent-ai-hover);
+  border-color: var(--accent-ai-hover);
+}
+
+/* ── РАЗМЕРЫ ── */
+.btn-sm {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  min-height: 32px;
+}
+
+.btn-lg {
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--text-base);
+  min-height: 44px;
+}
+
+.btn-full {
+  width: 100%;
+}
+
+.btn-nowrap {
+  white-space: nowrap;
+}
+
+/* ── DISABLED STATE ── */
+.btn-disabled-state {
+  background: var(--bg-input-disabled);
+  border-color: var(--border);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.btn-disabled-state:hover {
+  background: var(--bg-input-disabled);
+  border-color: var(--border);
+  color: var(--text-disabled);
+}
+
+/* ── ИКОНКА-КНОПКА (в действиях) ── */
+.action-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-btn);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+  padding: 0;
+}
+
+.action-icon-btn:hover {
+  background: var(--bg-body);
+  color: var(--text-main);
+  border-color: var(--border);
+}
+
+.action-icon-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.action-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Семантические цвета иконок */
+.action-icon-btn.approve {
+  color: var(--status-success-text);
+}
+
+.action-icon-btn.approve:hover {
+  background: var(--status-success-bg);
+  border-color: var(--status-success-border);
+}
+
+.action-icon-btn.reject {
+  color: var(--status-danger-text);
+}
+
+.action-icon-btn.reject:hover {
+  background: var(--status-danger-bg);
+  border-color: var(--status-danger-border);
+}
+
+.action-icon-btn.rework {
+  color: var(--status-warning-text);
+}
+
+.action-icon-btn.rework:hover {
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
+}
+
+.action-icon-btn.delete {
+  color: var(--text-muted);
+}
+
+.action-icon-btn.delete:hover {
+  background: var(--status-danger-bg);
+  color: var(--status-danger-text);
+  border-color: var(--status-danger-border);
+}
+
+/* ── КНОПКА ЗАКРЫТИЯ МОДАЛКИ ── */
+.btn-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-btn);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+  padding: 0;
+}
+
+.btn-close:hover {
+  background: var(--status-danger-bg);
+  color: var(--status-danger-text);
+}
+
+.btn-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── FAB (Floating Action Button) ── */
+.fab-btn {
+  position: fixed;
+  bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0));
+  right: var(--space-6);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: var(--text-inverse);
+  border: none;
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  z-index: var(--z-fab);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.fab-btn:hover {
+  background: var(--brand-hover);
+  box-shadow: var(--shadow-overlay);
+  transform: translateY(-2px);
+}
+
+.fab-btn:active {
+  transform: translateY(0);
+}
+
+.fab-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 4px;
+}
+
+.fab-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* ── ИКОНКА ВНУТРИ КНОПКИ ── */
+.btn-icon-left {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.btn-icon-right {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  order: 2;
+}
+
+/* ── МОБИЛЬНЫЕ TOUCH-TARGETS ── */
+@media (max-width: 767px) {
+  .btn {
+    min-height: var(--touch-target);
+    padding: var(--space-2) var(--space-4);
+  }
+
+  .btn-sm {
+    min-height: 40px;
+  }
+
+  .action-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .fab-btn {
+    bottom: calc(80px + env(safe-area-inset-bottom, 0));
+    right: var(--space-4);
+    width: 52px;
+    height: 52px;
+  }
+}

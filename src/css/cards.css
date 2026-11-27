@@ -1,0 +1,67 @@
+/* ============================================================
+   КАРТОЧКИ ЗАКУПОК (сетка) — P1, P3, P4, P25, P26, P27, P29
+   ============================================================ */
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  padding-bottom: 96px; /* safe-area под FAB, P5 */
+}
+
+.note-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px 16px 16px 18px;
+  box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 12px;
+  position: relative; overflow: hidden;
+  cursor: grab; user-select: none;
+  contain: layout paint;
+  transition: box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
+  animation: cardIn .22s var(--ease) both;
+}
+@keyframes cardIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.note-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.note-card:active { cursor: grabbing; }
+.note-card.dragging { opacity: .5; transform: scale(.99); }
+.note-card.drag-over { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+
+/* тонкий акцент стадии (JS подставляет --stage-color = токен-цвет) */
+.note-card::before {
+  content: ''; position: absolute; top: 0; left: 0; bottom: 0; width: 3px;
+  background: var(--stage-color, var(--gray));
+}
+
+.note-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.note-title { font-size: 15px; font-weight: 700; color: var(--text-main); line-height: 1.3; word-break: break-word; margin: 0; }
+.note-sub { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-top: 2px; } /* P25 */
+
+.note-desc {
+  background: var(--bg-subtle);
+  border-radius: var(--radius-btn);
+  padding: 10px 12px; font-size: 14px; font-weight: 600;
+}
+
+.note-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; font-size: 13px; }
+.note-info-item { display: flex; flex-direction: column; min-width: 0; }
+.note-info-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-bottom: 3px; }
+.note-info-value { font-weight: 600; color: var(--text-main); overflow-wrap: anywhere; }
+.note-info-value.amount-highlight { font-size: 15px; font-weight: 800; color: var(--brand); }
+
+/* P27: комментарий — warning-токен без рамки, иконка message-square в разметке */
+.note-comment-box {
+  background: var(--st-warning-bg); color: var(--st-warning-text);
+  border-radius: var(--radius-btn); padding: 10px 12px; font-size: 13px; font-weight: 600;
+  display: flex; gap: 8px; align-items: flex-start;
+}
+.note-warning-box {
+  background: var(--st-danger-bg); color: var(--st-danger-text);
+  border-radius: var(--radius-btn); padding: 10px 12px; font-size: 13px; font-weight: 600;
+  display: flex; gap: 8px; align-items: flex-start;
+}
+
+.note-footer { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+/* P3/P29: единый non-wrap кластер справа; пустой слот не рендерится (P4) */
+.note-actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; flex-wrap: nowrap; }
+.note-admin-actions { display: none; } /* P21: всё в ⋯-меню (decision 3) */

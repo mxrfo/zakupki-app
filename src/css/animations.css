@@ -1,0 +1,159 @@
+/* ============================================================
+   АНИМАЦИИ — modern enterprise: мягкие ease-enter/spring, стаггер
+   ============================================================ */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes sheetUp {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+
+@keyframes spinOnce {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@keyframes fabPop {
+  0% { transform: scale(0); }
+  70% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* Контент/списки: стаггер-вход (render.js ставит style="--i:N") */
+.notes-grid > .note-card {
+  animation: fadeUp var(--dur-2) var(--ease-enter) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+
+.table-view tbody tr {
+  animation: fadeIn var(--dur-2) var(--ease-enter) both;
+  animation-delay: calc(var(--i, 0) * 20ms);
+}
+
+/* Переключение вида */
+.view-toggle .view-btn {
+  transition: background var(--dur-1) var(--ease-default),
+              color var(--dur-1) var(--ease-default);
+}
+
+.notes-grid,
+.table-view {
+  animation: fadeUp var(--dur-2) var(--ease-enter);
+}
+
+/* Модалки: spring-scale + glass-fade */
+.modal-overlay {
+  animation: fadeIn var(--dur-1) var(--ease-default);
+}
+
+.modal {
+  animation: scaleIn var(--dur-2) var(--ease-spring) both;
+}
+
+.modal.sheet {
+  animation: sheetUp var(--dur-2) var(--ease-enter);
+}
+
+/* Табы/вкладки: скользящий индикатор */
+.tab-btn {
+  position: relative;
+  overflow: hidden;
+  transition: background var(--dur-1) var(--ease-default),
+              transform var(--dur-1) var(--ease-default),
+              box-shadow var(--dur-1) var(--ease-default);
+}
+
+.tab-btn::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur-2) var(--ease-enter);
+  opacity: 0.5;
+}
+
+.tab-btn.active::after {
+  transform: scaleX(1);
+}
+
+.admin-tab,
+.view-btn,
+.btn,
+.action-icon-btn,
+.dep-chip,
+.chip {
+  transition: all var(--dur-1) var(--ease-default);
+}
+
+.btn:active,
+.action-icon-btn:active {
+  transform: scale(0.97);
+}
+
+.btn:hover,
+.action-icon-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* FAB: pop при появлении */
+.fab-btn {
+  animation: fabPop var(--dur-3) var(--ease-spring);
+}
+
+/* Иконка «Обновить»: spin по классу JS (.spinning) */
+.btn-icon-ghost.spinning svg {
+  animation: spinOnce 0.6s var(--ease-default);
+}
+
+/* Тост: spring-вход */
+.toast {
+  transition: opacity var(--dur-2) var(--ease-default),
+              transform var(--dur-2) var(--ease-spring);
+}
+
+/* Скелетон загрузки */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-subtle) 25%,
+    var(--bg-hover) 50%,
+    var(--bg-subtle) 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: var(--radius-btn);
+}
+
+/* Доступность */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
