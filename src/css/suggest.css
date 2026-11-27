@@ -2,7 +2,7 @@
    АВТОПОДСКАЗКИ (P12/decision 28/33: дропдаут поверх поля — ок)
    ============================================================ */
 .suggest-dropdown {
-  position: fixed; z-index: 1300;
+  position: fixed; z-index: var(--z-dropdown);
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius-card); box-shadow: var(--shadow-lg);
   max-height: 240px; overflow-y: auto; display: none;

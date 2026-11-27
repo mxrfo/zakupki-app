@@ -241,41 +241,6 @@
   font-weight: var(--font-bold);
 }
 
-/* ── ТОСТ (уведомление) ── */
-.toast {
-  position: fixed;
-  bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0));
-  right: var(--space-6);
-  padding: var(--space-3) var(--space-5);
-  border-radius: var(--radius-btn);
-  color: var(--text-inverse);
-  font-weight: var(--font-semibold);
-  font-size: var(--text-sm);
-  opacity: 0;
-  transition: all var(--duration-normal) var(--ease-default);
-  z-index: var(--z-toast);
-  box-shadow: var(--shadow-lg);
-  pointer-events: none;
-  max-width: 400px;
-}
-
-.toast.show {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.toast.success {
-  background: var(--status-success-text);
-}
-
-.toast.error {
-  background: var(--status-danger-text);
-}
-
-.toast.info {
-  background: var(--brand);
-}
-
 /* ── МОБИЛЬНЫЕ АДАПТАЦИИ ── */
 @media (max-width: 767px) {
   .toast {

@@ -1,7 +1,7 @@
 /* ============================================================
-   НАСТРОЙКИ / АДМИНКА (§9: 7 вкладок, + «Цвета стадий», + «Логи»)
+   НАСТРОЙКИ / АДМИНКА (§9: 8 вкладок, + «Цвета стадий», + «Логи»)
    ============================================================ */
-.admin-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px; position: sticky; top: 0; background: var(--bg-card); z-index: 2; }
+.admin-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px; position: sticky; top: 0; background: var(--bg-card); z-index: var(--z-sticky); }
 .admin-tab { padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius-btn); background: var(--bg-card); font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all var(--dur) var(--ease); }
 .admin-tab:hover { background: var(--bg-hover); color: var(--text-main); }
 .admin-tab.active { color: var(--brand); background: var(--brand-soft); border-color: var(--brand); }
@@ -67,7 +67,10 @@
 .settings-table td .dept-auto { font-size: 11px; color: var(--text-muted); margin-left: 6px; }
 .settings-table td .short-input { width: 100%; padding: 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; background: var(--bg-card); color: var(--text-main); }
 
-/* Логи — теперь вкладка настроек (P22/decision 14), не fixed-панель */
+/* Логи — вкладка настроек (P22/decision 14) */
+.logs-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; } /* B7 */
+.logs-container { max-height: 320px; overflow-y: auto; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 12px; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px; } /* B7 */
+
 .log-panel { position: static; transform: none; height: auto; max-height: 320px; background: var(--bg-subtle); color: var(--text-main); border: 1px solid var(--border); border-radius: var(--radius-card); }
 .log-header { padding: 10px 16px; background: var(--bg-hover); display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; cursor: pointer; user-select: none; }
 .log-header-actions { display: flex; align-items: center; gap: 8px; }

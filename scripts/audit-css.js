@@ -55,8 +55,11 @@ const REMOVED = {
   '.btn-logs:hover': 'decision 51',
   '.pos-main .det-link[style*="display:none"]': 'decision 19',
   '.pos-main .det-link[style*="display: none"]': 'decision 19',
-  '.cs-step:focus, .cs-step:focus-visible, .cs-step:active': 'P9',
-  '.pos-head:focus, .pos-head:focus-visible': 'P9',
+  '.cs-step:focus': 'P9 — outline-хаки не нужны',
+  '.cs-step:focus-visible': 'P9',
+  '.cs-step:active': 'P9',
+  '.pos-head:focus': 'P9',
+  '.pos-head:focus-visible': 'P9',
 };
 
 
