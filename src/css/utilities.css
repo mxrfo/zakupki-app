@@ -1,52 +1,40 @@
-/* ============================================================
-   УТИЛИТЫ
-   ============================================================ */
 .text-secondary { font-weight: 500; color: var(--text-muted); }
 .text-muted-small { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-weight: 500; }
 .text-italic-muted { color: var(--text-muted); font-style: italic; font-weight: 500; }
 .text-bold { font-weight: 700; }
 .text-pre-wrap { white-space: pre-wrap; font-size: 12px; }
 .text-word-break { word-break: break-all; }
-
 .flex-row { display: flex; align-items: center; gap: 16px; }
 .flex-row-wrap { display: flex; gap: 16px; flex-wrap: wrap; }
 .flex-row-sm { display: flex; gap: 8px; flex-wrap: wrap; }
 .flex-between { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 12px; }
-
 .form-col { flex: 1; min-width: 200px; }
 .form-col-no-margin { flex: 1; min-width: 200px; margin-bottom: 0; }
 .grid-full { grid-column: 1 / -1; }
-
 .mt-0 { margin-top: 0; }
-.mt-4 { margin-top: 16px; } /* B9 */
+.mt-4 { margin-top: 16px; }
 .mt-8 { margin-top: 8px; }
-.mt-15 { margin-bottom: 15px; }
+/* ✅ FIX: mt-15 → margin-top (было margin-bottom — ошибка) */
+.mt-15 { margin-top: 15px; }
 .mt-20 { margin-top: 20px; }
 .mb-0 { margin-bottom: 0; }
-
 .select-min-w { min-width: 180px; }
 .search-full { width: 100%; }
-
 .section-title { margin-top: 0; margin-bottom: 16px; font-size: 15px; font-weight: 700; color: var(--text-main); }
 .subsection-title { font-size: 14px; font-weight: 600; color: var(--text-main); margin: 0; }
 .card-block { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow); }
 .settings-divider { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 8px; }
 .scroll-container { max-height: 320px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-card); padding: 8px; background: var(--bg-card); }
-
 .clickable-title { font-weight: 600; color: var(--brand); cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .clickable-title:hover { color: var(--brand-hover); }
 .file-link { color: var(--brand); text-decoration: underline; font-weight: 600; }
 .file-link:hover { color: var(--brand-hover); }
-
-.badge-unavailable { color: var(--st-danger-text); font-size: 11px; font-weight: 700; margin-left: 6px; display: inline-flex; align-items: center; gap: 4px; } /* P28: Lucide alert-triangle */
-.icon-clock { margin-left: 6px; vertical-align: middle; color: var(--text-muted); } /* P24/decision 54/58 */
-
+.badge-unavailable { color: var(--st-danger-text); font-size: 11px; font-weight: 700; margin-left: 6px; display: inline-flex; align-items: center; gap: 4px; }
+.icon-clock { margin-left: 6px; vertical-align: middle; color: var(--text-muted); }
 .progress-bar { width: 300px; height: 8px; background: var(--bg-hover); border-radius: 4px; margin: 0 auto; overflow: hidden; }
 .progress-bar-fill { height: 100%; background: var(--brand); border-radius: 4px; transition: width .3s var(--ease); }
-
 .date-colored { font-weight: 700; }
 .link-hidden { display: none !important; }
-
 /* Ширины колонок таблиц модалок */
 .col-view-name { width: 18%; } .col-view-purpose { width: 13%; } .col-view-price { width: 13%; }
 .col-view-qty { width: 7%; } .col-view-total { width: 10%; } .col-view-supplier { width: 11%; }

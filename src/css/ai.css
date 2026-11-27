@@ -1,48 +1,38 @@
-/* ============================================================
-   AI-МОДАЛКА (§8) — фиолетовый = единственное исключение
-   ============================================================ */
 .modal-ai .modal { max-width: 540px; }
 .modal-ai .modal-header { background: var(--accent-ai-soft); border-bottom-color: var(--border); }
 .modal-ai .modal-header h2 { display: flex; align-items: center; gap: 10px; color: var(--accent-ai-text); }
 .modal-ai .modal-header h2 svg { width: 20px; height: 20px; color: var(--accent-ai); }
-
 .ai-hint { font-size: 12px; color: var(--text-muted); margin: 0 0 16px; line-height: 1.5; font-weight: 500; }
 .ai-label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
 .ai-field { margin-bottom: 16px; }
-
 .ai-drop {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-  padding: 22px; border: 1.5px dashed var(--border-strong); border-radius: var(--radius-card);
-  background: var(--bg-subtle); cursor: pointer; text-align: center;
-  color: var(--text-muted); font-size: 13px; font-weight: 500;
-  transition: all var(--dur) var(--ease); position: relative;
+	display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+	padding: 22px; border: 1.5px dashed var(--border-strong); border-radius: var(--radius-card);
+	background: var(--bg-subtle); cursor: pointer; text-align: center;
+	color: var(--text-muted); font-size: 13px; font-weight: 500;
+	transition: all var(--dur) var(--ease); position: relative;
 }
 .ai-drop:hover, .ai-drop.dragover { border-color: var(--accent-ai); color: var(--accent-ai-text); background: var(--accent-ai-soft); }
 .ai-drop.has-file { border-style: solid; border-color: var(--st-success-text); color: var(--st-success-text); background: var(--st-success-bg); }
 .ai-drop svg { width: 24px; height: 24px; }
 .ai-drop input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .ai-file-name { font-weight: 700; color: var(--text-main); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 .ai-preview { margin-top: 10px; display: none; }
 .ai-preview.show { display: block; }
 .ai-preview img { max-width: 100%; max-height: 160px; border-radius: var(--radius-btn); border: 1px solid var(--border); }
-
-.ai-input { width: 100%; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-btn); font-family: var(--font-family); font-size: 14px; font-weight: 500; outline: none; color: var(--text-main); background: var(--bg-card); transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.ai-input { width: 100%; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-btn); font-family: var(--font-family); font-size: 14px; font-weight: 500; outline: none; color: var(--text-main); background: var(--bg-input); transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
 .ai-input:focus { border-color: var(--accent-ai); box-shadow: 0 0 0 3px var(--accent-ai-soft); }
-
 .ai-radio-group { display: flex; flex-direction: column; gap: 8px; }
 .ai-radio { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-btn); background: var(--bg-card); color: var(--text-main); transition: all var(--dur) var(--ease); }
 .ai-radio:hover { background: var(--accent-ai-soft); border-color: var(--accent-ai); }
 .ai-radio input { width: 16px; height: 16px; accent-color: var(--accent-ai); cursor: pointer; flex-shrink: 0; }
 .ai-radio.selected { border-color: var(--accent-ai); background: var(--accent-ai-soft); color: var(--accent-ai-text); font-weight: 700; }
-.ai-radio.disabled { opacity: .5; cursor: not-allowed; } /* radio-режимы зависят от заполнения (§8) */
-
+.ai-radio.disabled { opacity: .5; cursor: not-allowed; }
 .ai-status { display: none; padding: 12px 14px; border-radius: var(--radius-btn); font-size: 13px; font-weight: 600; margin-bottom: 4px; line-height: 1.5; }
 .ai-status.show { display: block; }
 .ai-status.info { background: var(--bg-subtle); color: var(--text-main); }
 .ai-status.ok { background: var(--st-success-bg); color: var(--st-success-text); }
 .ai-status.err { background: var(--st-danger-bg); color: var(--st-danger-text); }
-
 .btn-ai-run { background: var(--accent-ai); border-color: transparent; color: #fff; }
-.btn-ai-run:hover { background: #6d28d9; }
+.btn-ai-run:hover { background: var(--accent-ai-hover); }
 .btn-ai-run:disabled { opacity: .6; cursor: wait; }

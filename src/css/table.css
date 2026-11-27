@@ -1,61 +1,116 @@
-/* ============================================================
-   ТАБЛИЧНЫЙ ВИД — P2, P6, P10 (A1 reflow)
-   ============================================================ */
 .table-view {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow);
-  overflow-x: auto;
-  margin-bottom: 96px; /* safe-area FAB */
+	background: var(--bg-card);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-card);
+	box-shadow: var(--shadow);
+	overflow-x: auto;
+	/* ✅ FIX: 96px → токен (учитывает safe-area на iOS) */
+	margin-bottom: var(--safe-area-bottom);
 }
-.data-table { width: 100%; border-collapse: collapse; } /* min-width 1200px убран (P10) */
-.data-table th, .data-table td { padding: 12px 10px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--border); }
+.data-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+.data-table th,
+.data-table td {
+	padding: 12px 10px;
+	text-align: left;
+	vertical-align: middle;
+	border-bottom: 1px solid var(--border);
+}
 .data-table th {
-  background: var(--bg-subtle);
-  font-size: 11px; font-weight: 600; color: var(--text-muted);
-  text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+	background: var(--bg-subtle);
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: .04em;
+	white-space: nowrap;
 }
-.data-table td { font-size: 13px; color: var(--text-main); }
-.data-table tbody tr { transition: background var(--dur) var(--ease); }
-.data-table tbody tr:hover { background: var(--bg-hover); }
-.data-table tbody tr:last-child td { border-bottom: none; }
-
-.data-table td:nth-child(1) { min-width: 200px; max-width: 280px; }
-.data-table td:nth-child(3) { min-width: 140px; }
-.data-table td:nth-child(7) { min-width: 120px; }
-
+.data-table td {
+	font-size: 13px;
+	color: var(--text-main);
+}
+.data-table tbody tr {
+	transition: background var(--dur) var(--ease);
+}
+.data-table tbody tr:hover {
+	background: var(--bg-hover);
+}
+.data-table tbody tr:last-child td {
+	border-bottom: none;
+}
+/* ✅ FIX: nth-child → классы. Стабильно при условных колонках (manager не рендерит «Исполнитель») */
+.data-table td.col-name,
+.data-table td:first-child {
+	min-width: 200px;
+	max-width: 280px;
+}
+.data-table td.col-status {
+	white-space: nowrap;
+}
+.data-table td.col-sec {
+	min-width: 140px;
+}
+.data-table td.col-amount {
+	white-space: nowrap;
+	font-weight: 700;
+}
+.data-table td.col-deadline {
+	white-space: nowrap;
+}
+.data-table td.col-dir {
+	min-width: 120px;
+}
 /* P6: колонка «Действия» схлопывается, если слот пуст */
-.actions-cell { text-align: right; white-space: nowrap; width: 1%; }
-.data-table .btn-group { display: inline-flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
-
+.actions-cell {
+	text-align: right;
+	white-space: nowrap;
+	width: 1%;
+}
+.data-table .btn-group {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	flex-wrap: nowrap;
+}
 /* P2: единые цвета иконок в обоих видах — никаких !important-перебивок */
-.data-table .action-icon-btn { background: var(--bg-subtle); }
-
+.data-table .action-icon-btn {
+	background: var(--bg-subtle);
+}
 /* B12: отключаем hover-сдвиг кнопок в таблице (конфликт с animations.css) */
 .data-table .btn:hover,
 .data-table .action-icon-btn:hover {
-  transform: none;
+	transform: none;
 }
-
 /* вторичная строка A1 (показывается ≤1000px, см. mobile.css) */
-.td-secondary { display: none; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-top: 2px; }
-
+.td-secondary {
+	display: none;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--text-muted);
+	margin-top: 2px;
+}
 /* ghost-цепь = открыть ссылку (decision 26/31) */
-.link-ghost { color: var(--brand); display: inline-flex; align-items: center; }
-.link-ghost:hover { color: var(--brand-hover); }
-
+.link-ghost {
+	color: var(--brand);
+	display: inline-flex;
+	align-items: center;
+}
+.link-ghost:hover {
+	color: var(--brand-hover);
+}
 /* ── ИКОНКА КОММЕНТАРИЯ — B3 ── */
 .comment-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--brand);
-  cursor: help;
-  margin-left: 8px;
-  vertical-align: middle;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--brand);
+	cursor: help;
+	margin-left: 8px;
+	vertical-align: middle;
 }
 .comment-icon svg {
-  width: 16px;
-  height: 16px;
+	width: 16px;
+	height: 16px;
 }

@@ -1,16 +1,41 @@
-/* ============================================================
-   АВТОПОДСКАЗКИ (P12/decision 28/33: дропдаут поверх поля — ок)
-   ============================================================ */
 .suggest-dropdown {
-  position: fixed; z-index: var(--z-dropdown);
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--radius-card); box-shadow: var(--shadow-lg);
-  max-height: 240px; overflow-y: auto; display: none;
+	position: fixed;
+	z-index: var(--z-dropdown);
+	background: var(--bg-card);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-card);
+	box-shadow: var(--shadow-lg);
+	max-height: 240px;
+	overflow-y: auto;
+	display: none;
 }
-.suggest-dropdown.open { display: block; }
-.suggest-item { padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background var(--dur) var(--ease); }
-.suggest-item:last-child { border-bottom: none; }
-.suggest-item:hover, .suggest-item.active { background: var(--bg-hover); }
-.suggest-name { font-size: 13px; font-weight: 600; color: var(--text-main); }
-.suggest-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-.suggest-meta .s-price { color: var(--brand); font-weight: 700; }
+.suggest-dropdown.open {
+	display: block;
+}
+.suggest-item {
+	padding: 9px 12px;
+	cursor: pointer;
+	border-bottom: 1px solid var(--border);
+	transition: background var(--dur) var(--ease);
+}
+.suggest-item:last-child {
+	border-bottom: none;
+}
+.suggest-item:hover,
+.suggest-item.active {
+	background: var(--bg-hover);
+}
+.suggest-name {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-main);
+}
+.suggest-meta {
+	font-size: 11px;
+	color: var(--text-muted);
+	margin-top: 2px;
+}
+.suggest-meta .s-price {
+	color: var(--brand);
+	font-weight: 700;
+}

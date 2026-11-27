@@ -1,256 +1,210 @@
-/* ============================================================
-   BADGES — СТАТУСНЫЕ БЕЙДЖИ, ЧИПЫ, ИНДИКАТОРЫ
-   Альтернатива · Закупки v7
-   ============================================================ */
-
 /* ── БАЗОВЫЙ БЕЙДЖ ── */
 .badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  white-space: nowrap;
-  line-height: 1.4;
-  border: 1px solid transparent;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-1);
+	padding: var(--space-1) var(--space-3);
+	border-radius: var(--radius-sm);
+	font-size: var(--text-xs);
+	font-weight: var(--font-semibold);
+	white-space: nowrap;
+	line-height: 1.4;
+	border: 1px solid transparent;
 }
-
 /* ── СТАТУСНЫЕ ВАРИАНТЫ ── */
 .badge-neutral {
-  background: var(--status-neutral-bg);
-  color: var(--status-neutral-text);
-  border-color: var(--status-neutral-border);
+	background: var(--status-neutral-bg);
+	color: var(--status-neutral-text);
+	border-color: var(--status-neutral-border);
 }
-
 .badge-info {
-  background: var(--status-info-bg);
-  color: var(--status-info-text);
-  border-color: var(--status-info-border);
+	background: var(--status-info-bg);
+	color: var(--status-info-text);
+	border-color: var(--status-info-border);
 }
-
 .badge-success {
-  background: var(--status-success-bg);
-  color: var(--status-success-text);
-  border-color: var(--status-success-border);
+	background: var(--status-success-bg);
+	color: var(--status-success-text);
+	border-color: var(--status-success-border);
 }
-
 .badge-warning {
-  background: var(--status-warning-bg);
-  color: var(--status-warning-text);
-  border-color: var(--status-warning-border);
+	background: var(--status-warning-bg);
+	color: var(--status-warning-text);
+	border-color: var(--status-warning-border);
 }
-
 .badge-danger {
-  background: var(--status-danger-bg);
-  color: var(--status-danger-text);
-  border-color: var(--status-danger-border);
+	background: var(--status-danger-bg);
+	color: var(--status-danger-text);
+	border-color: var(--status-danger-border);
 }
-
 .badge-brand {
-  background: var(--status-brand-bg);
-  color: var(--status-brand-text);
-  border-color: var(--status-brand-border);
+	background: var(--status-brand-bg);
+	color: var(--status-brand-text);
+	border-color: var(--status-brand-border);
 }
-
 .badge-violet {
-  background: var(--status-violet-bg);
-  color: var(--status-violet-text);
-  border-color: var(--status-violet-border);
+	background: var(--status-violet-bg);
+	color: var(--status-violet-text);
+	border-color: var(--status-violet-border);
 }
-
 .badge-gray {
-  background: var(--status-gray-bg);
-  color: var(--status-gray-text);
-  border-color: var(--status-gray-border);
+	background: var(--status-gray-bg);
+	color: var(--status-gray-text);
+	border-color: var(--status-gray-border);
 }
-
 /* ── БЕЙДЖ СТАДИИ (в карточках/таблице) ── */
 .stage-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  white-space: nowrap;
-  line-height: 1.4;
+	display: inline-flex;
+	align-items: center;
+	padding: var(--space-1) var(--space-3);
+	border-radius: var(--radius-sm);
+	font-size: var(--text-xs);
+	font-weight: var(--font-semibold);
+	white-space: nowrap;
+	line-height: 1.4;
 }
-
 /* ── ЧИП (направления, отделы) ── */
 .chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-btn);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  color: var(--text-main);
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-default);
-  min-height: 32px;
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-1) var(--space-3);
+	border-radius: var(--radius-btn);
+	font-size: var(--text-xs);
+	font-weight: var(--font-medium);
+	background: var(--bg-card);
+	border: 1px solid var(--border);
+	color: var(--text-main);
+	cursor: pointer;
+	transition: all var(--duration-fast) var(--ease-default);
+	min-height: 32px;
 }
-
 .chip:hover {
-  background: var(--bg-body);
-  border-color: var(--border-strong);
+	background: var(--bg-body);
+	border-color: var(--border-strong);
 }
-
 .chip.selected {
-  background: var(--brand);
-  border-color: var(--brand);
-  color: var(--text-inverse);
+	background: var(--brand);
+	border-color: var(--brand);
+	color: var(--text-inverse);
 }
-
 .chip.selected svg {
-  width: 14px;
-  height: 14px;
+	width: 14px;
+	height: 14px;
 }
-
 /* ── ЧИП-КОД (ufCrm...) ── */
 .code-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  background: var(--gray-soft);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
+	display: inline-flex;
+	align-items: center;
+	padding: 2px var(--space-2);
+	border-radius: var(--radius-sm);
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	background: var(--gray-soft);
+	border: 1px solid var(--border);
+	color: var(--text-muted);
 }
-
 /* ── ИНДИКАТОР ОТЛОЖКИ (иконка часов) ── */
 .postpone-indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--status-warning-bg);
-  color: var(--status-warning-text);
-  cursor: help;
-  transition: all var(--duration-fast) var(--ease-default);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	background: var(--status-warning-bg);
+	color: var(--status-warning-text);
+	cursor: help;
+	transition: all var(--duration-fast) var(--ease-default);
 }
-
 .postpone-indicator:hover {
-  background: var(--status-warning-text);
-  color: var(--text-inverse);
+	background: var(--status-warning-text);
+	color: var(--text-inverse);
 }
-
 .postpone-indicator svg {
-  width: 14px;
-  height: 14px;
+	width: 14px;
+	height: 14px;
 }
-
 /* ── ИНДИКАТОР ИЗМЕНЕНИЯ СУММЫ ── */
 .amount-changed-indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--status-danger-bg);
-  color: var(--status-danger-text);
-  cursor: help;
-  margin-left: var(--space-2);
-  vertical-align: middle;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background: var(--status-danger-bg);
+	color: var(--status-danger-text);
+	cursor: help;
+	margin-left: var(--space-2);
+	vertical-align: middle;
 }
-
 .amount-changed-indicator svg {
-  width: 12px;
-  height: 12px;
+	width: 12px;
+	height: 12px;
 }
-
 /* ── ИНДИКАТОР НЕДОСТУПНОСТИ ── */
 .unavailable-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  color: var(--status-danger-text);
-  margin-left: var(--space-2);
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	font-size: var(--text-xs);
+	font-weight: var(--font-semibold);
+	color: var(--status-danger-text);
+	margin-left: var(--space-2);
 }
-
 .unavailable-indicator svg {
-  width: 14px;
-  height: 14px;
+	width: 14px;
+	height: 14px;
 }
-
 /* ── ИНФО-БЛОКИ (warning/success) ── */
 .info-note {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border-radius: var(--radius-btn);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  line-height: var(--leading-normal);
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-2);
+	padding: var(--space-3);
+	border-radius: var(--radius-btn);
+	font-size: var(--text-sm);
+	font-weight: var(--font-medium);
+	line-height: var(--leading-normal);
 }
-
 .info-note-warning {
-  background: var(--status-warning-bg);
-  color: var(--status-warning-text);
-  border: 1px solid var(--status-warning-border);
+	background: var(--status-warning-bg);
+	color: var(--status-warning-text);
+	border: 1px solid var(--status-warning-border);
 }
-
 .info-note-success {
-  background: var(--status-success-bg);
-  color: var(--status-success-text);
-  border: 1px solid var(--status-success-border);
+	background: var(--status-success-bg);
+	color: var(--status-success-text);
+	border: 1px solid var(--status-success-border);
 }
-
 .info-note svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  margin-top: 2px;
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	margin-top: 2px;
 }
-
 /* ── КОММЕНТАРИЙ ЭКОНОМИСТА ── */
 .comment-block {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border-radius: var(--radius-btn);
-  background: var(--status-warning-bg);
-  color: var(--status-warning-text);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  line-height: var(--leading-normal);
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-2);
+	padding: var(--space-3);
+	border-radius: var(--radius-btn);
+	background: var(--status-warning-bg);
+	color: var(--status-warning-text);
+	font-size: var(--text-sm);
+	font-weight: var(--font-medium);
+	line-height: var(--leading-normal);
 }
-
 .comment-block svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  margin-top: 2px;
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	margin-top: 2px;
 }
-
 .comment-block strong {
-  font-weight: var(--font-bold);
+	font-weight: var(--font-bold);
 }
-
-/* ── МОБИЛЬНЫЕ АДАПТАЦИИ ── */
-@media (max-width: 767px) {
-  .toast {
-    bottom: calc(80px + var(--space-4) + env(safe-area-inset-bottom, 0));
-    right: var(--space-4);
-    left: var(--space-4);
-    max-width: none;
-  }
-
-  .fab-btn {
-    bottom: calc(80px + env(safe-area-inset-bottom, 0));
-  }
-}
+/* ✅ FIX: удалён @media (max-width: 767px) с .toast и .fab-btn — они перенесены в toasts.css и buttons.css */

@@ -1,713 +1,653 @@
 <!DOCTYPE html>
-<html lang="ru" data-theme="light">
+<html lang="ru" data-theme="light" style="color-scheme: light dark;">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#003594">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#003594" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B1220" media="(prefers-color-scheme: dark)">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://api.bitrix24.com https://*.bitrix24.ru; script-src 'self' 'unsafe-inline' https://api.bitrix24.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://*.bitrix24.ru https://zakupki-proxy.artemgvardin1.workers.dev; font-src 'self' data:;">
 <title>Закупки (Приложение)</title>
-<script src="//api.bitrix24.com/api/v1/"></script>
-<link rel="stylesheet" href="css/styles.css">
+<script src="https://api.bitrix24.com/api/v1/" defer></script>
+<link rel="stylesheet" href="src/css/styles.css">
 </head>
 <body>
-
 <div class="app-layout">
-
-  <!-- ═══════════════════════════════════════════════════════════
-       САЙДБАР (десктоп/планшет)
-       ═══════════════════════════════════════════════════════════ -->
-  <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <svg class="brand-logo" viewBox="0 0 3590 3540" aria-hidden="true">
-        <path fill="currentColor" fill-rule="evenodd" d="m2390 640 c154 -308 280 -561 280 -563 0 -2 -86 -44 -191 -93 l-191 -89 241 -3 241 -2 175 -350 c96 -192 175 -352 175 -355 0 -3 -158 -84 -350 -180 l-350 -175 -162 325 -163 325 -380 0 -380 0 -80 -156 c-44 -86 -89 -162 -100 -169 -28 -19 -717 -326 -721 -322 -2 2 80 175 183 385 l186 380 166 81 166 80 -127 1 c-71 0 -128 2 -128 5 0 3 125 256 279 563 l279 557 333 157 c184 86 335 157 336 157 2 1 129 -251 283 -559z M1799 2681 l-226 -107 223 -446 224 -447 202 95 c112 53 220 102 240 111 l37 15 -222 444 c-150 300 -227 444 -237 443 -8 0 -117 -49 -241 -108z M1302 2095 c-100 -201 -179 -365 -174 -365 4 0 93 40 197 88 l190 88 63 122 62 122 -77 155 -78 155 -183 -365z M1696 1972 l-17 -32 31 0 c33 0 35 4 16 39 l-14 25 -16 -32z M1451 1737 l-153 -72 288 -3 c158 -1 289 0 291 2 2 2 -12 36 -31 75 l-36 71 -103 -1 -102 -1 -154 -71z M1275 1454 l-150 -74 515 1 515 0 145 74 145 74 -510 0 -510 -1 -150 -74z M2465 1393 c-126 -63 -232 -117 -234 -119 -2 -2 52 -116 119 -253 l123 -250 239 120 238 119 -125 250 c-69 138 -126 250 -128 249 -1 0 -105 -52 -232 -116z M790 1050 c-68 -135 -94 -197 -82 -193 9 4 96 43 192 88 l175 81 58 112 58 112 -151 0 -150 0 -100 -200z"/>
-      </svg>
-      <span class="brand-wordmark">АЛЬТЕРНАТИВА</span>
-    </div>
-
-    <nav class="nav-tabs" id="tabs-container" aria-label="Вкладки закупок">
-      <button class="tab-btn active" data-tab="my_requests" onclick="switchTab('my_requests')" type="button">
-        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        <span class="tab-label">Мои запросы</span>
-      </button>
-      <button class="tab-btn" data-tab="inbox" onclick="switchTab('inbox')" type="button">
-        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-        <span class="tab-label">Входящие (Действия)</span>
-      </button>
-      <button class="tab-btn" data-tab="all" onclick="switchTab('all')" type="button">
-        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-        <span class="tab-label">Все закупки</span>
-      </button>
-    </nav>
-  </aside>
-
-  <!-- ═══════════════════════════════════════════════════════════
-       ОСНОВНАЯ ОБЛАСТЬ
-       ═══════════════════════════════════════════════════════════ -->
-  <div class="main-wrapper">
-
-    <!-- ─── ТОПБАР ─── -->
-    <header class="topbar">
-      <div class="topbar-left">
-        <div class="search-bar">
-          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="21.65"/></svg>
-          <input type="text" id="search-input" placeholder="Поиск..." oninput="onSearchChange(this.value)" aria-label="Поиск закупок">
-        </div>
-        <button class="btn btn-primary btn-sm btn-nowrap" onclick="openCreateModal()" id="btn-create-top" type="button">
-          <svg class="btn-icon-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Создать запрос
-        </button>
-      </div>
-
-      <div class="topbar-right">
-        <!-- Админ-контролы (скрыты для не-админов) -->
-        <div class="admin-controls" id="admin-controls" style="display:none;">
-          <div class="test-mode-wrapper" id="test-mode-container">
-            <input type="checkbox" id="test-mode-toggle" onchange="toggleTestMode(this.checked)">
-            <label for="test-mode-toggle">Тест</label>
-          </div>
-          <div id="scenario-container">
-            <span class="control-label">Сценарий:</span>
-            <select id="scenario-select" class="control-select" onchange="changeScenario(this.value)">
-              <option value="none">Обычный тест</option>
-              <option value="full">Полный проход</option>
-              <option value="upload">Тест загрузки счёта</option>
-              <option value="approval">Тест согласования</option>
-            </select>
-          </div>
-          <div id="role-viewer-container">
-            <span class="control-label">Просмотр:</span>
-            <select id="role-viewer" class="control-select" onchange="simulateRole(this.value)">
-              <option value="admin">Администратор</option>
-              <option value="econ">Экономист</option>
-              <option value="head">Руководитель</option>
-              <option value="manager">Менеджер</option>
-              <option value="employee">Сотрудник</option>
-            </select>
-          </div>
-        </div>
-
-        <span class="user-display" id="user-display">Загрузка...</span>
-
-        <!-- Переключатель темы -->
-        <button class="btn-icon-ghost" onclick="toggleTheme()" id="btn-theme" title="Переключить тему" type="button" aria-label="Переключить тему">
-          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-          <svg class="icon-moon hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </button>
-
-        <!-- Настройки (только админ) -->
-        <button class="btn-icon-ghost" onclick="openAdminPanel()" id="btn-settings" style="display:none;" title="Настройки" type="button" aria-label="Настройки">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </button>
-
-        <!-- Обновить -->
-        <button class="btn-icon-ghost" onclick="loadAllData()" title="Обновить" type="button" aria-label="Обновить данные">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
-        </button>
-      </div>
-    </header>
-
-    <!-- ─── КОНТЕНТ ─── -->
-    <main class="main-content">
-      <div class="toolbar">
-        <div class="toolbar-left">
-          <div class="toolbar-group">
-            <span class="toolbar-label">Сортировка:</span>
-            <select id="sort-select" class="sort-select" onchange="changeSort(this.value)">
-              <option value="default">По умолчанию (Ручная)</option>
-              <option value="deadline_asc">По сроку (ближайшие)</option>
-              <option value="amount_desc">По сумме (большие)</option>
-              <option value="amount_asc">По сумме (меньшие)</option>
-              <option value="date_desc">По дате создания (новые)</option>
-            </select>
-          </div>
-          <div class="view-toggle" role="group" aria-label="Переключатель вида">
-            <button class="view-btn active" id="view-btn-grid" onclick="switchView('grid')" title="Карточки" type="button" aria-label="Вид карточками">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-            </button>
-            <button class="view-btn" id="view-btn-table" onclick="switchView('table')" title="Таблица" type="button" aria-label="Вид таблицей">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div id="app-container" class="notes-grid" role="list">
-        <div class="loading loading-full">Загрузка данных...</div>
-      </div>
-    </main>
-  </div>
+<aside class="sidebar" id="sidebar">
+<div class="brand">
+<svg class="brand-logo" viewBox="0 0 3590 3540" aria-hidden="true">
+<path fill="currentColor" fill-rule="evenodd" d="m2390 640 c154 -308 280 -561 280 -563 0 -2 -86 -44 -191 -93 l-191 -89 241 -3 241 -2 175 -350 c96 -192 175 -352 175 -355 0 -3 -158 -84 -350 -180 l-350 -175 -162 325 -163 325 -380 0 -380 0 -80 -156 c-44 -86 -89 -162 -100 -169 -28 -19 -717 -326 -721 -322 -2 2 80 175 183 385 l186 380 166 81 166 80 -127 1 c-71 0 -128 2 -128 5 0 3 125 256 279 563 l279 557 333 157 c184 86 335 157 336 157 2 1 129 -251 283 -559z M1799 2681 l-226 -107 223 -446 224 -447 202 95 c112 53 220 102 240 111 l37 15 -222 444 c-150 300 -227 444 -237 443 -8 0 -117 -49 -241 -108z M1302 2095 c-100 -201 -179 -365 -174 -365 4 0 93 40 197 88 l190 88 63 122 62 122 -77 155 -78 155 -183 -365z M1696 1972 l-17 -32 31 0 c33 0 35 4 16 39 l-14 25 -16 -32z M1451 1737 l-153 -72 288 -3 c158 -1 289 0 291 2 2 2 -12 36 -31 75 l-36 71 -103 -1 -102 -1 -154 -71z M1275 1454 l-150 -74 515 1 515 0 145 74 145 74 -510 0 -510 -1 -150 -74z M2465 1393 c-126 -63 -232 -117 -234 -119 -2 -2 52 -116 119 -253 l123 -250 239 120 238 119 -125 250 c-69 138 -126 250 -128 249 -1 0 -105 -52 -232 -116z M790 1050 c-68 -135 -94 -197 -82 -193 9 4 96 43 192 88 l175 81 58 112 58 112 -151 0 -150 0 -100 -200z"/>
+</svg>
+<span class="brand-wordmark">АЛЬТЕРНАТИВА</span>
 </div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     FAB (Создать) — остаётся дублем топбара (мобильный задел)
-     ═══════════════════════════════════════════════════════════ -->
-<button class="fab-btn" onclick="openCreateModal()" title="Создать запрос" type="button" aria-label="Создать запрос">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+<nav class="nav-tabs" id="tabs-container" aria-label="Вкладки закупок">
+<button class="tab-btn active" data-tab="my_requests" onclick="switchTab('my_requests')" type="button">
+<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+<span class="tab-label">Мои запросы</span>
 </button>
-
-<!-- ═══════════════════════════════════════════════════════════
-     МОБИЛЬНАЯ НИЖНЯЯ НАВИГАЦИЯ (≤767px)
-     ═══════════════════════════════════════════════════════════ -->
-<nav class="mobile-nav" id="mobile-nav" aria-label="Мобильная навигация">
-  <button class="mobile-nav-btn active" data-tab="my_requests" onclick="switchTab('my_requests')" type="button">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-    <span>Мои</span>
-  </button>
-  <button class="mobile-nav-btn" data-tab="inbox" onclick="switchTab('inbox')" type="button">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-    <span>Входящие</span>
-  </button>
-  <button class="mobile-nav-btn" data-tab="all" onclick="switchTab('all')" type="button">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-    <span>Все</span>
-  </button>
+<button class="tab-btn" data-tab="inbox" onclick="switchTab('inbox')" type="button">
+<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+<span class="tab-label">Входящие (Действия)</span>
+</button>
+<button class="tab-btn" data-tab="all" onclick="switchTab('all')" type="button">
+<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+<span class="tab-label">Все закупки</span>
+</button>
 </nav>
-
-<!-- ═══════════════════════════════════════════════════════════
-     МОДАЛКИ
-     ═══════════════════════════════════════════════════════════ -->
-
-<!-- Просмотр закупки -->
+</aside>
+<div class="main-wrapper">
+<header class="topbar">
+<div class="topbar-left">
+<div class="search-bar">
+<svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="21.65"/></svg>
+<input type="text" id="search-input" placeholder="Поиск..." oninput="onSearchChange(this.value)" aria-label="Поиск закупок">
+</div>
+<button class="btn btn-primary btn-sm btn-nowrap" onclick="openCreateModal()" id="btn-create-top" type="button">
+<svg class="btn-icon-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+Создать запрос
+</button>
+</div>
+<div class="topbar-right">
+<div class="admin-controls" id="admin-controls" style="display:none;">
+<div class="test-mode-wrapper" id="test-mode-container">
+<input type="checkbox" id="test-mode-toggle" onchange="toggleTestMode(this.checked)">
+<label for="test-mode-toggle">Тест</label>
+</div>
+<div id="scenario-container">
+<span class="control-label">Сценарий:</span>
+<select id="scenario-select" class="control-select" onchange="changeScenario(this.value)">
+<option value="none">Обычный тест</option>
+<option value="full">Полный проход</option>
+<option value="upload">Тест загрузки счёта</option>
+<option value="approval">Тест согласования</option>
+</select>
+</div>
+<div id="role-viewer-container">
+<span class="control-label">Просмотр:</span>
+<select id="role-viewer" class="control-select" onchange="simulateRole(this.value)">
+<option value="admin">Администратор</option>
+<option value="econ">Экономист</option>
+<option value="head">Руководитель</option>
+<option value="manager">Менеджер</option>
+<option value="employee">Сотрудник</option>
+</select>
+</div>
+</div>
+<span class="user-display" id="user-display">Загрузка...</span>
+<button class="btn-icon-ghost" onclick="toggleTheme()" id="btn-theme" title="Переключить тему" type="button" aria-label="Переключить тему">
+<svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+<svg class="icon-moon hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+<button class="btn-icon-ghost" onclick="openAdminPanel()" id="btn-settings" style="display:none;" title="Настройки" type="button" aria-label="Настройки">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+</button>
+<button class="btn-icon-ghost" onclick="loadAllData()" title="Обновить" type="button" aria-label="Обновить данные">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+</button>
+</div>
+</header>
+<main class="main-content">
+<div class="toolbar">
+<div class="toolbar-left">
+<div class="toolbar-group">
+<span class="toolbar-label">Сортировка:</span>
+<select id="sort-select" class="sort-select" onchange="changeSort(this.value)">
+<option value="default">По умолчанию (Ручная)</option>
+<option value="deadline_asc">По сроку (ближайшие)</option>
+<option value="amount_desc">По сумме (большие)</option>
+<option value="amount_asc">По сумме (меньшие)</option>
+<option value="date_desc">По дате создания (новые)</option>
+</select>
+</div>
+<div class="view-toggle" role="group" aria-label="Переключатель вида">
+<button class="view-btn active" id="view-btn-grid" onclick="switchView('grid')" title="Карточки" type="button" aria-label="Вид карточками">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+</button>
+<button class="view-btn" id="view-btn-table" onclick="switchView('table')" title="Таблица" type="button" aria-label="Вид таблицей">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+</button>
+</div>
+</div>
+</div>
+<div id="app-container" class="notes-grid" role="list">
+<div class="loading loading-full">Загрузка данных...</div>
+</div>
+</main>
+</div>
+</div>
+<button class="fab-btn" onclick="openCreateModal()" title="Создать запрос" type="button" aria-label="Создать запрос">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+</button>
+<nav class="mobile-nav" id="mobile-nav" aria-label="Мобильная навигация">
+<button class="mobile-nav-btn active" data-tab="my_requests" onclick="switchTab('my_requests')" type="button">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+<span>Мои</span>
+</button>
+<button class="mobile-nav-btn" data-tab="inbox" onclick="switchTab('inbox')" type="button">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+<span>Входящие</span>
+</button>
+<button class="mobile-nav-btn" data-tab="all" onclick="switchTab('all')" type="button">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+<span>Все</span>
+</button>
+</nav>
 <div id="modal-view" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="view-title">
-  <div class="modal modal-xl" id="view-modal-content">
-    <div class="modal-header">
-      <h2 id="view-title">Детали закупки</h2>
-      <button class="btn-close" onclick="closeModal('modal-view')" type="button" aria-label="Закрыть">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="modal-body" id="view-body"></div>
-    <div class="modal-footer">
-      <button class="btn" onclick="closeModal('modal-view')" type="button">Закрыть</button>
-    </div>
-  </div>
+<div class="modal modal-xl" id="view-modal-content">
+<div class="modal-header">
+<h2 id="view-title">Детали закупки</h2>
+<button class="btn-close" onclick="closeModal('modal-view')" type="button" aria-label="Закрыть">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>
 </div>
-
-<!-- Мастер создания (3 шага) -->
+<div class="modal-body" id="view-body"></div>
+<div class="modal-footer">
+<button class="btn" onclick="closeModal('modal-view')" type="button">Закрыть</button>
+</div>
+</div>
+</div>
 <div id="modal-create" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="create-modal-title">
-  <div class="modal" id="create-modal-content">
-    <div class="modal-header">
-      <div class="modal-header-title">
-        <h2 id="create-modal-title">Создать запрос на закупку</h2>
-        <span class="modal-header-sum hidden" id="create-header-sum">0.00 ₽</span>
-      </div>
-      <button class="btn-close" onclick="closeModal('modal-create')" type="button" aria-label="Закрыть">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-
-    <div class="create-stepper">
-      <div class="cs-steps">
-        <div class="cs-fill" id="cs-fill"></div>
-        <button type="button" class="cs-step active" data-step="1" onclick="tryGoCreateStep(1)">
-          <span class="cs-num">1</span>
-          <span class="cs-label">Основная информация</span>
-        </button>
-        <button type="button" class="cs-step" data-step="2" onclick="tryGoCreateStep(2)">
-          <span class="cs-num">2</span>
-          <span class="cs-label">Позиции закупки</span>
-        </button>
-        <button type="button" class="cs-step" data-step="3" onclick="tryGoCreateStep(3)">
-          <span class="cs-num">3</span>
-          <span class="cs-label">Итоги</span>
-        </button>
-      </div>
-    </div>
-
-    <form id="form-create" onsubmit="submitCreateRequest(event)">
-      <div class="modal-body">
-        <input type="hidden" id="edit-item-id">
-        <input type="hidden" id="create-amount-product" value="">
-
-        <!-- ШАГ 1 -->
-        <div class="step-panel active" data-step="1">
-          <div class="form-block">
-            <div class="form-group">
-              <label for="create-dept">Ответственный отдел *</label>
-              <select id="create-dept" required></select>
-            </div>
-          </div>
-          <div class="form-block form-block-pair">
-            <div class="form-group">
-              <label for="create-section">Раздел направления расхода д/с *</label>
-              <select id="create-section" required onchange="updateDirectionsCreate()"></select>
-            </div>
-            <div class="form-group">
-              <label for="create-direction">Направление расхода д/с *</label>
-              <select id="create-direction" required></select>
-            </div>
-          </div>
-          <div class="form-block">
-            <div class="form-group">
-              <label for="create-deadline">Крайний срок закупки *</label>
-              <input type="date" id="create-deadline" required>
-            </div>
-          </div>
-        </div>
-
-        <!-- ШАГ 2 -->
-        <div class="step-panel" data-step="2">
-          <div class="form-group">
-            <label for="create-short-desc">Краткое описание *</label>
-            <input type="text" id="create-short-desc" required placeholder="Например: оборудование для лаборатории">
-          </div>
-          <div class="flex-between">
-            <h5 class="subsection-title">Позиции закупки</h5>
-            <button type="button" class="btn btn-sm" onclick="openPastItemsModal()">
-              <svg class="btn-icon-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
-              Выбрать из прошлых
-            </button>
-          </div>
-          <div id="purchase-items-container"></div>
-          <button type="button" class="btn btn-sm mt-4" onclick="addDetailRow()">
-            <svg class="btn-icon-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Добавить позицию
-          </button>
-        </div>
-
-        <!-- ШАГ 3 -->
-        <div class="step-panel" data-step="3">
-          <div id="create-review-container"></div>
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <button type="button" class="btn" onclick="closeModal('modal-create')">Отмена</button>
-        <button type="button" class="btn" id="btn-create-back" onclick="prevCreateStep()" style="display:none">Назад</button>
-        <button type="button" class="btn btn-primary" id="btn-create-next" onclick="nextCreateStep()">Далее</button>
-        <button type="submit" class="btn btn-primary" id="btn-save-create" style="display:none">Сохранить</button>
-      </div>
-    </form>
-  </div>
+<div class="modal" id="create-modal-content">
+<div class="modal-header">
+<div class="modal-header-title">
+<h2 id="create-modal-title">Создать запрос на закупку</h2>
+<span class="modal-header-sum hidden" id="create-header-sum">0.00 ₽</span>
 </div>
-
-<!-- Выбрать из прошлых -->
+<button class="btn-close" onclick="closeModal('modal-create')" type="button" aria-label="Закрыть">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>
+</div>
+<div class="create-stepper">
+<div class="cs-steps">
+<div class="cs-fill" id="cs-fill"></div>
+<button type="button" class="cs-step active" data-step="1" onclick="tryGoCreateStep(1)">
+<span class="cs-num">1</span>
+<span class="cs-label">Основная информация</span>
+</button>
+<button type="button" class="cs-step" data-step="2" onclick="tryGoCreateStep(2)">
+<span class="cs-num">2</span>
+<span class="cs-label">Позиции закупки</span>
+</button>
+<button type="button" class="cs-step" data-step="3" onclick="tryGoCreateStep(3)">
+<span class="cs-num">3</span>
+<span class="cs-label">Итоги</span>
+</button>
+</div>
+</div>
+<form id="form-create" onsubmit="submitCreateRequest(event)">
+<div class="modal-body">
+<input type="hidden" id="edit-item-id">
+<input type="hidden" id="create-amount-product" value="">
+<div class="step-panel active" data-step="1">
+<div class="form-block">
+<div class="form-group">
+<label for="create-dept">Ответственный отдел *</label>
+<select id="create-dept" required></select>
+</div>
+</div>
+<div class="form-block form-block-pair">
+<div class="form-group">
+<label for="create-section">Раздел направления расхода д/с *</label>
+<select id="create-section" required onchange="updateDirectionsCreate()"></select>
+</div>
+<div class="form-group">
+<label for="create-direction">Направление расхода д/с *</label>
+<select id="create-direction" required></select>
+</div>
+</div>
+<div class="form-block">
+<div class="form-group">
+<label for="create-deadline">Крайний срок закупки *</label>
+<input type="date" id="create-deadline" required>
+</div>
+</div>
+</div>
+<div class="step-panel" data-step="2">
+<div class="form-group">
+<label for="create-short-desc">Краткое описание *</label>
+<input type="text" id="create-short-desc" required placeholder="Например: оборудование для лаборатории">
+</div>
+<div class="flex-between">
+<h5 class="subsection-title">Позиции закупки</h5>
+<button type="button" class="btn btn-sm" onclick="openPastItemsModal()">
+<svg class="btn-icon-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+Выбрать из прошлых
+</button>
+</div>
+<div id="purchase-items-container"></div>
+<button type="button" class="btn btn-sm mt-4" onclick="addDetailRow()">
+<svg class="btn-icon-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+Добавить позицию
+</button>
+</div>
+<div class="step-panel" data-step="3">
+<div id="create-review-container"></div>
+</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn" onclick="closeModal('modal-create')">Отмена</button>
+<button type="button" class="btn" id="btn-create-back" onclick="prevCreateStep()" style="display:none">Назад</button>
+<button type="button" class="btn btn-primary" id="btn-create-next" onclick="nextCreateStep()">Далее</button>
+<button type="submit" class="btn btn-primary" id="btn-save-create" style="display:none">Сохранить</button>
+</div>
+</form>
+</div>
+</div>
 <div id="modal-past" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="past-modal-title">
-  <div class="modal modal-lg">
-    <div class="modal-header">
-      <h2 id="past-modal-title">Выбрать позиции из прошлых закупок</h2>
-      <button class="btn-close" onclick="closeModal('modal-past')" type="button" aria-label="Закрыть">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div class="past-toolbar">
-        <div class="search-bar search-full">
-          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="21.65"/></svg>
-          <input type="text" id="past-search" placeholder="Поиск по наименованию..." oninput="renderPastItems()">
-        </div>
-      </div>
-      <div class="past-list" id="past-list"></div>
-    </div>
-    <div class="modal-footer">
-      <button type="button" class="btn" onclick="closeModal('modal-past')">Отмена</button>
-      <button type="button" class="btn btn-primary" id="btn-past-add" onclick="addSelectedPastItems()">Добавить выбранные</button>
-    </div>
-  </div>
+<div class="modal modal-lg">
+<div class="modal-header">
+<h2 id="past-modal-title">Выбрать позиции из прошлых закупок</h2>
+<button class="btn-close" onclick="closeModal('modal-past')" type="button" aria-label="Закрыть">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>
 </div>
-
-<!-- Сбор данных и расчёт -->
+<div class="modal-body">
+<div class="past-toolbar">
+<div class="search-bar search-full">
+<svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="21.65"/></svg>
+<input type="text" id="past-search" placeholder="Поиск по наименованию..." oninput="renderPastItems()">
+</div>
+</div>
+<div class="past-list" id="past-list"></div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn" onclick="closeModal('modal-past')">Отмена</button>
+<button type="button" class="btn btn-primary" id="btn-past-add" onclick="addSelectedPastItems()">Добавить выбранные</button>
+</div>
+</div>
+</div>
 <div id="modal-data" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="data-modal-title">
-  <div class="modal modal-xl">
-    <div class="modal-header">
-      <h2 id="data-modal-title">Сбор данных и расчёт</h2>
-      <button class="btn-close" onclick="closeModal('modal-data')" type="button" aria-label="Закрыть">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <form id="form-data" onsubmit="submitData(event)">
-      <div class="modal-body">
-        <input type="hidden" id="data-id">
-        <div class="modal-summary">
-          <div class="modal-summary-title" id="data-modal-title-inner">Закупка</div>
-          <div class="modal-summary-desc" id="data-modal-desc">Описание</div>
-        </div>
-        <div class="calc-main-block">
-          <h4 class="section-title">Основные данные расчёта</h4>
-          <div class="form-row-calc">
-            <div class="form-group form-col-no-margin">
-              <label for="data-amount-product">Сумма товаров (без доставки) *</label>
-              <input type="number" id="data-amount-product" required step="0.01" placeholder="0.00">
-            </div>
-            <div class="form-group form-col-no-margin">
-              <label for="data-amount-delivery">Сумма доставки</label>
-              <input type="number" id="data-amount-delivery" step="0.01" placeholder="0.00">
-            </div>
-          </div>
-        </div>
-        <details class="admin-section mb-0">
-          <summary>Детализация закупки (нажмите, чтобы развернуть и редактировать)</summary>
-          <div class="section-content">
-            <div class="detail-table-wrapper">
-              <table class="detail-table" id="data-detail-table">
-                <thead>
-                  <tr>
-                    <th class="col-name">Наименование</th>
-                    <th class="col-purpose">Цель использования</th>
-                    <th class="col-price">Цена с НДС за 1 шт.</th>
-                    <th class="col-qty">Количество</th>
-                    <th class="col-total">Всего</th>
-                    <th class="col-supplier">Поставщик</th>
-                    <th class="col-actions">Действия</th>
-                    <th class="col-empty"></th>
-                  </tr>
-                </thead>
-                <tbody id="data-detail-tbody"></tbody>
-              </table>
-            </div>
-            <button type="button" class="btn btn-sm" onclick="addDataDetailRow()">+ Добавить строку</button>
-          </div>
-        </details>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn" onclick="closeModal('modal-data')">Отмена</button>
-        <button type="submit" class="btn btn-primary">Отправить на согласование</button>
-      </div>
-    </form>
-  </div>
+<div class="modal modal-xl">
+<div class="modal-header">
+<h2 id="data-modal-title">Сбор данных и расчёт</h2>
+<button class="btn-close" onclick="closeModal('modal-data')" type="button" aria-label="Закрыть">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>
 </div>
-
-<!-- Изменить сумму -->
+<form id="form-data" onsubmit="submitData(event)">
+<div class="modal-body">
+<input type="hidden" id="data-id">
+<div class="modal-summary">
+<div class="modal-summary-title" id="data-modal-title-inner">Закупка</div>
+<div class="modal-summary-desc" id="data-modal-desc">Описание</div>
+</div>
+<div class="calc-main-block">
+<h4 class="section-title">Основные данные расчёта</h4>
+<div class="form-row-calc">
+<div class="form-group form-col-no-margin">
+<label for="data-amount-product">Сумма товаров (без доставки) *</label>
+<input type="number" id="data-amount-product" required step="0.01" placeholder="0.00">
+</div>
+<div class="form-group form-col-no-margin">
+<label for="data-amount-delivery">Сумма доставки</label>
+<input type="number" id="data-amount-delivery" step="0.01" placeholder="0.00">
+</div>
+</div>
+</div>
+<details class="admin-section mb-0">
+<summary>Детализация закупки (нажмите, чтобы развернуть и редактировать)</summary>
+<div class="section-content">
+<div class="detail-table-wrapper">
+<table class="detail-table" id="data-detail-table">
+<thead>
+<tr>
+<th class="col-name">Наименование</th>
+<th class="col-purpose">Цель использования</th>
+<th class="col-price">Цена с НДС за 1 шт.</th>
+<th class="col-qty">Количество</th>
+<th class="col-total">Всего</th>
+<th class="col-supplier">Поставщик</th>
+<th class="col-actions">Действия</th>
+<th class="col-empty"></th>
+</tr>
+</thead>
+<tbody id="data-detail-tbody"></tbody>
+</table>
+</div>
+<button type="button" class="btn btn-sm" onclick="addDataDetailRow()">+ Добавить строку</button>
+</div>
+</details>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn" onclick="closeModal('modal-data')">Отмена</button>
+<button type="submit" class="btn btn-primary">Отправить на согласование</button>
+</div>
+</form>
+</div>
+</div>
 <div id="modal-edit-amount" class="modal-overlay" role="dialog" aria-modal="true">
-  <div class="modal modal-sm">
-    <div class="modal-header">
-      <h2>Изменить сумму</h2>
-      <button class="btn-close" onclick="closeModal('modal-edit-amount')" type="button" aria-label="Закрыть">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <form id="form-edit-amount" onsubmit="submitEditAmount(event)">
-      <div class="modal-body">
-        <input type="hidden" id="edit-amount-id">
-        <div class="form-group">
-          <label for="edit-amount-value">Новая сумма товаров (без доставки) *</label>
-          <input type="number" id="edit-amount-value" step="0.01" required>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn" onclick="closeModal('modal-edit-amount')">Отмена</button>
-        <button type="submit" class="btn btn-primary">Сохранить</button>
-      </div>
-    </form>
-  </div>
+<div class="modal modal-sm">
+<div class="modal-header">
+<h2>Изменить сумму</h2>
+<button class="btn-close" onclick="closeModal('modal-edit-amount')" type="button" aria-label="Закрыть">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>
 </div>
-
-<!-- Загрузка счёта -->
+<form id="form-edit-amount" onsubmit="submitEditAmount(event)">
+<div class="modal-body">
+<input type="hidden" id="edit-amount-id">
+<div class="form-group">
+<label for="edit-amount-value">Новая сумма товаров (без доставки) *</label>
+<input type="number" id="edit-amount-value" step="0.01" required>
+</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn" onclick="closeModal('modal-edit-amount')">Отмена</button>
+<button type="submit" class="btn btn-primary">Сохранить</button>
+</div>
+</form>
+</div>
+</div>
 <div id="modal-upload" class="modal-overlay" role="dialog" aria-modal="true">
-  <div class="modal">
-    <div class="modal-header">
-      <h2>Загрузка входящего счёта</h2>
-      <button class="btn-close" onclick="closeModal('modal-upload')" type="button" aria-label="Закрыть">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <form id="form-upload" onsubmit="submitUpload(event)">
-      <div class="modal-body">
-        <input type="hidden" id="upload-id">
-        <div class="form-group">
-          <label>Копия счёта (файл) *</label>
-          <div class="file-upload-wrapper">
-            <input type="file" id="upload-file" required class="link-hidden" onchange="updateFileName(this)">
-            <label for="upload-file" class="file-upload-label">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              <span id="file-name-display" class="file-name-display">Нажмите, чтобы выбрать файл</span>
-            </label>
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="upload-deadline">Крайний срок оплаты *</label>
-          <input type="date" id="upload-deadline" required>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn" onclick="closeModal('modal-upload')">Отмена</button>
-        <button type="submit" class="btn btn-primary">Передать экономисту</button>
-      </div>
-    </form>
-  </div>
+<div class="modal">
+<div class="modal-header">
+<h2>Загрузка входящего счёта</h2>
+<button class="btn-close" onclick="closeModal('modal-upload')" type="button" aria-label="Закрыть">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>
 </div>
-
-<!-- Действие (согласовать/доработка/отклонить/утвердить) -->
+<form id="form-upload" onsubmit="submitUpload(event)">
+<div class="modal-body">
+<input type="hidden" id="upload-id">
+<div class="form-group">
+<label>Копия счёта (файл) *</label>
+<div class="file-upload-wrapper">
+<input type="file" id="upload-file" required class="link-hidden" onchange="updateFileName(this)">
+<label for="upload-file" class="file-upload-label">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+<span id="file-name-display" class="file-name-display">Нажмите, чтобы выбрать файл</span>
+</label>
+</div>
+</div>
+<div class="form-group">
+<label for="upload-deadline">Крайний срок оплаты *</label>
+<input type="date" id="upload-deadline" required>
+</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn" onclick="closeModal('modal-upload')">Отмена</button>
+<button type="submit" class="btn btn-primary">Передать экономисту</button>
+</div>
+</form>
+</div>
+</div>
 <div id="modal-action" class="modal-overlay" role="dialog" aria-modal="true">
-  <div class="modal">
-    <div class="modal-header">
-      <h2 id="action-title">Действие</h2>
-      <button class="btn-close" onclick="closeModal('modal-action')" type="button" aria-label="Закрыть">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <form id="form-action" onsubmit="submitAction(event)">
-      <div class="modal-body">
-        <input type="hidden" id="action-id">
-        <input type="hidden" id="action-type">
-        <div class="form-group" id="action-postpone-group" style="display:none;">
-          <label for="action-postpone-date">Отложить до даты</label>
-          <input type="date" id="action-postpone-date" value="">
-          <div class="field-hint">Если указана дата, закупка не будет передана дальше до её наступления.</div>
-        </div>
-        <div class="form-group">
-          <label id="action-comment-label" for="action-comment">Комментарий</label>
-          <textarea id="action-comment" rows="3"></textarea>
-        </div>
-      </div>
-      <div class="modal-footer" id="action-footer-buttons"></div>
-    </form>
-  </div>
+<div class="modal">
+<div class="modal-header">
+<h2 id="action-title">Действие</h2>
+<button class="btn-close" onclick="closeModal('modal-action')" type="button" aria-label="Закрыть">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>
 </div>
-
-<!-- Делегирование -->
+<form id="form-action" onsubmit="submitAction(event)">
+<div class="modal-body">
+<input type="hidden" id="action-id">
+<input type="hidden" id="action-type">
+<div class="form-group" id="action-postpone-group" style="display:none;">
+<label for="action-postpone-date">Отложить до даты</label>
+<input type="date" id="action-postpone-date" value="">
+<div class="field-hint">Если указана дата, закупка не будет передана дальше до её наступления.</div>
+</div>
+<div class="form-group">
+<label id="action-comment-label" for="action-comment">Комментарий</label>
+<textarea id="action-comment" rows="3"></textarea>
+</div>
+</div>
+<div class="modal-footer" id="action-footer-buttons"></div>
+</form>
+</div>
+</div>
 <div id="modal-delegate" class="modal-overlay" role="dialog" aria-modal="true">
-  <div class="modal modal-md">
-    <div class="modal-header">
-      <h2 id="delegate-title">Делегировать закупку</h2>
-      <button class="btn-close" onclick="closeModal('modal-delegate')" type="button" aria-label="Закрыть">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <form id="form-delegate" onsubmit="submitDelegate(event)">
-      <div class="modal-body">
-        <input type="hidden" id="delegate-id">
-        <div class="form-group">
-          <label>Текущий исполнитель</label>
-          <input type="text" id="delegate-from" disabled class="field-disabled">
-        </div>
-        <div class="form-group">
-          <label>Отдел</label>
-          <input type="text" id="delegate-dept" disabled class="field-disabled">
-        </div>
-        <div class="form-group">
-          <label for="delegate-to">Передать сотруднику *</label>
-          <select id="delegate-to" required></select>
-        </div>
-        <div class="form-group">
-          <label for="delegate-note">Причина / комментарий</label>
-          <textarea id="delegate-note" rows="3" placeholder="Напр.: основной исполнитель в отпуске"></textarea>
-        </div>
-        <div class="info-note info-note-warning">История делегирований сохраняется в карточке закупки.</div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn" onclick="closeModal('modal-delegate')">Отмена</button>
-        <button type="submit" class="btn btn-primary" id="btn-delegate-save">Делегировать</button>
-      </div>
-    </form>
-  </div>
+<div class="modal modal-md">
+<div class="modal-header">
+<h2 id="delegate-title">Делегировать закупку</h2>
+<button class="btn-close" onclick="closeModal('modal-delegate')" type="button" aria-label="Закрыть">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>
 </div>
-
-<!-- Выбор исполнителя -->
+<form id="form-delegate" onsubmit="submitDelegate(event)">
+<div class="modal-body">
+<input type="hidden" id="delegate-id">
+<div class="form-group">
+<label>Текущий исполнитель</label>
+<input type="text" id="delegate-from" disabled class="field-disabled">
+</div>
+<div class="form-group">
+<label>Отдел</label>
+<input type="text" id="delegate-dept" disabled class="field-disabled">
+</div>
+<div class="form-group">
+<label for="delegate-to">Передать сотруднику *</label>
+<select id="delegate-to" required></select>
+</div>
+<div class="form-group">
+<label for="delegate-note">Причина / комментарий</label>
+<textarea id="delegate-note" rows="3" placeholder="Напр.: основной исполнитель в отпуске"></textarea>
+</div>
+<div class="info-note info-note-warning">История делегирований сохраняется в карточке закупки.</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn" onclick="closeModal('modal-delegate')">Отмена</button>
+<button type="submit" class="btn btn-primary" id="btn-delegate-save">Делегировать</button>
+</div>
+</form>
+</div>
+</div>
 <div id="modal-executor" class="modal-overlay" role="dialog" aria-modal="true">
-  <div class="modal modal-md">
-    <div class="modal-header">
-      <h2 id="executor-title">Выбор исполнителя</h2>
-      <button class="btn-close" onclick="closeModal('modal-executor')" type="button" aria-label="Закрыть">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <form id="form-executor" onsubmit="submitExecutor(event)">
-      <div class="modal-body">
-        <input type="hidden" id="executor-id">
-        <input type="hidden" id="executor-task-id">
-        <div class="form-group">
-          <label>Закупка</label>
-          <input type="text" id="executor-desc" disabled class="field-disabled">
-        </div>
-        <div class="form-group">
-          <label for="executor-to">Назначить исполнителем *</label>
-          <select id="executor-to" required></select>
-        </div>
-        <div class="info-note info-note-success">После утверждения задача будет автоматически закрыта, сотрудник станет менеджером закупки, и ему придёт уведомление о сборе данных.</div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn" onclick="closeModal('modal-executor')">Отмена</button>
-        <button type="submit" class="btn btn-primary" id="btn-executor-save">Утвердить</button>
-      </div>
-    </form>
-  </div>
+<div class="modal modal-md">
+<div class="modal-header">
+<h2 id="executor-title">Выбор исполнителя</h2>
+<button class="btn-close" onclick="closeModal('modal-executor')" type="button" aria-label="Закрыть">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>
 </div>
-
-<!-- Настройки (8 вкладок: Основные, Роли, CRM, Связи, Отсутствия, Чат-бот, Цвета стадий, Логи) -->
+<form id="form-executor" onsubmit="submitExecutor(event)">
+<div class="modal-body">
+<input type="hidden" id="executor-id">
+<input type="hidden" id="executor-task-id">
+<div class="form-group">
+<label>Закупка</label>
+<input type="text" id="executor-desc" disabled class="field-disabled">
+</div>
+<div class="form-group">
+<label for="executor-to">Назначить исполнителем *</label>
+<select id="executor-to" required></select>
+</div>
+<div class="info-note info-note-success">После утверждения задача будет автоматически закрыта, сотрудник станет менеджером закупки, и ему придёт уведомление о сборе данных.</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn" onclick="closeModal('modal-executor')">Отмена</button>
+<button type="submit" class="btn btn-primary" id="btn-executor-save">Утвердить</button>
+</div>
+</form>
+</div>
+</div>
 <div id="modal-settings" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-  <div class="modal modal-xl">
-    <div class="modal-header">
-      <h2 id="settings-title">Настройки приложения</h2>
-      <button class="btn-close" onclick="closeModal('modal-settings')" type="button" aria-label="Закрыть">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div class="admin-tabs" role="tablist">
-        <button type="button" class="admin-tab active" data-tab="main" onclick="switchAdminTab('main')" role="tab">Основные</button>
-        <button type="button" class="admin-tab" data-tab="roles" onclick="switchAdminTab('roles')" role="tab">Роли отделов</button>
-        <button type="button" class="admin-tab" data-tab="crm" onclick="switchAdminTab('crm')" role="tab">Поля CRM</button>
-        <button type="button" class="admin-tab" data-tab="deps" onclick="switchAdminTab('deps')" role="tab">Связи списков</button>
-        <button type="button" class="admin-tab" data-tab="absence" onclick="switchAdminTab('absence')" role="tab">Отсутствия</button>
-        <button type="button" class="admin-tab" data-tab="bot" onclick="switchAdminTab('bot')" role="tab">Чат-бот</button>
-        <button type="button" class="admin-tab" data-tab="stages" onclick="switchAdminTab('stages')" role="tab">Цвета стадий</button>
-        <button type="button" class="admin-tab" data-tab="logs" onclick="switchAdminTab('logs')" role="tab">Логи</button>
-      </div>
-
-      <!-- Основные -->
-      <div class="admin-panel active" data-panel="main" role="tabpanel">
-        <div class="flex-row-wrap">
-          <div class="form-group form-col">
-            <label for="set-entityid">ID Смарт-процесса (Закупки)</label>
-            <input type="number" id="set-entityid" value="1072">
-          </div>
-          <div class="form-group form-col">
-            <label for="set-categoryid">ID Воронки (Category ID)</label>
-            <input type="number" id="set-categoryid" value="65">
-          </div>
-        </div>
-        <div class="flex-row-wrap">
-          <div class="form-group form-col">
-            <label for="set-systemuserid">ID Системного пользователя</label>
-            <input type="number" id="set-systemuserid" value="175">
-            <div class="field-hint">От его имени отправляются уведомления.</div>
-          </div>
-          <div class="form-group form-col">
-            <label for="set-clientid">Client ID приложения</label>
-            <input type="text" id="set-clientid" placeholder="local.xxxxxxxxxx">
-            <div class="field-hint">Из карточки интеграции портала.</div>
-          </div>
-          <div class="form-group form-col">
-            <label for="set-clientsecret">Client Secret (не обяз.)</label>
-            <input type="text" id="set-clientsecret" placeholder="xxxxxxxxxx">
-          </div>
-        </div>
-        <div class="settings-divider">
-          <div class="flex-row-wrap">
-            <div class="form-group form-col">
-              <label for="set-deadline-red">Дней до дедлайна для КРАСНОГО</label>
-              <input type="number" id="set-deadline-red" value="3" min="0">
-            </div>
-            <div class="form-group form-col">
-              <label for="set-deadline-yellow">Дней до дедлайна для ЖЁЛТОГО</label>
-              <input type="number" id="set-deadline-yellow" value="14" min="0">
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Роли отделов -->
-      <div class="admin-panel" data-panel="roles" role="tabpanel">
-        <div class="table-view">
-          <table class="settings-table" id="dept-roles-table">
-            <thead>
-              <tr>
-                <th>Отдел</th>
-                <th>Краткое имя</th>
-                <th>Выводить</th>
-                <th>Руководитель</th>
-                <th>Менеджер по ум.</th>
-                <th class="text-center">Экономисты?</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <button type="button" class="btn btn-sm" onclick="autoFillHeadsFromB24()">Заполнить руководителей из Б24</button>
-      </div>
-
-      <!-- Поля CRM -->
-      <div class="admin-panel" data-panel="crm" role="tabpanel">
-        <div class="flex-row-sm">
-          <button type="button" class="btn btn-sm btn-primary" onclick="autoMapFields()">Автонастроить маппинг</button>
-          <button type="button" class="btn btn-sm" onclick="createField('delegateHistory')">Создать поле «История делегирований»</button>
-          <button type="button" class="btn btn-sm" onclick="createField('detailSupplier')">Создать поле «Поставщик»</button>
-        </div>
-        <p class="field-hint">Статус полей CRM:</p>
-        <div id="fields-status-container"></div>
-        <p class="field-hint" style="margin:16px 0 8px;">Сопоставление полей CRM:</p>
-        <div id="mapping-container"></div>
-      </div>
-
-      <!-- Связи списков -->
-      <div class="admin-panel" data-panel="deps" role="tabpanel">
-        <p class="field-hint" style="margin-bottom:10px;">Выберите направления для каждого раздела.</p>
-        <div id="list-dependencies-container"></div>
-      </div>
-
-      <!-- Отсутствия -->
-      <div class="admin-panel" data-panel="absence" role="tabpanel">
-        <button type="button" class="btn btn-sm btn-primary" onclick="runManualAbsenceCheck()" id="btn-absence-check">Проверить отсутствия сейчас</button>
-        <p class="field-hint" style="margin:10px 0;" id="absence-meta"></p>
-        <div id="unavailable-users-container" class="scroll-container"></div>
-      </div>
-
-      <!-- Чат-бот -->
-      <div class="admin-panel" data-panel="bot" role="tabpanel">
-        <p class="field-hint" style="margin-bottom:8px;">Статус чат-бота:</p>
-        <div class="bot-status-box" id="bot-status-box"></div>
-        <div class="flex-row-sm">
-          <button type="button" class="btn btn-sm btn-primary" onclick="forceCreateBot()">Создать бота сейчас</button>
-          <button type="button" class="btn btn-sm" onclick="testBotSend()">Тестовое сообщение себе</button>
-          <button type="button" class="btn btn-sm btn-danger" onclick="resetBotChat()">Сбросить чат бота</button>
-          <button type="button" class="btn btn-sm" onclick="window.open('https://dev.bitrix24.ru/rest_bot.php', '_blank')">Открыть карточку ботов</button>
-        </div>
-        <div class="form-group">
-          <label for="set-botid">ID чат-бота (если авто-поиск не сработал)</label>
-          <input type="number" id="set-botid" placeholder="например 345">
-          <div class="field-hint">Число из URL карточки бота. Приоритет над авто-поиском. Переживает обновления архива.</div>
-        </div>
-        <div class="form-group">
-          <label for="set-chatid">ID группового чата бота (не обяз.)</label>
-          <input type="text" id="set-chatid" placeholder="пусто = создавать автоматически">
-          <div class="field-hint">Оставьте пустым, чтобы приложение само создало и запомнило рабочий чат.</div>
-        </div>
-        <div class="form-group">
-          <label for="set-bothandler">URL обработчика событий бота (handler)</label>
-          <input type="text" id="set-bothandler" placeholder="пусто = текущий URL приложения">
-          <div class="field-hint">Обязателен при eventMode=fetch.</div>
-        </div>
-        <div class="form-group">
-          <label for="set-absence-field">Код доп. поля статуса отсутствия (не обяз.)</label>
-          <input type="text" id="set-absence-field" placeholder="оставьте пустым для авто-детекта UF_ABSENCE">
-        </div>
-        <div class="form-group">
-          <label for="set-absence-values">Значения доп. поля, означающие отсутствие</label>
-          <input type="text" id="set-absence-values" placeholder="отпуск,больничный,командировка">
-        </div>
-      </div>
-
-      <!-- Цвета стадий (новая) -->
-      <div class="admin-panel" data-panel="stages" role="tabpanel">
-        <p class="field-hint" style="margin-bottom:10px;">Сопоставьте стадии воронки со статусными токенами. Изменения сохраняются только в настройках приложения, CRM не затрагивается.</p>
-        <div id="stages-mapping-container"></div>
-      </div>
-
-      <!-- Логи (новая, перенесена из плавающей панели) -->
-      <div class="admin-panel" data-panel="logs" role="tabpanel">
-        <div class="logs-toolbar">
-          <button type="button" class="btn btn-sm btn-danger" onclick="clearLogPanel()">Очистить</button>
-          <span class="field-hint" id="logs-count">0 записей</span>
-        </div>
-        <div class="logs-container" id="logs-container"></div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
-    </div>
-  </div>
+<div class="modal modal-xl">
+<div class="modal-header">
+<h2 id="settings-title">Настройки приложения</h2>
+<button class="btn-close" onclick="closeModal('modal-settings')" type="button" aria-label="Закрыть">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>
 </div>
-
-<!-- Toast -->
+<div class="modal-body">
+<div class="admin-tabs" role="tablist">
+<button type="button" class="admin-tab active" data-tab="main" onclick="switchAdminTab('main')" role="tab">Основные</button>
+<button type="button" class="admin-tab" data-tab="roles" onclick="switchAdminTab('roles')" role="tab">Роли отделов</button>
+<button type="button" class="admin-tab" data-tab="crm" onclick="switchAdminTab('crm')" role="tab">Поля CRM</button>
+<button type="button" class="admin-tab" data-tab="deps" onclick="switchAdminTab('deps')" role="tab">Связи списков</button>
+<button type="button" class="admin-tab" data-tab="absence" onclick="switchAdminTab('absence')" role="tab">Отсутствия</button>
+<button type="button" class="admin-tab" data-tab="bot" onclick="switchAdminTab('bot')" role="tab">Чат-бот</button>
+<button type="button" class="admin-tab" data-tab="stages" onclick="switchAdminTab('stages')" role="tab">Цвета стадий</button>
+<button type="button" class="admin-tab" data-tab="logs" onclick="switchAdminTab('logs')" role="tab">Логи</button>
+</div>
+<div class="admin-panel active" data-panel="main" role="tabpanel">
+<div class="flex-row-wrap">
+<div class="form-group form-col">
+<label for="set-entityid">ID Смарт-процесса (Закупки)</label>
+<input type="number" id="set-entityid" value="1072">
+</div>
+<div class="form-group form-col">
+<label for="set-categoryid">ID Воронки (Category ID)</label>
+<input type="number" id="set-categoryid" value="65">
+</div>
+</div>
+<div class="flex-row-wrap">
+<div class="form-group form-col">
+<label for="set-systemuserid">ID Системного пользователя</label>
+<input type="number" id="set-systemuserid" value="175">
+<div class="field-hint">От его имени отправляются уведомления.</div>
+</div>
+<div class="form-group form-col">
+<label for="set-clientid">Client ID приложения</label>
+<input type="text" id="set-clientid" placeholder="local.xxxxxxxxxx">
+<div class="field-hint">Из карточки интеграции портала.</div>
+</div>
+<div class="form-group form-col">
+<label for="set-clientsecret">Client Secret (не обяз.)</label>
+<input type="text" id="set-clientsecret" placeholder="xxxxxxxxxx">
+</div>
+</div>
+<div class="settings-divider">
+<div class="flex-row-wrap">
+<div class="form-group form-col">
+<label for="set-deadline-red">Дней до дедлайна для КРАСНОГО</label>
+<input type="number" id="set-deadline-red" value="3" min="0">
+</div>
+<div class="form-group form-col">
+<label for="set-deadline-yellow">Дней до дедлайна для ЖЁЛТОГО</label>
+<input type="number" id="set-deadline-yellow" value="14" min="0">
+</div>
+</div>
+</div>
+</div>
+<div class="admin-panel" data-panel="roles" role="tabpanel">
+<div class="table-view">
+<table class="settings-table" id="dept-roles-table">
+<thead>
+<tr>
+<th>Отдел</th>
+<th>Краткое имя</th>
+<th>Выводить</th>
+<th>Руководитель</th>
+<th>Менеджер по ум.</th>
+<th class="text-center">Экономисты?</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
+<button type="button" class="btn btn-sm" onclick="autoFillHeadsFromB24()">Заполнить руководителей из Б24</button>
+</div>
+<div class="admin-panel" data-panel="crm" role="tabpanel">
+<div class="flex-row-sm">
+<button type="button" class="btn btn-sm btn-primary" onclick="autoMapFields()">Автонастроить маппинг</button>
+<button type="button" class="btn btn-sm" onclick="createField('delegateHistory')">Создать поле «История делегирований»</button>
+<button type="button" class="btn btn-sm" onclick="createField('detailSupplier')">Создать поле «Поставщик»</button>
+</div>
+<p class="field-hint">Статус полей CRM:</p>
+<div id="fields-status-container"></div>
+<p class="field-hint" style="margin:16px 0 8px;">Сопоставление полей CRM:</p>
+<div id="mapping-container"></div>
+</div>
+<div class="admin-panel" data-panel="deps" role="tabpanel">
+<p class="field-hint" style="margin-bottom:10px;">Выберите направления для каждого раздела.</p>
+<div id="list-dependencies-container"></div>
+</div>
+<div class="admin-panel" data-panel="absence" role="tabpanel">
+<button type="button" class="btn btn-sm btn-primary" onclick="runManualAbsenceCheck()" id="btn-absence-check">Проверить отсутствия сейчас</button>
+<p class="field-hint" style="margin:10px 0;" id="absence-meta"></p>
+<div id="unavailable-users-container" class="scroll-container"></div>
+</div>
+<div class="admin-panel" data-panel="bot" role="tabpanel">
+<p class="field-hint" style="margin-bottom:8px;">Статус чат-бота:</p>
+<div class="bot-status-box" id="bot-status-box"></div>
+<div class="flex-row-sm">
+<button type="button" class="btn btn-sm btn-primary" onclick="forceCreateBot()">Создать бота сейчас</button>
+<button type="button" class="btn btn-sm" onclick="testBotSend()">Тестовое сообщение себе</button>
+<button type="button" class="btn btn-sm btn-danger" onclick="resetBotChat()">Сбросить чат бота</button>
+<button type="button" class="btn btn-sm" onclick="window.open('https://dev.bitrix24.ru/rest_bot.php', '_blank')">Открыть карточку ботов</button>
+</div>
+<div class="form-group">
+<label for="set-botid">ID чат-бота (если авто-поиск не сработал)</label>
+<input type="number" id="set-botid" placeholder="например 345">
+<div class="field-hint">Число из URL карточки бота. Приоритет над авто-поиском. Переживает обновления архива.</div>
+</div>
+<div class="form-group">
+<label for="set-chatid">ID группового чата бота (не обяз.)</label>
+<input type="text" id="set-chatid" placeholder="пусто = создавать автоматически">
+<div class="field-hint">Оставьте пустым, чтобы приложение само создало и запомнило рабочий чат.</div>
+</div>
+<div class="form-group">
+<label for="set-bothandler">URL обработчика событий бота (handler)</label>
+<input type="text" id="set-bothandler" placeholder="пусто = текущий URL приложения">
+<div class="field-hint">Обязателен при eventMode=fetch.</div>
+</div>
+<div class="form-group">
+<label for="set-absence-field">Код доп. поля статуса отсутствия (не обяз.)</label>
+<input type="text" id="set-absence-field" placeholder="оставьте пустым для авто-детекта UF_ABSENCE">
+</div>
+<div class="form-group">
+<label for="set-absence-values">Значения доп. поля, означающие отсутствие</label>
+<input type="text" id="set-absence-values" placeholder="отпуск,больничный,командировка">
+</div>
+</div>
+<div class="admin-panel" data-panel="stages" role="tabpanel">
+<p class="field-hint" style="margin-bottom:10px;">Сопоставьте стадии воронки со статусными токенами. Изменения сохраняются только в настройках приложения, CRM не затрагивается.</p>
+<div id="stages-mapping-container"></div>
+</div>
+<div class="admin-panel" data-panel="logs" role="tabpanel">
+<div class="logs-toolbar">
+<button type="button" class="btn btn-sm btn-danger" onclick="clearLogPanel()">Очистить</button>
+<span class="field-hint" id="logs-count">0 записей</span>
+</div>
+<div class="logs-container" id="logs-container"></div>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
+</div>
+</div>
+</div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     СКРИПТЫ
-     ═══════════════════════════════════════════════════════════ -->
-<script src="js/core/config.js"></script>
-<script src="js/core/state.js"></script>
-<script src="js/core/utils.js"></script>
-<script src="js/api/bot.js"></script>
-<script src="js/api/api.js"></script>
-<script src="js/api/cache.js"></script>
-<script src="js/logic/roles.js"></script>
-<script src="js/ui/dragdrop.js"></script>
-<script src="js/ui/render.js"></script>
-<script src="js/ui/modals.js"></script>
-<script src="js/ui/parsers/link-parser.js"></script>
-<script src="js/ui/forms.js"></script>
-<script src="js/logic/actions.js"></script>
-<script src="js/logic/settings.js"></script>
-<script src="js/core/init.js"></script>
+<script src="src/js/core/config.js" defer></script>
+<script src="src/js/core/state.js" defer></script>
+<script src="src/js/core/utils.js" defer></script>
+<script src="src/js/api/bot.js" defer></script>
+<script src="src/js/api/core.js" defer></script>
+<script src="src/js/api/notifications.js" defer></script>
+<script src="src/js/api/group-status.js" defer></script>
+<script src="src/js/api/absence.js" defer></script>
+<script src="src/js/api/delegate.js" defer></script>
+<script src="src/js/api/scenarios.js" defer></script>
+<script src="src/js/api/sync.js" defer></script>
+<script src="src/js/api/url-handler.js" defer></script>
+<script src="src/js/api/cache.js" defer></script>
+<script src="src/js/logic/roles.js" defer></script>
+<script src="src/js/ui/dragdrop.js" defer></script>
+<script src="src/js/ui/render.js" defer></script>
+<script src="src/js/ui/modals/core.js" defer></script>
+<script src="src/js/ui/modals/view.js" defer></script>
+<script src="src/js/ui/modals/action.js" defer></script>
+<script src="src/js/ui/modals/delegate.js" defer></script>
+<script src="src/js/ui/modals/executor.js" defer></script>
+<script src="src/js/ui/parsers/link-parser.js" defer></script>
+<script src="src/js/ui/parsers/ai-parser.js" defer></script>
+<script src="src/js/ui/forms/smart-parse.js" defer></script>
+<script src="src/js/ui/forms/suggestions.js" defer></script>
+<script src="src/js/ui/forms/positions.js" defer></script>
+<script src="src/js/ui/forms/wizard.js" defer></script>
+<script src="src/js/ui/forms/submit.js" defer></script>
+<script src="src/js/ui/modals/data.js" defer></script>
+<script src="src/js/ui/modals/upload.js" defer></script>
+<script src="src/js/ui/modals/edit-amount.js" defer></script>
+<script src="src/js/ui/modals/past.js" defer></script>
+<script src="src/js/logic/settings/core.js" defer></script>
+<script src="src/js/logic/settings/roles.js" defer></script>
+<script src="src/js/logic/settings/crm.js" defer></script>
+<script src="src/js/logic/settings/deps.js" defer></script>
+<script src="src/js/logic/settings/absence.js" defer></script>
+<script src="src/js/logic/settings/bot.js" defer></script>
+<script src="src/js/logic/actions.js" defer></script>
+<script src="src/js/core/init.js" defer></script>
 </body>
 </html>

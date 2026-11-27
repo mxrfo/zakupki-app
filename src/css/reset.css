@@ -1,151 +1,118 @@
-/* ============================================================
-   СБРОС И БАЗОВЫЕ СТИЛИ
-   ============================================================ */
-
 *,
 *::before,
 *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
 }
-
 html {
-  font-size: 16px;
-  -webkit-text-size-adjust: 100%;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+	font-size: 100%;
+	-webkit-text-size-adjust: 100%;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
 }
-
 body {
-  font-family: var(--font-family);
-  font-size: var(--text-base);
-  font-weight: var(--font-normal);
-  line-height: var(--leading-normal);
-  color: var(--text-main);
-  background-color: var(--bg-body);
-  margin: 0;
-  padding: 0;
-  min-height: 100vh;
-  overflow-x: hidden;
+	font-family: var(--font-family);
+	font-size: var(--text-base);
+	font-weight: var(--font-normal);
+	line-height: var(--leading-normal);
+	color: var(--text-main);
+	background-color: var(--bg-body);
+	margin: 0;
+	padding: 0;
+	min-height: 100vh;
+	/* ✅ FIX: overflow-x: hidden удалён — маскировал баги вёрстки */
 }
-
 /* Убираем точки на фоне (P7) */
 body::before {
-  display: none;
+	display: none;
 }
-
 /* Ссылки */
 a {
-  color: var(--brand);
-  text-decoration: none;
-  transition: color var(--duration-fast) var(--ease-default);
+	color: var(--brand);
+	text-decoration: none;
+	transition: color var(--duration-fast) var(--ease-default);
 }
-
 a:hover {
-  color: var(--brand-hover);
-  text-decoration: underline;
+	color: var(--brand-hover);
+	text-decoration: underline;
 }
-
-a:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
+/* ✅ FIX: focus-visible только для интерактивных элементов (убран глобальный) */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+	outline: 2px solid var(--brand);
+	outline-offset: 2px;
+	border-radius: var(--radius-sm);
 }
-
 /* Изображения */
 img {
-  max-width: 100%;
-  height: auto;
-  display: block;
+	max-width: 100%;
+	height: auto;
+	display: block;
 }
-
 /* Кнопки по умолчанию */
 button {
-  font-family: inherit;
-  font-size: inherit;
-  cursor: pointer;
-  border: none;
-  background: none;
-  color: inherit;
+	font-family: inherit;
+	font-size: inherit;
+	cursor: pointer;
+	border: none;
+	background: none;
+	color: inherit;
 }
-
-button:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-  border-radius: var(--radius-btn);
-}
-
 button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+	cursor: not-allowed;
+	opacity: 0.5;
 }
-
 /* Формы */
 input,
 textarea,
 select {
-  font-family: inherit;
-  font-size: inherit;
-  color: inherit;
+	font-family: inherit;
+	font-size: inherit;
+	color: inherit;
 }
-
 /* Таблицы */
 table {
-  border-collapse: collapse;
-  width: 100%;
+	border-collapse: collapse;
+	width: 100%;
 }
-
 /* Списки */
 ul,
 ol {
-  list-style: none;
+	list-style: none;
 }
-
-/* Скроллбары */
+/* Скроллбары — Chromium */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+	width: 8px;
+	height: 8px;
 }
-
 ::-webkit-scrollbar-track {
-  background: var(--bg-body);
+	background: var(--bg-body);
 }
-
 ::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: var(--radius-sm);
+	background: var(--border-strong);
+	border-radius: var(--radius-sm);
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+	background: var(--text-muted);
 }
-
+/* ✅ FIX: скроллбары для Firefox */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--border-strong) var(--bg-body);
+}
 /* Выделение текста */
 ::selection {
-  background: var(--brand-light);
-  color: var(--brand);
+	background: var(--brand-light);
+	color: var(--brand);
 }
-
-/* Фокус для доступности */
-:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-
 /* Скрытые элементы */
 [hidden] {
-  display: none !important;
+	display: none !important;
 }
-
-/* Анимации (уважение prefers-reduced-motion) */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
+/* ✅ FIX: prefers-reduced-motion удалён отсюда — дублируется в animations.css */
