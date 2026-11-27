@@ -1,12 +1,20 @@
+#!/usr/bin/env node
+/* ============================================================
+   СБОРКА — Альтернатива · Закупки v7
+   Инлайнит CSS (@import) и JS в dist/index.html, создаёт ZIP.
+   ============================================================ */
+'use strict';
+
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
-const esbuild = require('esbuild');
 const { execSync } = require('child_process');
 
-const INPUT_HTML = 'src/index.html';
-const OUTPUT_HTML = 'dist/index.html';
-const CSS_FILE = 'src/css/styles.css';
+const ROOT = path.resolve(__dirname, '..');
+const INPUT_HTML = path.join(ROOT, 'src', 'index.html');
+const OUTPUT_HTML = path.join(ROOT, 'dist', 'index.html');
+const CSS_FILE = path.join(ROOT, 'src', 'css', 'styles.css');
+const ZIP_OUTPUT_DIR = path.join(ROOT, 'dist', 'releases');
 
 const now = new Date();
 const timestamp =
@@ -17,17 +25,11 @@ const timestamp =
   String(now.getHours()).padStart(2, '0') +
   String(now.getMinutes()).padStart(2, '0') +
   String(now.getSeconds()).padStart(2, '0');
+const ZIP_OUTPUT = path.join(ZIP_OUTPUT_DIR, `app_${timestamp}.zip`);
 
-const ZIP_OUTPUT = `dist/releases/app_${timestamp}.zip`;
-
-let buildId;
-try {
-  buildId = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
-} catch (e) {
-  buildId = 'dev';
-}
 const FIXED_ENTRY_DATE = new Date('2000-01-01T00:00:00Z');
 
+// Порядок подключения JS-модулей (зависимости сверху вниз)
 const JS_FILES_ORDER = [
   'src/js/core/config.js',
   'src/js/core/state.js',
@@ -77,6 +79,14 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
+function getBuildId() {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8', cwd: ROOT }).trim();
+  } catch (e) {
+    return 'dev';
+  }
+}
+
 function injectBuildId(content, buildId) {
   const re = /\blet\s+APP_BUILD_ID\s*=\s*(['"])[^'"]*\1\s*;/;
   if (!re.test(content)) {
@@ -88,9 +98,6 @@ function injectBuildId(content, buildId) {
 
 /**
  * Рекурсивно разворачивает все @import в CSS-файле.
- * @param {string} filePath - путь к CSS-файлу
- * @param {Set<string>} visited - защита от циклических импортов
- * @returns {string} - CSS с инлайновыми @import
  */
 function inlineCssImports(filePath, visited = new Set()) {
   const resolved = path.resolve(filePath);
@@ -108,14 +115,10 @@ function inlineCssImports(filePath, visited = new Set()) {
   let content = fs.readFileSync(resolved, 'utf8');
   const dir = path.dirname(resolved);
 
-  // Регулярка для @import 'file.css' / @import "file.css" / @import url('file.css')
   const importRe = /@import\s+(?:url\()?\s*(['"])([^'"]+)\1\s*\)?\s*;/g;
 
   content = content.replace(importRe, (match, quote, importPath) => {
-    // Пропускаем внешние URL (http/https)
-    if (/^(https?:)?\/\//i.test(importPath)) {
-      return match;
-    }
+    if (/^(https?:)?\/\//i.test(importPath)) return match;
     const importFile = path.resolve(dir, importPath);
     const inlined = inlineCssImports(importFile, visited);
     return `\n/* ===== BEGIN ${importPath} ===== */\n${inlined}\n/* ===== END ${importPath} ===== */\n`;
@@ -145,8 +148,8 @@ function injectApplicationJs(html, js) {
   throw new Error('В src/index.html не найден закрывающий тег </body>');
 }
 
-async function createZip() {
-  ensureDir(path.dirname(ZIP_OUTPUT));
+function createZip() {
+  ensureDir(ZIP_OUTPUT_DIR);
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(ZIP_OUTPUT);
     const archive = archiver('zip', { zlib: { level: 9 } });
@@ -164,34 +167,36 @@ async function createZip() {
     archive.pipe(output);
 
     archive.file(OUTPUT_HTML, { name: 'index.html', date: FIXED_ENTRY_DATE });
-
     archive.finalize().catch(reject);
   });
 }
 
 async function build() {
   console.log('🔨 Начинаю сборку...\n');
-  ensureDir('dist');
+  ensureDir(path.dirname(OUTPUT_HTML));
 
   if (!fs.existsSync(INPUT_HTML)) throw new Error(`HTML-файл не найден: ${INPUT_HTML}`);
 
+  const buildId = getBuildId();
+  console.log(`🏷️ APP_BUILD_ID: ${buildId}`);
+
+  // CSS
   let css = '';
   if (fs.existsSync(CSS_FILE)) {
-    // РАЗВЁРТЫВАЕМ @import рекурсивно
     css = inlineCssImports(CSS_FILE);
     console.log(`✅ CSS собран с инлайновыми @import: ${CSS_FILE} (${(css.length / 1024).toFixed(1)} КБ)`);
   } else {
     console.warn(`⚠️ CSS-файл не найден: ${CSS_FILE}`);
   }
 
+  // JS
   let js = '';
-
   for (const file of JS_FILES_ORDER) {
-    if (!fs.existsSync(file)) throw new Error(`Обязательный JS-файл не найден: ${file}`);
-    let content = fs.readFileSync(file, 'utf8');
+    const fullPath = path.join(ROOT, file);
+    if (!fs.existsSync(fullPath)) throw new Error(`Обязательный JS-файл не найден: ${file}`);
+    let content = fs.readFileSync(fullPath, 'utf8');
     if (file === BUILD_ID_FILE) {
       content = injectBuildId(content, buildId);
-      console.log(`🏷️ APP_BUILD_ID: ${buildId}`);
     }
     js += '\n\n// ============================================================\n';
     js += `// МОДУЛЬ: ${path.basename(file)}\n`;
@@ -200,18 +205,24 @@ async function build() {
     console.log(`✅ JS модуль: ${file} (${(content.length / 1024).toFixed(1)} КБ)`);
   }
 
+  // HTML
   let html = fs.readFileSync(INPUT_HTML, 'utf8');
   html = replaceCssLink(html, css);
   html = removeSourceJsScripts(html);
   html = injectApplicationJs(html, js);
 
   fs.writeFileSync(OUTPUT_HTML, html, 'utf8');
-  console.log('\n🎉 Сборка HTML завершена!');
+  console.log(`\n🎉 Сборка HTML завершена!`);
   console.log(`📦 Результат: ${OUTPUT_HTML} (${(html.length / 1024).toFixed(1)} КБ)`);
 
-  console.log('\n🗜️ Начинаю создание ZIP-архива...');
+  // ZIP
+  console.log('\n🗜️ Создаю ZIP-архив...');
   await createZip();
   console.log('\n🚀 Приложение готово к загрузке в Битрикс24!');
+  console.log(`\n📋 Следующие шаги:`);
+  console.log(`   1. npm run check          # линт + аудит CSS`);
+  console.log(`   2. Откройте dist/index.html в браузере для проверки`);
+  console.log(`   3. Загрузите ${ZIP_OUTPUT} в Битрикс24`);
 }
 
 build().catch((error) => {

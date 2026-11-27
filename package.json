@@ -1,14 +1,22 @@
 {
   "name": "zakupki-app",
-  "version": "1.0.0",
-  "description": "Локальное приложение Битрикс24 для управления закупками",
+  "version": "7.0.0",
+  "description": "Локальное приложение Битрикс24 «АЛЬТЕРНАТИВА · Закупки»",
   "private": true,
+  "type": "commonjs",
   "scripts": {
     "build": "node scripts/build.js",
     "watch": "npx nodemon --watch src/js --watch src/css --ext js,css,html -x \"node scripts/build.js\"",
-    "lint:css": "stylelint \"src/**/*.css\"",
-    "lint:js": "eslint \"src/**/*.js\"",
-    "audit:css": "node scripts/audit-css.js"
+    "lint:css": "stylelint \"src/css/**/*.css\"",
+    "lint:css:fix": "stylelint \"src/css/**/*.css\" --fix",
+    "lint:js": "eslint \"src/js/**/*.js\"",
+    "lint:js:fix": "eslint \"src/js/**/*.js\" --fix",
+    "lint": "npm run lint:css && npm run lint:js",
+    "audit:css": "node scripts/audit-css.js",
+    "check": "npm run lint && npm run audit:css",
+    "clean": "rm -rf dist",
+    "release": "npm run clean && npm run build && npm run check",
+    "start": "npm run watch"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
@@ -16,6 +24,7 @@
     "esbuild": "^0.28.2",
     "eslint": "^9.39.0",
     "globals": "^15.15.0",
+    "nodemon": "^3.1.0",
     "stylelint": "^16.26.1",
     "stylelint-config-standard": "^36.0.1"
   },
@@ -25,5 +34,8 @@
   "overrides": {
     "glob": "^14.0.2",
     "minimatch": "^11.0.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

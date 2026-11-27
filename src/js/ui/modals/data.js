@@ -60,16 +60,15 @@ function openDataModal(id) {
   const modalTitle = document.querySelector('#modal-data .modal-header h2');
   const submitBtn = document.querySelector('#form-data button[type="submit"]');
 
-  if (submitBtn) submitBtn.classList.remove('btn-approval-submit');
   if (allowApprovalEdit) {
     if (modalTitle) modalTitle.innerText = 'Редактирование данных (согласование)';
-    if (submitBtn) { submitBtn.innerText = 'Сохранить изменения'; submitBtn.classList.add('btn-approval-submit'); }
+    if (submitBtn) { submitBtn.innerText = 'Сохранить изменения'; submitBtn.className = 'btn btn-primary'; }
   } else if (stName.includes('корректировк')) {
     if (modalTitle) modalTitle.innerText = 'Корректировка данных';
-    if (submitBtn) { submitBtn.innerText = 'Отправить на согласование'; submitBtn.classList.add('btn-approval-submit'); }
+    if (submitBtn) { submitBtn.innerText = 'Отправить на согласование'; submitBtn.className = 'btn btn-primary'; }
   } else {
     if (modalTitle) modalTitle.innerText = 'Сбор данных и расчет';
-    if (submitBtn) { submitBtn.innerText = 'Отправить на согласование'; submitBtn.classList.add('btn-approval-submit'); }
+    if (submitBtn) { submitBtn.innerText = 'Отправить на согласование'; submitBtn.className = 'btn btn-primary'; }
   }
 
   const modal = document.querySelector('#modal-data .modal');

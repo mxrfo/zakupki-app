@@ -35,7 +35,7 @@ function openActionModal(id, type) {
   } else if (type === 'send_to_rework') {
     title.innerText = 'Отправить на доработку';
     label.innerText = 'Комментарий — что исправить (обязательно)';
-    btnHtml += `<button type="submit" class="btn btn-rework">Отправить на доработку</button>`;
+    btnHtml += `<button type="submit" class="btn btn-warning">Отправить на доработку</button>`;
   } else if (type === 'reject_terms') {
     title.innerText = 'Отклонить условия';
     label.innerText = 'Причина отказа';

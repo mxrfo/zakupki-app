@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /* ============================================================
-   АУДИТОР CSS-ПЕРЕНОСА — Альтернатива · Закупки v7 (v2)
+   АУДИТОР CSS-ПЕРЕНОСА — Альтернатива · Закупки v7 (v3)
    backup/styles.css → src/css/*.css + dist/index.html + src/js/**
-   Фиксы v2:
+   Фиксы:
    - A1: вырезание <script>/<style> перед парсингом class=""
    - A2: покрытость класса через вхождение в любой селектор
    - A3: корректный regex теней (не ловит определения)
@@ -10,6 +10,7 @@
    - A5: расширенная z-шкала
    - A6: сканирование src/js/**.js на динамические классы
    - A7: расширенные REMOVED/RENAME_MAP
+   - A8: фильтрация data-атрибутов из JS-классов
    Запуск: npm run audit:css
    ============================================================ */
 'use strict';
@@ -62,8 +63,6 @@ const REMOVED = {
   '.pos-head:focus-visible': 'P9',
 };
 
-
-
 const EXCLUDE_SELECTORS = new Set([':root', '*', 'body', 'html', 'body *', '*::before', '*::after']);
 const TOKEN_ALLOW = new Set(['--stage-color', '--i']);
 
@@ -93,6 +92,12 @@ const KNOWN_DUP = [
   ['.main-content', 'layout ↔ mobile'],
   ['.data-table td', 'table ↔ mobile (media)'],
   ['.data-table th', 'table ↔ mobile (media)'],
+  ['h1', 'typography: групповое + размер'],
+  ['h2', 'typography: групповое + размер'],
+  ['h3', 'typography: групповое + размер'],
+  ['h4', 'typography: групповое + размер'],
+  ['h5', 'typography: групповое + размер'],
+  ['h6', 'typography: групповое + размер'],
 ];
 
 const IMPORTANT_OK = [/\[hidden\]/, /link-hidden/, /prefers-reduced-motion/, /\.cs-fill/, /\.hidden/];
@@ -116,7 +121,6 @@ const FORBIDDEN = [
   { re: /%23111111|%23111\b/gi, msg: 'чёрный в data-URI' },
   { re: /--shadow-(?:sm|md|lg):\s*[^;]*\b\d+px\s+\d+px\s+0\b/g, msg: 'hard-offset в определении тени' },
 ];
-
 
 /* ── УТИЛИТЫ ── */
 
@@ -205,7 +209,7 @@ function parseFile(file) {
   return res;
 }
 
-/* ── СКАН ЗАПРЕЩЁННОГО (v2: allowlist !important) ── */
+/* ── СКАН ЗАПРЕЩЁННОГО ── */
 
 function scanForbidden(css, file, map) {
   const hits = [];
@@ -243,7 +247,7 @@ function collectAnimations(parsed) {
   return used;
 }
 
-/* ── АНАЛИЗ HTML (v2: вырезание script/style) ── */
+/* ── АНАЛИЗ HTML (A1: вырезание script/style) ── */
 
 function analyzeHTML(html) {
   const clean = html
@@ -256,6 +260,7 @@ function analyzeHTML(html) {
   while ((m = classRegex.exec(clean)) !== null) {
     const line = html.slice(0, m.index).split('\n').length;
     for (const cls of m[1].split(/\s+/).filter(Boolean)) {
+      if (cls.startsWith('data-')) continue;
       if (!results.classes.has(cls)) results.classes.set(cls, []);
       results.classes.get(cls).push(line);
     }
@@ -277,7 +282,7 @@ function analyzeHTML(html) {
   return results;
 }
 
-/* ── СКАН JS-КЛАССОВ (v2) ── */
+/* ── СКАН JS-КЛАССОВ (A6 + A8: фильтрация data-атрибутов) ── */
 
 function walkDir(dir, ext, out = []) {
   if (!fs.existsSync(dir)) return out;
@@ -295,16 +300,16 @@ function collectJsClasses() {
   for (const file of walkDir(JS_DIR, '.js')) {
     const src = fs.readFileSync(file, 'utf8');
     for (const m of src.matchAll(/class="([^"{}$]+)"/g))
-      for (const c of m[1].split(/\s+/)) if (/^[a-z][\w-]*$/i.test(c)) set.add(c);
+      for (const c of m[1].split(/\s+/)) if (/^[a-z][\w-]*$/i.test(c) && !c.startsWith('data-')) set.add(c);
     for (const m of src.matchAll(/classList\.(?:add|toggle|remove)\(([^)]+)\)/g))
-      for (const q of m[1].matchAll(/['"]([\w-]+)['"]/g)) set.add(q[1]);
+      for (const q of m[1].matchAll(/['"]([\w-]+)['"]/g)) if (/^[a-z][\w-]*$/i.test(q[1]) && !q[1].startsWith('data-')) set.add(q[1]);
     for (const m of src.matchAll(/className\s*=\s*['"]([^"'{}$]+)['"]/g))
-      for (const c of m[1].split(/\s+/)) if (/^[a-z][\w-]*$/i.test(c)) set.add(c);
+      for (const c of m[1].split(/\s+/)) if (/^[a-z][\w-]*$/i.test(c) && !c.startsWith('data-')) set.add(c);
   }
   return set;
 }
 
-/* ── ПОКРЫТОСТЬ КЛАССА (v2) ── */
+/* ── ПОКРЫТОСТЬ КЛАССА (A2) ── */
 
 function buildClassIndex(selSet) {
   const idx = new Set();
@@ -434,7 +439,7 @@ function main() {
   /* ── ОТЧЁТ ── */
   const md = [];
   const push = (...l) => md.push(...l);
-  push('# CSS Audit v2 — backup → src/css + dist/index.html + src/js', '');
+  push('# CSS Audit v3 — backup → src/css + dist/index.html + src/js', '');
   push(`Дата: ${new Date().toISOString()}`, '');
   push('## Сводка', '',
     '| Метрика | Значение |', '|---|---|',

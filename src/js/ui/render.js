@@ -135,16 +135,17 @@ function hasBeenSentToWork(item, stName) {
 
 function approvalButtonsIcon(item) {
   return `<button class="action-icon-btn approve" title="Согласовать" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_terms')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>` +
-    `<button class="action-icon-btn btn-rework" title="На доработку" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_rework')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6a3 3 0 0 0-4.2 4.2L4 16.7V20h3.3l6.5-6.5a3 3 0 0 0 0-4.2z"/><path d="M18 8l2-2"/></svg></button>` +
+    `<button class="action-icon-btn rework" title="На доработку" onclick="event.stopPropagation(); openActionModal(${item.id}, 'send_to_rework')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6a3 3 0 0 0-4.2 4.2L4 16.7V20h3.3l6.5-6.5a3 3 0 0 0 0-4.2z"/><path d="M18 8l2-2"/></svg></button>` +
     `<button class="action-icon-btn reject" title="Отклонить" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_terms')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
 }
 
-const CLOCK_ICON = `<svg class="icon-clock" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" title="Отложено"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+const CLOCK_ICON = `<svg class="icon-clock" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" title="Отложено"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+const ALERT_TRIANGLE_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
 
 function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
   const isHeadUI = isAdminUI || currentRole === 'head';
   const fragment = document.createDocumentFragment();
-  filtered.forEach(item => {
+  filtered.forEach((item, index) => {
     try {
       const stage = spStages[item.stageId] || { name: 'Неизвестно', color: '#64748b' };
       const stName = stage.name.toLowerCase().replace(/ё/g, 'е');
@@ -186,7 +187,7 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
         }
         if (isEconUI && stName.includes('обработка входящего счета')) {
           if (!approvedInvoices[item.id]) buttonsHtml += `<button class="action-icon-btn approve" title="Утвердить счет" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_invoice')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>`;
-          else buttonsHtml += `<button class="action-icon-btn approve btn-confirm-payment" title="Подтвердить оплату" onclick="event.stopPropagation(); openActionModal(${item.id}, 'confirm_payment')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></button>`;
+          else buttonsHtml += `<button class="action-icon-btn approve" title="Подтвердить оплату" onclick="event.stopPropagation(); openActionModal(${item.id}, 'confirm_payment')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></button>`;
           buttonsHtml += `<button class="action-icon-btn reject" title="Отклонить счет" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_invoice')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
         }
       }
@@ -216,13 +217,14 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       const combinedDirText = resolveCombinedDir(item) || '—';
       let mgrUnavailableBadge = '';
       const mgrIds2 = Array.isArray(item[actualFields.manager]) ? item[actualFields.manager] : (item[actualFields.manager] ? [item[actualFields.manager]] : []);
-      if (mgrIds2.length && isUserUnavailable(mgrIds2[0])) mgrUnavailableBadge = `<span class="badge-unavailable">⚠ недоступен</span>`;
+      if (mgrIds2.length && isUserUnavailable(mgrIds2[0])) mgrUnavailableBadge = `<span class="badge-unavailable">${ALERT_TRIANGLE_ICON} недоступен</span>`;
       const card = document.createElement('div');
       card.className = 'note-card';
       card.setAttribute('data-stage-color', 'true');
       card.setAttribute('data-id', item.id);
       card.setAttribute('draggable', 'true');
       card.style.setProperty('--stage-color', stageColor);
+      card.style.setProperty('--i', index);
       card.onclick = () => openViewModal(item.id);
       const isCompactView = (activeTab === 'my_requests' || activeTab === 'all');
       let infoHtml = `
@@ -237,15 +239,15 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
           ` : `<div class="note-info-item"><span class="note-info-label">Сумма (примерно)</span><span class="note-info-value amount-highlight">${amount}</span></div>`}
         </div>
         ${!isCompactView && econComment ? `<div class="note-comment-box"><b>Комментарий:</b> ${econComment}</div>` : ''}
-        ${!isCompactView && isAmountChanged ? `<div class="note-warning-box">⚠ Сумма изменена! Было согласовано: ${formatMoney(savedAmount)}, сейчас: ${formatMoney(currentTotalAmount)}</div>` : ''}
+        ${!isCompactView && isAmountChanged ? `<div class="note-warning-box">${ALERT_TRIANGLE_ICON} Сумма изменена! Было согласовано: ${formatMoney(savedAmount)}, сейчас: ${formatMoney(currentTotalAmount)}</div>` : ''}
       `;
       let badgeHtml = `<span class="note-badge" style="background:${stageColor}">${stage.name}</span>`;
-      if (isPostponed) badgeHtml = `<span class="note-badge postponed">Ожидает даты: ${new Date(postponeDate).toLocaleDateString('ru-RU')}</span>`;
+      if (isPostponed) badgeHtml = `<span class="note-badge" style="background:${stageColor}">${stage.name}</span>${CLOCK_ICON}`;
       card.innerHTML = `
         <div class="note-header"><h3 class="note-title">${mainTitle}${mgrUnavailableBadge}</h3>${badgeHtml}</div>
         <div class="note-desc">${shortDesc}</div>
         ${infoHtml}
-        <div class="note-footer"><div class="note-actions">${buttonsHtml}</div>${adminActionsHtml ? `<div class="note-admin-actions">${adminActionsHtml}</div>` : ''}</div>
+        <div class="note-footer">${buttonsHtml ? `<div class="note-actions">${buttonsHtml}</div>` : ''}${adminActionsHtml ? `<div class="note-admin-actions">${adminActionsHtml}</div>` : ''}</div>
       `;
       card.addEventListener('dragstart', handleDragStart);
       card.addEventListener('dragover', handleDragOver);
@@ -260,8 +262,8 @@ function renderGrid(container, filtered, isAdminUI, isEconUI, isMgrUI) {
 function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
   const isHeadUI = isAdminUI || currentRole === 'head';
   let html = `<table class="data-table">
-    <thead><tr><th>Название</th><th>Статус</th><th>Заказчик / Отдел</th>${currentRole !== 'manager' ? `<th>Исполнитель</th>` : ''}<th>Сумма</th><th>Срок</th><th>Раздел/Напр</th><th class="actions-cell">Действия</th>${isAdminUI ? `<th class="actions-cell">Админ</th>` : ''}</tr></thead><tbody>`;
-  filtered.forEach(item => {
+    <thead><tr><th>Название</th><th>Статус</th><th class="col-sec">Заказчик / Отдел</th><th class="col-sec">Исполнитель</th><th>Сумма</th><th>Срок</th><th class="col-sec">Раздел/Напр</th><th class="actions-cell">Действия</th>${isAdminUI ? `<th class="actions-cell">Админ</th>` : ''}</tr></thead><tbody>`;
+  filtered.forEach((item, index) => {
     const stage = spStages[item.stageId] || { name: 'Неизвестно', color: '#64748b' };
     const stName = stage.name.toLowerCase().replace(/ё/g, 'е');
     const isCreator = String(item.createdBy) === String(currentUser.ID);
@@ -307,7 +309,7 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
       }
       if (isEconUI && stName.includes('обработка входящего счета')) {
         if (!approvedInvoices[item.id]) buttonsHtml += `<button class="action-icon-btn approve" title="Утвердить счет" onclick="event.stopPropagation(); openActionModal(${item.id}, 'approve_invoice')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>`;
-        else buttonsHtml += `<button class="action-icon-btn approve btn-confirm-payment" title="Подтвердить оплату" onclick="event.stopPropagation(); openActionModal(${item.id}, 'confirm_payment')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></button>`;
+        else buttonsHtml += `<button class="action-icon-btn approve" title="Подтвердить оплату" onclick="event.stopPropagation(); openActionModal(${item.id}, 'confirm_payment')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></button>`;
         buttonsHtml += `<button class="action-icon-btn reject" title="Отклонить счет" onclick="event.stopPropagation(); openActionModal(${item.id}, 'reject_invoice')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
       }
     }
@@ -325,14 +327,14 @@ function renderTable(container, filtered, isAdminUI, isEconUI, isMgrUI) {
     }
     const commentIcon = econComment ? `<span class="comment-icon" title="${econComment.replace(/"/g, '&quot;')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>` : '';
     const clockIcon = isPostponed ? CLOCK_ICON : '';
-    html += `<tr>
-      <td><div class="clickable-title" onclick="openViewModal(${item.id})">${mainTitle} ${commentIcon} ${clockIcon}</div><div class="text-muted-small">${getShortDesc(item)}</div></td>
+    html += `<tr style="--i:${index}">
+      <td><div class="clickable-title" onclick="openViewModal(${item.id})">${mainTitle} ${commentIcon} ${clockIcon}</div><div class="td-secondary">${creatorDept} · ${deptName} · ${combinedDirText}</div><div class="text-muted-small">${getShortDesc(item)}</div></td>
       <td><span class="note-badge" style="background:${stageColor}">${stage.name}</span></td>
-      <td><div class="text-bold">${creatorName}</div><div class="text-muted-small">${creatorDept}</div></td>
-      ${currentRole !== 'manager' ? `<td>${deptName}</td>` : ''}
+      <td class="col-sec"><div class="text-bold">${creatorName}</div><div class="text-muted-small">${creatorDept}</div></td>
+      ${currentRole !== 'manager' ? `<td class="col-sec">${deptName}</td>` : ''}
       <td class="text-bold text-nowrap">${formatMoney(currentTotalAmount)}</td>
       <td class="text-nowrap">${deadlineDisplay}</td>
-      <td>${combinedDirText}</td>
+      <td class="col-sec">${combinedDirText}</td>
       <td class="actions-cell"><div class="btn-group">${buttonsHtml}</div></td>
       ${isAdminUI ? `<td class="actions-cell"><div class="btn-group">${adminHtml}</div></td>` : ''}
     </tr>`;

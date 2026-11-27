@@ -1,7 +1,11 @@
 // js/ui/modals/core.js — Общие функции модалок
 
 function closeModal(id) {
-  document.getElementById(id).style.display = 'none';
+  const overlay = document.getElementById(id);
+  if (!overlay) return;
+  overlay.style.display = 'none';
+  const modal = overlay.querySelector('.modal');
+  if (modal) modal.classList.remove('sheet');
 }
 
 function deleteItem(id, event) {

@@ -1,52 +1,34 @@
 # CSS Audit v2 — backup → src/css + dist/index.html + src/js
 
-Дата: 2026-11-27T09:19:51.251Z
+Дата: 2026-11-27T09:36:18.865Z
 
 ## Сводка
 
 | Метрика | Значение |
 |---|---|
 | Селекторов в монолите | 462 |
-| Селекторов в модулях | 597 |
-| ❌ Потерянных | 19 |
+| Селекторов в модулях | 616 |
+| ❌ Потерянных | 0 |
 | ↻ Переименованных | 6 |
-| 🗑 Удалённых намеренно | 15 |
-| ➕ Новых | 175 |
+| 🗑 Удалённых намеренно | 18 |
+| ➕ Новых | 178 |
 | ⚠ Дублей внутри файла | 14 |
-| ℹ Дублей между файлами | 46 |
+| ℹ Дублей между файлами | 28 |
 | 🔴 var() без определения | 0 |
 | ⬜ Определений вне tokens.css | 0 |
-| 🔵 Неиспользуемых токенов | 28 |
-| 🚫 Запрещённых паттернов | 2 |
+| 🔵 Неиспользуемых токенов | 24 |
+| 🚫 Запрещённых паттернов | 1 |
 | 🎬 keyframes: нет определения | 0 |
 | 📐 Breakpoints вне списка | 0 |
 | 🧱 z-index вне шкалы | 0 |
 | 📦 Не импортировано | 0 |
-| 🟡 HTML/JS-классов без CSS | 46 |
+| 🟡 HTML/JS-классов без CSS | 34 |
 | 🔴 Дубликатов ID | 0 |
 | ⚠ Inline display:none | 5 |
 
 ## ❌ Потерянные селекторы
 
-- `.note-badge` — был в styles.css:208
-- `.comment-icon` — был в styles.css:252
-- `.comment-icon svg` — был в styles.css:253
-- `.file-upload-label svg` — был в styles.css:401
-- `.cs-step:focus` — был в styles.css:493
-- `.cs-step:focus-visible` — был в styles.css:493
-- `.cs-step:active` — был в styles.css:493
-- `.pos-head:focus` — был в styles.css:535
-- `.pos-head:focus-visible` — был в styles.css:535
-- `.btn-link-action.has-link:hover` — был в styles.css:656
-- `.btn-link-action:active` — был в styles.css:657
-- `.btn-rework` — был в styles.css:863
-- `.btn-rework:hover` — был в styles.css:864
-- `.btn-confirm-payment` — был в styles.css:865
-- `.btn-confirm-payment:hover` — был в styles.css:866
-- `.modal-sm` — был в styles.css:987
-- `.modal-md` — был в styles.css:988
-- `.modal-lg` — был в styles.css:989
-- `.modal-xl` — был в styles.css:990
+_нет_
 
 ## ↻ Переименованные
 
@@ -67,11 +49,14 @@
 - `.action-icon-btn.dark` — не используется
 - `.note-badge.postponed` — P24/решения 54,58 — но JS пока рендерит → добавлен в cards.css
 - `.data-table .btn` — P2
-- `.data-table .btn:hover` — P2 → transform:none в table.css
-- `.data-table .action-icon-btn:hover` — P2
 - `.form-group input[type="date"]::after` — нативный picker-индикатор
 - `.log-panel.open` — P22 — логи теперь static-вкладка
 - `.btn-logs:hover` — decision 51
+- `.cs-step:focus` — P9 — outline-хаки не нужны
+- `.cs-step:focus-visible` — P9
+- `.cs-step:active` — P9
+- `.pos-head:focus` — P9
+- `.pos-head:focus-visible` — P9
 - `.pos-main .det-link[style*="display:none"]` — decision 19
 - `.pos-main .det-link[style*="display: none"]` — decision 19
 
@@ -80,6 +65,8 @@
 - `.dep-chip.selected`
 - `.dep-chip.selected::after`
 - `.settings-table tr:last-child td`
+- `.logs-toolbar`
+- `.logs-container`
 - `.ai-radio.disabled`
 - `.notes-grid>.note-card`
 - `.table-view tbody tr`
@@ -142,8 +129,8 @@
 - `.form-group input:hover`
 - `.form-group select:hover`
 - `.form-group textarea:hover`
-- `.info-note-info`
 - `.pos-del svg`
+- `.detail-table td.cell-note`
 - `.brand`
 - `.brand-logo`
 - `.brand-wordmark`
@@ -251,15 +238,16 @@
 - `.leading-tight`
 - `.leading-normal`
 - `.leading-relaxed`
+- `.mt-4`
 - `.clickable-title:hover`
 
 ## ⚠ Дубли внутри файла
 
 - .form-group select (base) → forms.css:6, forms.css:21
-- .pg-actions .btn-icon-link (base) → forms.css:137, forms.css:143
-- .pg-actions .btn-icon-ai (base) → forms.css:137, forms.css:146
-- .detail-table th (base) → forms.css:158, forms.css:160
-- .detail-table td (base) → forms.css:158, forms.css:161
+- .pg-actions .btn-icon-link (base) → forms.css:132, forms.css:138
+- .pg-actions .btn-icon-ai (base) → forms.css:132, forms.css:141
+- .detail-table th (base) → forms.css:155, forms.css:157
+- .detail-table td (base) → forms.css:155, forms.css:158
 - .data-table td (@media (max-width: 767px)) → mobile.css:26, mobile.css:30
 - .data-table th (base) → table.css:13, table.css:14
 - .data-table td (base) → table.css:13, table.css:19
@@ -282,7 +270,7 @@
 - .view-btn — допущен: layout ↔ animations
 - .btn — допущен: buttons ↔ animations: transform
 - .action-icon-btn — допущен: buttons ↔ animations
-- .chip → animations.css:103, badges.css:83, forms.css:133
+- .chip → animations.css:104, badges.css:83
 - .btn:active — допущен: buttons ↔ animations: transform
 - .btn:hover — допущен: buttons ↔ animations: transform
 - .action-icon-btn:hover — допущен: buttons ↔ animations
@@ -291,33 +279,15 @@
 - * → animations.css:1, layout.css:1, reset.css:1
 - *::before → animations.css:1, layout.css:1, reset.css:1
 - *::after → animations.css:1, layout.css:1, reset.css:1
-- .chip:hover → badges.css:99, forms.css:134
-- .info-note → badges.css:189, forms.css:44
-- .info-note-warning → badges.css:200, forms.css:45
-- .info-note-success → badges.css:206, forms.css:46
-- .toast.show → badges.css:262, toasts.css:14
-- .toast.success → badges.css:267, toasts.css:16
-- .toast.error → badges.css:271, toasts.css:17
-- .toast.info → badges.css:275, toasts.css:18
 - .toast — допущен: toasts ↔ animations
 - .fab-btn — допущен: buttons ↔ animations
-- .btn-full → buttons.css:161, utilities.css:24
-- .btn-nowrap → buttons.css:165, utilities.css:25
-- .btn-close → buttons.css:255, modals.css:40
-- .btn-close:hover → buttons.css:270, modals.css:41
-- .btn-close svg → buttons.css:275, modals.css:42
-- .btn-icon-left → buttons.css:321, utilities.css:42
 - .btn — допущен: buttons ↔ animations: transform
 - .action-icon-btn — допущен: buttons ↔ animations
-- .loading → layout.css:482, modals.css:81
-- .loading-full → layout.css:490, utilities.css:49
 - .app-layout — допущен: layout ↔ mobile
 - .sidebar — допущен: layout ↔ mobile
 - .topbar — допущен: layout ↔ mobile
 - .search-bar — допущен: layout ↔ mobile
 - .main-content — допущен: layout ↔ mobile
-- .text-center → typography.css:123, utilities.css:10
-- .text-nowrap → typography.css:132, utilities.css:8
 
 ## 🔴 var() без определения
 
@@ -336,6 +306,7 @@ _нет_
 - `--radius-modal`
 - `--st-neutral-bg`
 - `--st-neutral-text`
+- `--st-info-bg`
 - `--st-brand-bg`
 - `--st-brand-text`
 - `--st-violet-bg`
@@ -343,11 +314,6 @@ _нет_
 - `--space-8`
 - `--space-12`
 - `--z-base`
-- `--z-resize`
-- `--z-overlay`
-- `--z-overlay-nested`
-- `--z-overlay-top`
-- `--z-dropdown`
 - `--ease-in`
 - `--ease-out`
 - `--breakpoint-mobile`
@@ -360,8 +326,8 @@ _нет_
 
 ## 🚫 Запрещённые паттерны
 
-- `layout.css:320` — !important — `!important; }  /* ── ОСНОВНОЙ КОНТЕНТ ── */ .main-conten`
-- `table.css:32` — !important — `!important-перебивок */ .data-table .action-icon-btn { back`
+- `table.css:32` — !important — `!important-перебивок */
+ .data-table .action-icon-btn { back`
 
 ## 🎬 keyframes: нет определения
 
@@ -385,13 +351,6 @@ _нет_
 
 ## 🟡 HTML/JS-классы без CSS-покрытия
 
-- .modal-xl — 518, 883, 1418
-- .mt-4 — 762
-- .modal-lg — 819
-- .modal-sm — 1025
-- .modal-md — 1246, 1336
-- .logs-toolbar — 1800
-- .logs-container — 1807
 - .dark — JS
 - .light — JS
 - .unavail-check — JS
@@ -421,14 +380,9 @@ _нет_
 - .data-det-link — JS
 - .filled — JS
 - .forward — JS
-- .btn-rework — JS
 - .btn-approval-submit — JS
 - .past-check — JS
-- .note-badge — JS
 - .postponed — JS
-- .cell-note — JS
-- .btn-confirm-payment — JS
-- .comment-icon — JS
 - .grid — JS
 - .table — JS
 
