@@ -7,7 +7,8 @@
     "build": "node scripts/build.js",
     "watch": "npx nodemon --watch src/js --watch src/css --ext js,css,html -x \"node scripts/build.js\"",
     "lint:css": "stylelint \"src/**/*.css\"",
-    "lint:js": "eslint \"src/**/*.js\""
+    "lint:js": "eslint \"src/**/*.js\"",
+    "audit:css": "node scripts/audit-css.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
