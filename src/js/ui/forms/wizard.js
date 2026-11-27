@@ -131,13 +131,22 @@ function openCreateModal() {
   const deptSelect = document.getElementById('create-dept');
   deptSelect.innerHTML = '<option value="">-- Выберите отдел --</option>';
   let availableDepts = 0;
+
+  // ✅ FIX: различаем «данные ещё не загружены» и «нет доступных отделов»
+  if (!Array.isArray(departments) || departments.length === 0) {
+    return showToast('Справочник отделов ещё не загружен. Подождите завершения инициализации или обновите страницу.', 'error');
+  }
+
   departments.forEach(d => {
     if (settings.visibleDepts.includes(String(d.ID)) && settings.deptShortNames[d.ID]) {
       deptSelect.innerHTML += `<option value="${d.ID}">${d.NAME} (${settings.deptShortNames[d.ID]})</option>`;
       availableDepts++;
     }
   });
-  if (availableDepts === 0) return showToast('Нет доступных отделов', 'error');
+
+  if (availableDepts === 0) {
+    return showToast('Нет доступных отделов. Проверьте настройки видимости отделов и кратких названий в панели администратора.', 'error');
+  }
 
   document.getElementById('create-modal-title').innerText = 'Создать запрос на закупку';
   document.getElementById('form-create').reset();

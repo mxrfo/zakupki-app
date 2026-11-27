@@ -213,54 +213,9 @@ function updateFileName(input) {
   }
 }
 
-function handleLinkParse(btn) {
-  const card = btn.closest('.pos-card');
-  if (!card) { showToast('Не удалось определить карточку позиции', 'error'); return; }
-  const linkInput = card.querySelector('.det-link');
-  const url = linkInput ? linkInput.value.trim() : '';
-  if (!url) { showToast('Введите ссылку', 'error'); return; }
-  try {
-    const parsedUrl = new URL(url);
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) { showToast('Допускаются только HTTP и HTTPS ссылки', 'error'); return; }
-  } catch (_) { showToast('Введите корректную ссылку', 'error'); return; }
-  if (typeof window.parseLinkData !== 'function') { showToast('Модуль парсинга не загружен. Проверьте подключение link-parser.js.', 'error'); return; }
-  const originalText = btn.innerText;
-  btn.disabled = true;
-  btn.innerText = 'Загрузка...';
-  try {
-    window.parseLinkData(url, card);
-  } catch (error) {
-    console.error('[Forms] Link parsing error:', error);
-    showToast('Ошибка при обработке ссылки', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerText = originalText;
-  }
-}
-
-function updateOpenLink(input) {
-  const card = input.closest('.pos-card');
-  if (!card) return;
-  const btn = card.querySelector('.btn-open-link');
-  if (!btn) return;
-  const url = input.value.trim();
-  if (url && /^https?:\/\//i.test(url)) {
-    btn.dataset.url = url;
-    btn.disabled = false;
-  } else {
-    btn.dataset.url = '';
-    btn.disabled = true;
-  }
-}
-
 function openLink(btn) {
   const url = btn.dataset.url;
   if (url) window.open(url, '_blank', 'noopener');
-}
-
-async function parseVseinstrumentiCart(url, card) {
-  if (typeof window.parseLinkData !== 'function') { showToast('Модуль парсинга не загружен', 'error'); return false; }
-  return await window.parseLinkData(url, card);
 }
 
 function initResizableTable(tableId) {
@@ -300,8 +255,5 @@ window.updateHeaderSum = updateHeaderSum;
 window.addDataDetailRow = addDataDetailRow;
 window.calculateDataRowTotal = calculateDataRowTotal;
 window.updateFileName = updateFileName;
-window.handleLinkParse = handleLinkParse;
-window.updateOpenLink = updateOpenLink;
 window.openLink = openLink;
-window.parseVseinstrumentiCart = parseVseinstrumentiCart;
 window.initResizableTable = initResizableTable;

@@ -8,10 +8,11 @@ function renderBotStatus() {
   const res = lastBotStatus.result || 'нет данных';
   const ts = lastBotStatus.ts ? new Date(lastBotStatus.ts).toLocaleTimeString('ru-RU') : '—';
   const ok = /ok/.test(res);
+  // ✅ FIX: цвета статусов через CSS-переменные
   box.innerHTML = `
     <div class="bot-stat"><span class="bot-stat-label">ID бота</span><span class="bot-stat-value">${botId}</span></div>
     <div class="bot-stat"><span class="bot-stat-label">Последний диалог</span><span class="bot-stat-value">${chatId}</span></div>
-    <div class="bot-stat"><span class="bot-stat-label">Последняя доставка</span><span class="bot-stat-value" style="color:${ok ? '#4dff47' : '#ff524c'}">${res} @ ${ts}</span></div>
+    <div class="bot-stat"><span class="bot-stat-label">Последняя доставка</span><span class="bot-stat-value" style="color:${ok ? 'var(--st-success-text)' : 'var(--st-danger-text)'}">${res} @ ${ts}</span></div>
     <div class="bot-stat"><span class="bot-stat-label">Handler</span><span class="bot-stat-value text-word-break">${getBotHandlerUrl() || '—'}</span></div>
     <div class="flex-row-sm">
       <button type="button" class="btn btn-sm btn-primary" onclick="forceCreateGroupChat()">Проверить групповой чат</button>
@@ -31,9 +32,10 @@ function resetBotChat() {
 }
 
 function testBotSend() {
-  const uid = parseInt(currentUser.ID);
+  const uid = parseInt(currentUser.ID, 10);
   logAction('Тестовая отправка (личная) пользователю ' + uid + '...', 'info');
-  notifyUserViaBot(uid, 'Тестовое сообщение', 'Проверка ЛИЧНОЙ ветки чат-бота «' + BOT_NAME + '». Если вы видите это в личном чате с ботом — личная доставка работает.', [{ text: '📋 Открыть приложение', url: buildAppLink('view', 0, 'my_requests') }], function (ok) {
+  // ✅ FIX: передаём itemId = currentUser.ID вместо 0
+  notifyUserViaBot(uid, 'Тестовое сообщение', 'Проверка ЛИЧНОЙ ветки чат-бота «' + BOT_NAME + '». Если вы видите это в личном чате с ботом — личная доставка работает.', [{ text: '📋 Открыть приложение', url: buildAppLink('view', uid, 'my_requests') }], function (ok) {
     renderBotStatus();
     if (ok) showToast('Личное тестовое сообщение отправлено', 'success');
     else showToast('Личная доставка не удалась — см. логи', 'error');
