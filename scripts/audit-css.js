@@ -39,26 +39,27 @@ const RENAME_MAP = {
 };
 
 const REMOVED = {
-  '.note-badge.postponed': 'P24/решения 54,58 — но JS пока рендерит → добавлен в cards.css',
-  '.btn-logs': 'decision 51',
-  '.btn-logs:hover': 'decision 51',
-  '.log-panel.open': 'P22 — логи теперь static-вкладка',
-  '.data-table .btn:hover': 'P2 → transform:none в table.css',
-  '.data-table .action-icon-btn:hover': 'P2',
-  '.data-table .btn, .data-table .action-icon-btn': 'P2 → transform:none',
-  '.pos-main .det-link[style*="display:none"]': 'decision 19',
-  '.pos-main .det-link[style*="display: none"]': 'decision 19',
-  '.cs-step:focus, .cs-step:focus-visible, .cs-step:active': 'P9',
-  '.pos-head:focus, .pos-head:focus-visible': 'P9',
+  '.user-info b': '.user-display рендерится без <b>',
   '.btn-icon': 'не используется (заменён .action-icon-btn)',
   '.btn-approval-submit': 'не используется (заменён .btn-primary)',
   '.btn-approval-submit:hover': 'не используется',
   '.action-icon-btn.primary': 'не используется',
   '.action-icon-btn.dark': 'не используется',
-  '.form-group input[type="date"]::after': 'нативный picker-индикатор',
-  '.user-info b': '.user-display рендерится без <b>',
+  '.action-icon-btn:active': 'не используется (animations.css даёт scale)',
+  '.note-badge.postponed': 'P24/решения 54,58 — но JS пока рендерит → добавлен в cards.css',
   '.data-table .btn': 'P2',
+  '.data-table .btn:hover': 'P2 → transform:none в table.css',
+  '.data-table .action-icon-btn:hover': 'P2',
+  '.form-group input[type="date"]::after': 'нативный picker-индикатор',
+  '.log-panel.open': 'P22 — логи теперь static-вкладка',
+  '.btn-logs:hover': 'decision 51',
+  '.pos-main .det-link[style*="display:none"]': 'decision 19',
+  '.pos-main .det-link[style*="display: none"]': 'decision 19',
+  '.cs-step:focus, .cs-step:focus-visible, .cs-step:active': 'P9',
+  '.pos-head:focus, .pos-head:focus-visible': 'P9',
 };
+
+
 
 const EXCLUDE_SELECTORS = new Set([':root', '*', 'body', 'html', 'body *', '*::before', '*::after']);
 const TOKEN_ALLOW = new Set(['--stage-color', '--i']);
@@ -91,7 +92,7 @@ const KNOWN_DUP = [
   ['.data-table th', 'table ↔ mobile (media)'],
 ];
 
-const IMPORTANT_OK = [/\[hidden\]/, /link-hidden/, /prefers-reduced-motion/, /\.cs-fill/];
+const IMPORTANT_OK = [/\[hidden\]/, /link-hidden/, /prefers-reduced-motion/, /\.cs-fill/, /\.hidden/];
 
 const ALLOWED_BREAKPOINTS = [1200, 1000, 999, 767, 480];
 const ALLOWED_ZINDEX = [1, 2, 900, 1000, 1010, 1020, 1030, 1040, 1050, 1060, 1100, 1200, 1300, 1400];
@@ -112,6 +113,7 @@ const FORBIDDEN = [
   { re: /%23111111|%23111\b/gi, msg: 'чёрный в data-URI' },
   { re: /--shadow-(?:sm|md|lg):\s*[^;]*\b\d+px\s+\d+px\s+0\b/g, msg: 'hard-offset в определении тени' },
 ];
+
 
 /* ── УТИЛИТЫ ── */
 

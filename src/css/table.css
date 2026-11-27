@@ -32,9 +32,30 @@
 /* P2: единые цвета иконок в обоих видах — никаких !important-перебивок */
 .data-table .action-icon-btn { background: var(--bg-subtle); }
 
+/* B12: отключаем hover-сдвиг кнопок в таблице (конфликт с animations.css) */
+.data-table .btn:hover,
+.data-table .action-icon-btn:hover {
+  transform: none;
+}
+
 /* вторичная строка A1 (показывается ≤1000px, см. mobile.css) */
 .td-secondary { display: none; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-top: 2px; }
 
 /* ghost-цепь = открыть ссылку (decision 26/31) */
 .link-ghost { color: var(--brand); display: inline-flex; align-items: center; }
 .link-ghost:hover { color: var(--brand-hover); }
+
+/* ── ИКОНКА КОММЕНТАРИЯ — B3 ── */
+.comment-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand);
+  cursor: help;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.comment-icon svg {
+  width: 16px;
+  height: 16px;
+}

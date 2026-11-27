@@ -5,9 +5,7 @@
 .text-muted-small { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-weight: 500; }
 .text-italic-muted { color: var(--text-muted); font-style: italic; font-weight: 500; }
 .text-bold { font-weight: 700; }
-.text-nowrap { white-space: nowrap; }
 .text-pre-wrap { white-space: pre-wrap; font-size: 12px; }
-.text-center { text-align: center; }
 .text-word-break { word-break: break-all; }
 
 .flex-row { display: flex; align-items: center; gap: 16px; }
@@ -19,10 +17,13 @@
 .form-col-no-margin { flex: 1; min-width: 200px; margin-bottom: 0; }
 .grid-full { grid-column: 1 / -1; }
 
-.mt-0 { margin-top: 0; } .mt-8 { margin-top: 8px; } .mt-15 { margin-bottom: 15px; } .mt-20 { margin-top: 20px; } .mb-0 { margin-bottom: 0; }
+.mt-0 { margin-top: 0; }
+.mt-4 { margin-top: 16px; } /* B9 */
+.mt-8 { margin-top: 8px; }
+.mt-15 { margin-bottom: 15px; }
+.mt-20 { margin-top: 20px; }
+.mb-0 { margin-bottom: 0; }
 
-.btn-full { flex: 1; }
-.btn-nowrap { white-space: nowrap; }
 .select-min-w { min-width: 180px; }
 .search-full { width: 100%; }
 
@@ -39,14 +40,12 @@
 
 .badge-unavailable { color: var(--st-danger-text); font-size: 11px; font-weight: 700; margin-left: 6px; display: inline-flex; align-items: center; gap: 4px; } /* P28: Lucide alert-triangle */
 .icon-clock { margin-left: 6px; vertical-align: middle; color: var(--text-muted); } /* P24/decision 54/58 */
-.btn-icon-left { margin-right: 6px; }
 
 .progress-bar { width: 300px; height: 8px; background: var(--bg-hover); border-radius: 4px; margin: 0 auto; overflow: hidden; }
 .progress-bar-fill { height: 100%; background: var(--brand); border-radius: 4px; transition: width .3s var(--ease); }
 
 .date-colored { font-weight: 700; }
 .link-hidden { display: none !important; }
-.loading-full { grid-column: 1 / -1; }
 
 /* Ширины колонок таблиц модалок */
 .col-view-name { width: 18%; } .col-view-purpose { width: 13%; } .col-view-price { width: 13%; }
