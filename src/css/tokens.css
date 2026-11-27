@@ -68,47 +68,39 @@
   --radius-input: 6px;                 /* Поля ввода */
 
   /* ── СТАТУСНЫЕ ТОКЕНЫ (пастельный фон + контрастный текст) ── */
-  /* neutral — серый */
   --status-neutral-bg: #F1F5F9;
   --status-neutral-text: #475569;
   --status-neutral-border: #E2E8F0;
 
-  /* info — голубой */
   --status-info-bg: #E0F2FE;
   --status-info-text: #0369A1;
   --status-info-border: #BAE6FD;
 
-  /* success — зелёный */
   --status-success-bg: #DCFCE7;
   --status-success-text: #15803D;
   --status-success-border: #BBF7D0;
 
-  /* warning — жёлтый/оранжевый */
   --status-warning-bg: #FEF3C7;
   --status-warning-text: #92400E;
   --status-warning-border: #FDE68A;
 
-  /* danger — красный */
   --status-danger-bg: #FEE2E2;
   --status-danger-text: #B91C1C;
   --status-danger-border: #FECACA;
 
-  /* brand — синий */
   --status-brand-bg: var(--brand-light);
   --status-brand-text: var(--brand);
   --status-brand-border: var(--brand-soft);
 
-  /* violet — AI */
   --status-violet-bg: var(--accent-ai-soft);
   --status-violet-text: #5B21B6;
   --status-violet-border: #DDD6FE;
 
-  /* gray — альтернативный нейтральный */
   --status-gray-bg: #F8FAFC;
   --status-gray-text: #64748B;
   --status-gray-border: #E2E8F0;
 
-  /* Алиасы st-* (короткие, используются в компонентах) */
+  /* Короткие алиасы st-* (используются в компонентах) */
   --st-neutral-bg: var(--status-neutral-bg);
   --st-neutral-text: var(--status-neutral-text);
   --st-info-bg: var(--status-info-bg);
@@ -128,7 +120,6 @@
   --font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Arial', sans-serif;
   --font-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
 
-  /* Размеры */
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 14px;
@@ -137,14 +128,12 @@
   --text-2xl: 18px;
   --text-3xl: 20px;
 
-  /* Веса */
   --font-normal: 400;
   --font-medium: 500;
   --font-semibold: 600;
   --font-bold: 700;
   --font-extrabold: 800;
 
-  /* Межстрочные интервалы */
   --leading-tight: 1.2;
   --leading-normal: 1.5;
   --leading-relaxed: 1.6;
@@ -160,15 +149,17 @@
   --space-10: 40px;
   --space-12: 48px;
 
-  /* ── Z-INDEX ШКАЛА ── */
+  /* ── Z-INDEX ШКАЛА (расширена под реальные нужды) ── */
   --z-base: 1;
-  --z-dropdown: 1000;
-  --z-sticky: 1010;
-  --z-overlay: 1020;
-  --z-modal: 1030;
-  --z-modal-stack: 1040;             /* Вложенные модалки */
-  --z-toast: 1050;
-  --z-fab: 1060;
+  --z-resize: 2;                      /* Resize-handle таблиц */
+  --z-sticky: 1010;                   /* Сайдбар, топбар, sticky-табы */
+  --z-nav: 900;                       /* Мобильная нижняя навигация */
+  --z-overlay: 1000;                  /* Оверлей модалок (базовый) */
+  --z-overlay-nested: 1100;           /* Вложенные оверлеи */
+  --z-overlay-top: 1200;              /* Верхний оверлей */
+  --z-dropdown: 1300;                 /* Автоподсказки, дропдауты */
+  --z-toast: 1400;                    /* Тосты */
+  --z-fab: 1060;                      /* FAB */
 
   /* ── АНИМАЦИИ ── */
   --ease-default: cubic-bezier(0.4, 0, 0.2, 1);   /* Стандарт Material */
@@ -181,7 +172,7 @@
   --duration-normal: 200ms;
   --duration-slow: 300ms;
 
-  /* Алиасы для компонентов (не менять имена — на них завязаны cards/table/forms/...) */
+  /* Алиасы для компонентов (НЕ менять имена — на них завязаны cards/table/forms/...) */
   --ease: var(--ease-default);
   --dur: var(--duration-normal);
   --dur-1: var(--duration-fast);

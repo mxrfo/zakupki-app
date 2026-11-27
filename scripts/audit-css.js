@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /* ============================================================
-   АУДИТОР CSS-ПЕРЕНОСА — Альтернатива · Закупки v7
-   Сверяет backup/styles.css (монолит) с src/css/*.css (модули):
-   1. селекторы: потерянные / переименованные / удалённые намеренно
-   2. токены: var() без определения, определения вне tokens.css
-   3. дубли: внутри файла (баг) и между файлами (инфо)
-   4. запрещённые паттерны старой системы (!important, steps(), #111...)
-   5. keyframes / z-index / breakpoints / порядок @import
-   Запуск: node scripts/audit-css.js   (или npm run audit:css)
-   Код возврата: 0 — чисто, 1 — есть находки.
+   АУДИТОР CSS-ПЕРЕНОСА — Альтернатива · Закупки v7 (v2)
+   backup/styles.css → src/css/*.css + dist/index.html + src/js/**
+   Фиксы v2:
+   - A1: вырезание <script>/<style> перед парсингом class=""
+   - A2: покрытость класса через вхождение в любой селектор
+   - A3: корректный regex теней (не ловит определения)
+   - A4: allowlist !important по контексту
+   - A5: расширенная z-шкала
+   - A6: сканирование src/js/**.js на динамические классы
+   - A7: расширенные REMOVED/RENAME_MAP
+   Запуск: npm run audit:css
    ============================================================ */
 'use strict';
 
@@ -19,77 +21,96 @@ const ROOT = path.resolve(__dirname, '..');
 const OLD_FILE = path.join(ROOT, 'backup', 'styles.css');
 const SRC_DIR = path.join(ROOT, 'src', 'css');
 const ENTRY = path.join(SRC_DIR, 'styles.css');
+const DIST_HTML = path.join(ROOT, 'dist', 'index.html');
+const JS_DIR = path.join(ROOT, 'src', 'js');
 const OUT_MD = path.join(ROOT, 'css-audit-report.md');
 
-/* ── КОНФИГ: намеренные изменения (из decisions/P-реестра) ── */
+/* ── КОНФИГ: намеренные изменения ── */
 
 const RENAME_MAP = {
   '.brand-text': '.brand-wordmark',
   '.user-info': '.user-display',
-  '.user-info b': '.user-display b',
   '.search-bar svg': '.search-icon',
   '.tab-btn svg': '.tab-icon',
   '.role-viewer': '.control-select',
   '.note-card[data-stage-color]::before': '.note-card::before',
+  '.test-mode-wrapper input': '.test-mode-wrapper input[type="checkbox"]',
+  '.data-table tr:hover': '.data-table tbody tr:hover',
 };
 
 const REMOVED = {
-  '.note-badge.postponed': 'P24 / решения 54,58 — отложка = clock-иконка, не жёлтый чип',
-  '.btn-logs': 'decision 51 — плавающая кнопка логов удалена',
-  '.data-table .btn:hover': 'P2 — единые hover-состояния кнопок',
-  '.data-table .action-icon-btn:hover': 'P2 — единые hover-состояния',
-  '.data-table .btn, .data-table .action-icon-btn': 'P2 — !important-перебивка transform удалена',
-  '.pos-main .det-link[style*="display:none"]': 'decision 19 — inline-style хак удалён',
+  '.note-badge.postponed': 'P24/решения 54,58 — но JS пока рендерит → добавлен в cards.css',
+  '.btn-logs': 'decision 51',
+  '.btn-logs:hover': 'decision 51',
+  '.log-panel.open': 'P22 — логи теперь static-вкладка',
+  '.data-table .btn:hover': 'P2 → transform:none в table.css',
+  '.data-table .action-icon-btn:hover': 'P2',
+  '.data-table .btn, .data-table .action-icon-btn': 'P2 → transform:none',
+  '.pos-main .det-link[style*="display:none"]': 'decision 19',
   '.pos-main .det-link[style*="display: none"]': 'decision 19',
-  '.cs-step:focus, .cs-step:focus-visible, .cs-step:active': 'P9 — outline-хаки не нужны',
+  '.cs-step:focus, .cs-step:focus-visible, .cs-step:active': 'P9',
   '.pos-head:focus, .pos-head:focus-visible': 'P9',
-  '.search-bar input:focus': 'сохранено в layout.css под другим селектором — проверьте вручную',
+  '.btn-icon': 'не используется (заменён .action-icon-btn)',
+  '.btn-approval-submit': 'не используется (заменён .btn-primary)',
+  '.btn-approval-submit:hover': 'не используется',
+  '.action-icon-btn.primary': 'не используется',
+  '.action-icon-btn.dark': 'не используется',
+  '.form-group input[type="date"]::after': 'нативный picker-индикатор',
+  '.user-info b': '.user-display рендерится без <b>',
+  '.data-table .btn': 'P2',
 };
 
-/* Селекторы-«инфраструктура», не подлежащие сверке */
-const EXCLUDE_SELECTORS = new Set([':root', '*', 'body', 'html', 'body *']);
-
-/* var(), живущие в инлайн-стилях JS */
+const EXCLUDE_SELECTORS = new Set([':root', '*', 'body', 'html', 'body *', '*::before', '*::after']);
 const TOKEN_ALLOW = new Set(['--stage-color', '--i']);
 
-/* Известные кросс-файловые дубли (animations.css переопределяет transition) */
 const KNOWN_DUP = [
-  ['.note-card', 'cards.css ↔ animations.css: стаггер-override'],
-  ['.modal-overlay', 'modals.css ↔ animations.css: fade-in'],
-  ['.modal', 'modals.css ↔ animations.css: scale-in'],
-  ['.modal.sheet', 'modals.css ↔ animations.css: sheet-up'],
-  ['.tab-btn', 'layout.css ↔ animations.css: transition+индикатор'],
-  ['.btn', 'buttons.css ↔ animations.css: transition'],
-  ['.action-icon-btn', 'buttons.css ↔ animations.css: transition'],
-  ['.view-btn', 'layout.css ↔ animations.css: transition'],
-  ['.admin-tab', 'admin.css ↔ animations.css: transition'],
-  ['.dep-chip', 'admin.css ↔ animations.css: transition'],
-  ['.chip', 'forms.css ↔ animations.css: transition'],
-  ['.toast', 'toasts.css ↔ animations.css: spring-вход'],
-  ['.fab-btn', 'buttons.css ↔ animations.css: pop'],
-  ['.step-panel.active', 'forms.css ↔ animations.css: slide'],
-  ['.notes-grid', 'cards.css ↔ animations.css: fadeUp контейнера'],
-  ['.table-view', 'table.css ↔ animations.css: fadeUp контейнера'],
+  ['.note-card', 'cards ↔ animations: стаггер'],
+  ['.modal-overlay', 'modals ↔ animations'],
+  ['.modal', 'modals ↔ animations'],
+  ['.modal.sheet', 'modals ↔ animations'],
+  ['.tab-btn', 'layout ↔ animations: ::after индикатор'],
+  ['.btn', 'buttons ↔ animations: transform'],
+  ['.btn:hover', 'buttons ↔ animations'],
+  ['.btn:active', 'buttons ↔ animations'],
+  ['.action-icon-btn', 'buttons ↔ animations'],
+  ['.action-icon-btn:hover', 'buttons ↔ animations'],
+  ['.view-btn', 'layout ↔ animations'],
+  ['.admin-tab', 'admin ↔ animations'],
+  ['.dep-chip', 'admin ↔ animations'],
+  ['.toast', 'toasts ↔ animations'],
+  ['.fab-btn', 'buttons ↔ animations'],
+  ['.step-panel.active', 'forms ↔ animations'],
+  ['.notes-grid', 'cards ↔ animations'],
+  ['.table-view', 'table ↔ animations'],
+  ['.app-layout', 'layout ↔ mobile'],
+  ['.sidebar', 'layout ↔ mobile'],
+  ['.topbar', 'layout ↔ mobile'],
+  ['.search-bar', 'layout ↔ mobile'],
+  ['.main-content', 'layout ↔ mobile'],
+  ['.data-table td', 'table ↔ mobile (media)'],
+  ['.data-table th', 'table ↔ mobile (media)'],
 ];
 
+const IMPORTANT_OK = [/\[hidden\]/, /link-hidden/, /prefers-reduced-motion/, /\.cs-fill/];
+
 const ALLOWED_BREAKPOINTS = [1200, 1000, 999, 767, 480];
-const ALLOWED_ZINDEX = [1, 1000, 1010, 1020, 1030, 1040, 1050, 1060];
+const ALLOWED_ZINDEX = [1, 2, 900, 1000, 1010, 1020, 1030, 1040, 1050, 1060, 1100, 1200, 1300, 1400];
 
 const FORBIDDEN = [
-  { re: /steps\(/g, msg: 'steps()-анимации старой системы (P7)' },
+  { re: /steps\(/g, msg: 'steps()-анимации (P7)' },
   { re: /#111111|#111\b/gi, msg: 'чернила #111 (P7)' },
   { re: /var\(--ink\b/g, msg: 'старый токен --ink' },
   { re: /--brand-blue\b/g, msg: 'старый токен --brand-blue' },
-  { re: /var\(--danger\b|var\(--success\b|var\(--warning\b/g, msg: 'старые семантические токены (--danger/--success/--warning)' },
-  { re: /box-shadow:\s*[^;]*\b\d+px\s+\d+px\s+0\b/g, msg: 'neo-brutal тень Npx Npx 0 (P7)' },
-  { re: /border:\s*[23]px\s+solid/g, msg: 'жирная рамка 2–3px (P7)' },
-  { re: /border-(top|right|bottom|left):\s*3px/g, msg: 'жирная рамка 3px (P7)' },
-  { re: /radial-gradient\([^)]*rgba\(17/gi, msg: 'точечный фон (P7)' },
+  { re: /var\(--danger\b|var\(--success\b|var\(--warning\b/g, msg: 'старые токены' },
+  { re: /box-shadow:\s*[^;]*\b\d+px\s+\d+px\s+0\b/g, msg: 'neo-brutal тень' },
+  { re: /border:\s*[23]px\s+solid/g, msg: 'жирная рамка 2–3px' },
+  { re: /border-(top|right|bottom|left):\s*3px/g, msg: 'жирная рамка 3px' },
+  { re: /radial-gradient\([^)]*rgba\(17/gi, msg: 'точечный фон' },
   { re: /translate\(-\d+px,\s*-?\d+px\)/g, msg: 'hover-сдвиг старой системы' },
-  { re: /z-index:\s*(9999|10000|100000|10001)\b/g, msg: 'z-index вне шкалы токенов' },
-  { re: /min-width:\s*1200px/g, msg: 'min-width 1200 таблицы (P10)' },
-  { re: /%23111111|%23111\b/gi, msg: 'чёрный в data-URI svg' },
-  { re: /--shadow-(sm|md|lg):\s*\d/g, msg: 'старые hard-offset тени в определениях' },
+  { re: /z-index:\s*(9999|10000|100000|10001)\b/g, msg: 'z-index вне шкалы' },
+  { re: /min-width:\s*1200px/g, msg: 'min-width 1200 таблицы' },
+  { re: /%23111111|%23111\b/gi, msg: 'чёрный в data-URI' },
+  { re: /--shadow-(?:sm|md|lg):\s*[^;]*\b\d+px\s+\d+px\s+0\b/g, msg: 'hard-offset в определении тени' },
 ];
 
 /* ── УТИЛИТЫ ── */
@@ -121,11 +142,13 @@ function emptyRes() {
 }
 
 function mergeInto(a, b) {
-  for (const k of Object.keys(b)) a[k].push(...b[k]);
+  for (const k of Object.keys(b)) {
+    if (Array.isArray(a[k]) && Array.isArray(b[k])) a[k].push(...b[k]);
+  }
   return a;
 }
 
-/* ── ПАРСЕР: обход блоков с учётом вложенных @media/@supports ── */
+/* ── ПАРСЕР CSS ── */
 
 function walk(css, file, ctx, map, res) {
   let i = 0; const L = css.length;
@@ -150,8 +173,7 @@ function walk(css, file, ctx, map, res) {
     } else if (sel.startsWith('@media') || sel.startsWith('@supports') || sel.startsWith('@layer')) {
       const m = sel.match(/\(\s*max-width:\s*(\d+)px\s*\)/);
       if (m) res.breaks.push({ bp: +m[1], file, line });
-      const nctx = ctx ? ctx + ' → ' + sel : sel;
-      walk(body, file, nctx, map, res);
+      walk(body, file, ctx ? ctx + ' → ' + sel : sel, map, res);
     } else if (sel.startsWith('@font-face') || sel.startsWith('@charset')) {
       /* ignore */
     } else {
@@ -178,7 +200,7 @@ function parseFile(file) {
   return res;
 }
 
-/* ── СКАН ЗАПРЕЩЁННОГО (с контекстом reduced-motion для !important) ── */
+/* ── СКАН ЗАПРЕЩЁННОГО (v2: allowlist !important) ── */
 
 function scanForbidden(css, file, map) {
   const hits = [];
@@ -189,8 +211,8 @@ function scanForbidden(css, file, map) {
     while ((m = p.re.exec(css)) !== null) {
       const line = map[m.index];
       if (p.msg === '!important') {
-        const back = css.slice(Math.max(0, m.index - 700), m.index);
-        if (/prefers-reduced-motion/.test(back)) continue; // a11y-override разрешён
+        const back = css.slice(Math.max(0, m.index - 400), m.index);
+        if (IMPORTANT_OK.some(re => re.test(back))) continue;
       }
       hits.push({ file, line, msg: p.msg, snippet: css.slice(m.index, m.index + 60).replace(/\n/g, ' ') });
     }
@@ -198,7 +220,7 @@ function scanForbidden(css, file, map) {
   return hits;
 }
 
-/* ── KEYFRAMES: использованные vs определённые ── */
+/* ── KEYFRAMES ── */
 
 function collectAnimations(parsed) {
   const used = new Set();
@@ -216,20 +238,95 @@ function collectAnimations(parsed) {
   return used;
 }
 
+/* ── АНАЛИЗ HTML (v2: вырезание script/style) ── */
+
+function analyzeHTML(html) {
+  const clean = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '');
+
+  const results = { classes: new Map(), ids: [], inlineStyles: [], bx24Classes: [], scriptRefs: [] };
+  let m;
+  const classRegex = /class="([^"]+)"/g;
+  while ((m = classRegex.exec(clean)) !== null) {
+    const line = html.slice(0, m.index).split('\n').length;
+    for (const cls of m[1].split(/\s+/).filter(Boolean)) {
+      if (!results.classes.has(cls)) results.classes.set(cls, []);
+      results.classes.get(cls).push(line);
+    }
+  }
+  const idRegex = /\bid="([^"]+)"/g;
+  while ((m = idRegex.exec(clean)) !== null) {
+    results.ids.push({ id: m[1], line: html.slice(0, m.index).split('\n').length });
+  }
+  const styleRegex = /style="([^"]+)"/g;
+  while ((m = styleRegex.exec(clean)) !== null) {
+    results.inlineStyles.push({ style: m[1], line: html.slice(0, m.index).split('\n').length });
+  }
+  const bx24Regex = /\bb24-[a-z-]+\b/g;
+  while ((m = bx24Regex.exec(clean)) !== null) {
+    results.bx24Classes.push({ cls: m[0], line: html.slice(0, m.index).split('\n').length });
+  }
+  const scriptRegex = /<script\s+src="([^"]+)"/g;
+  while ((m = scriptRegex.exec(html)) !== null) results.scriptRefs.push(m[1]);
+  return results;
+}
+
+/* ── СКАН JS-КЛАССОВ (v2) ── */
+
+function walkDir(dir, ext, out = []) {
+  if (!fs.existsSync(dir)) return out;
+  for (const f of fs.readdirSync(dir)) {
+    const full = path.join(dir, f);
+    const st = fs.statSync(full);
+    if (st.isDirectory()) walkDir(full, ext, out);
+    else if (f.endsWith(ext)) out.push(full);
+  }
+  return out;
+}
+
+function collectJsClasses() {
+  const set = new Set();
+  for (const file of walkDir(JS_DIR, '.js')) {
+    const src = fs.readFileSync(file, 'utf8');
+    for (const m of src.matchAll(/class="([^"{}$]+)"/g))
+      for (const c of m[1].split(/\s+/)) if (/^[a-z][\w-]*$/i.test(c)) set.add(c);
+    for (const m of src.matchAll(/classList\.(?:add|toggle|remove)\(([^)]+)\)/g))
+      for (const q of m[1].matchAll(/['"]([\w-]+)['"]/g)) set.add(q[1]);
+    for (const m of src.matchAll(/className\s*=\s*['"]([^"'{}$]+)['"]/g))
+      for (const c of m[1].split(/\s+/)) if (/^[a-z][\w-]*$/i.test(c)) set.add(c);
+  }
+  return set;
+}
+
+/* ── ПОКРЫТОСТЬ КЛАССА (v2) ── */
+
+function buildClassIndex(selSet) {
+  const idx = new Set();
+  for (const s of selSet) {
+    for (const m of s.matchAll(/\.([A-Za-z_][\w-]*)/g)) idx.add(m[1]);
+  }
+  return idx;
+}
+
 /* ── MAIN ── */
 
 function main() {
   if (!fs.existsSync(OLD_FILE)) { console.error('Не найден ' + OLD_FILE); process.exit(2); }
   const oldParsed = parseFile(OLD_FILE);
-  const moduleFiles = fs.readdirSync(SRC_DIR).filter(f => f.endsWith('.css') && f !== 'styles.css');
+  const moduleFiles = fs.readdirSync(SRC_DIR)
+    .filter(f => f.endsWith('.css') && f !== 'styles.css')
+    .filter(f => fs.statSync(path.join(SRC_DIR, f)).isFile());
   const newParsed = emptyRes();
   const perFile = {};
   const forbiddenAll = [];
   for (const f of moduleFiles) {
-    const p = parseFile(path.join(SRC_DIR, f));
-    perFile[f] = p;
-    mergeInto(newParsed, p);
-    forbiddenAll.push(...scanForbidden(p.raw, f, p.map));
+    try {
+      const p = parseFile(path.join(SRC_DIR, f));
+      perFile[f] = p;
+      mergeInto(newParsed, p);
+      forbiddenAll.push(...scanForbidden(p.raw, f, p.map));
+    } catch (e) { console.warn(`⚠ ${f}: ${e.message}`); }
   }
   const entry = parseFile(ENTRY);
 
@@ -256,7 +353,7 @@ function main() {
 
   /* 2. ТОКЕНЫ */
   const defined = new Set();
-  for (const v of perFile['tokens.css'].varsDefined) defined.add(v.name);
+  if (perFile['tokens.css']) for (const v of perFile['tokens.css'].varsDefined) defined.add(v.name);
   const undefinedVars = new Map();
   for (const u of newParsed.varUse) {
     if (!defined.has(u.name) && !TOKEN_ALLOW.has(u.name)) {
@@ -264,26 +361,23 @@ function main() {
       undefinedVars.get(u.name).push(`${u.file}:${u.line}`);
     }
   }
-  const definedOutside = newParsed.varsDefined
-    .filter(v => v.file !== 'tokens.css')
+  const definedOutside = newParsed.varsDefined.filter(v => v.file !== 'tokens.css')
     .map(v => `${v.name} — ${v.file}:${v.line}`);
   const unused = [...defined].filter(d => !newParsed.varUse.some(u => u.name === d));
 
   /* 3. ДУБЛИ */
   const dupWithin = [], dupCross = [];
   const byCtxSel = new Map();
-  for (const r of newParsed.rules) {
-    for (const s of splitSelectors(r.sel)) {
-      const key = s + '|' + r.ctx;
-      if (!byCtxSel.has(key)) byCtxSel.set(key, []);
-      byCtxSel.get(key).push(`${r.file}:${r.line}`);
-    }
+  for (const r of newParsed.rules) for (const s of splitSelectors(r.sel)) {
+    const key = s + '|' + r.ctx;
+    if (!byCtxSel.has(key)) byCtxSel.set(key, []);
+    byCtxSel.get(key).push(`${r.file}:${r.line}`);
   }
   for (const [key, locs] of byCtxSel) {
     if (locs.length < 2) continue;
     const s = key.split('|')[0];
     const files = new Set(locs.map(l => l.split(':')[0]));
-    const known = KNOWN_DUP.find(([d]) => d === s);
+    const known = KNOWN_DUP.find(([d]) => d === s || s.startsWith(d + ':') || s.startsWith(d + ' '));
     if (files.size === 1) dupWithin.push(`${s} (${key.split('|')[1] || 'base'}) → ${locs.join(', ')}`);
     else if (known) dupCross.push(`${s} — допущен: ${known[1]}`);
     else dupCross.push(`${s} → ${locs.join(', ')}`);
@@ -295,7 +389,7 @@ function main() {
   const kfMissing = [...usedKf].filter(n => !definedKf.has(n));
   const kfUnused = [...definedKf].filter(n => !usedKf.has(n));
 
-  /* 5. BREAKPOINTS / Z-INDEX / ИМПОРТЫ */
+  /* 5. BREAKPOINTS / Z / ИМПОРТЫ */
   const badBp = newParsed.breaks.filter(b => !ALLOWED_BREAKPOINTS.includes(b.bp));
   const badZ = newParsed.zHard.filter(z => !ALLOWED_ZINDEX.includes(+z.val));
   const imported = entry.imports.map(i => i.sel.replace(/@import\s+['"]?([^'";]+)['"]?/, '$1'));
@@ -303,22 +397,48 @@ function main() {
   const mobileIdx = imported.indexOf('mobile.css');
   const animIdx = imported.indexOf('animations.css');
   const orderIssues = [];
-  if (mobileIdx !== -1 && mobileIdx !== imported.length - 1) orderIssues.push('mobile.css не последний в @import');
-  if (animIdx !== -1 && mobileIdx !== -1 && animIdx > mobileIdx) orderIssues.push('animations.css идёт после mobile.css');
+  if (mobileIdx !== -1 && mobileIdx !== imported.length - 1) orderIssues.push('mobile.css не последний');
+  if (animIdx !== -1 && mobileIdx !== -1 && animIdx > mobileIdx) orderIssues.push('animations.css после mobile.css');
+
+  /* 6. HTML + JS КЛАССЫ */
+  const htmlAnalysis = { classes: [], ids: [], inlineStyles: [], bx24: [], scripts: [] };
+  let htmlRes = null;
+  const classIdx = buildClassIndex(newSelSet);
+  const jsClasses = collectJsClasses();
+  if (fs.existsSync(DIST_HTML)) {
+    htmlRes = analyzeHTML(fs.readFileSync(DIST_HTML, 'utf8'));
+    const allHtmlClasses = new Set([...htmlRes.classes.keys(), ...jsClasses]);
+    for (const cls of allHtmlClasses) {
+      if (cls.startsWith('b24-') || cls.startsWith('js-')) continue;
+      if (!classIdx.has(cls)) {
+        htmlAnalysis.classes.push({ cls, lines: htmlRes.classes.get(cls) || ['JS'] });
+      }
+    }
+    const idCount = new Map();
+    for (const { id, line } of htmlRes.ids) {
+      if (!idCount.has(id)) idCount.set(id, []);
+      idCount.get(id).push(line);
+    }
+    for (const [id, lines] of idCount) if (lines.length > 1) htmlAnalysis.ids.push({ id, lines });
+    for (const { style, line } of htmlRes.inlineStyles)
+      if (/display:\s*none/.test(style)) htmlAnalysis.inlineStyles.push({ style, line });
+    htmlAnalysis.bx24 = [...new Set(htmlRes.bx24Classes.map(b => b.cls))].sort();
+    htmlAnalysis.scripts = htmlRes.scriptRefs;
+  } else console.warn('⚠ dist/index.html не найден');
 
   /* ── ОТЧЁТ ── */
   const md = [];
   const push = (...l) => md.push(...l);
-  push('# CSS Audit — backup/styles.css → src/css/*.css', '');
+  push('# CSS Audit v2 — backup → src/css + dist/index.html + src/js', '');
   push(`Дата: ${new Date().toISOString()}`, '');
   push('## Сводка', '',
     '| Метрика | Значение |', '|---|---|',
-    `| Селекторов в монолите (уникальных) | ${oldSels.size} |`,
-    `| Селекторов в модулях (уникальных) | ${newSelSet.size} |`,
+    `| Селекторов в монолите | ${oldSels.size} |`,
+    `| Селекторов в модулях | ${newSelSet.size} |`,
     `| ❌ Потерянных | ${missing.length} |`,
-    `| ↻ Переименованных (ожидаемо) | ${renamed.length} |`,
+    `| ↻ Переименованных | ${renamed.length} |`,
     `| 🗑 Удалённых намеренно | ${removedOk.length} |`,
-    `| ➕ Новых (не было в монолите) | ${newOnly.length} |`,
+    `| ➕ Новых | ${newOnly.length} |`,
     `| ⚠ Дублей внутри файла | ${dupWithin.length} |`,
     `| ℹ Дублей между файлами | ${dupCross.length} |`,
     `| 🔴 var() без определения | ${undefinedVars.size} |`,
@@ -326,14 +446,16 @@ function main() {
     `| 🔵 Неиспользуемых токенов | ${unused.length} |`,
     `| 🚫 Запрещённых паттернов | ${forbiddenAll.length} |`,
     `| 🎬 keyframes: нет определения | ${kfMissing.length} |`,
-    `| 🎬 keyframes: определён, не используется | ${kfUnused.length} |`,
     `| 📐 Breakpoints вне списка | ${badBp.length} |`,
     `| 🧱 z-index вне шкалы | ${badZ.length} |`,
-    `| 📦 Не импортировано в styles.css | ${notImported.length} |`,
+    `| 📦 Не импортировано | ${notImported.length} |`,
+    `| 🟡 HTML/JS-классов без CSS | ${htmlAnalysis.classes.length} |`,
+    `| 🔴 Дубликатов ID | ${htmlAnalysis.ids.length} |`,
+    `| ⚠ Inline display:none | ${htmlAnalysis.inlineStyles.length} |`,
     '');
 
-  const section = (title, items, fmt = x => x) => {
-    push(`## ${title}`, '');
+  const section = (t, items, fmt = x => x) => {
+    push(`## ${t}`, '');
     if (!items.length) { push('_нет_', ''); return; }
     for (const it of items) push('- ' + fmt(it));
     push('');
@@ -341,33 +463,33 @@ function main() {
 
   section('❌ Потерянные селекторы', missing, ([s, loc]) => `\`${s}\` — был в ${loc}`);
   section('↻ Переименованные', renamed, ([o, n, loc]) => `\`${o}\` → \`${n}\` (был в ${loc})`);
-  section('🗑 Удалённые намеренно', removedOk, ([s, why, loc]) => `\`${s}\` — ${why} (был в ${loc})`);
+  section('🗑 Удалённые намеренно', removedOk, ([s, why, loc]) => `\`${s}\` — ${why}`);
   section('➕ Новые селекторы', newOnly, s => `\`${s}\``);
   section('⚠ Дубли внутри файла', dupWithin);
   section('ℹ Дубли между файлами', dupCross);
-  section('🔴 var() без определения в tokens.css',
-    [...undefinedVars].map(([n, locs]) => `\`${n}\` — ${locs.join(', ')}`));
-  section('⬜ Определения переменных вне tokens.css', definedOutside, s => `\`${s}\``);
+  section('🔴 var() без определения', [...undefinedVars].map(([n, locs]) => `\`${n}\` — ${locs.join(', ')}`));
+  section('⬜ Определения вне tokens.css', definedOutside, s => `\`${s}\``);
   section('🔵 Неиспользуемые токены', unused, s => `\`${s}\``);
-  section('🚫 Запрещённые паттерны', forbiddenAll, h =>
-    `\`${h.file}:${h.line}\` — ${h.msg} — \`${h.snippet}\``);
-  section('🎬 keyframes: использован, но не определён', kfMissing, s => `\`${s}\``);
-  section('🎬 keyframes: определён, но не используется', kfUnused, s => `\`${s}\``);
-  section('📐 Breakpoints вне [1200,1000,999,767,480]', badBp, b => `${b.bp}px — ${b.file}:${b.line}`);
+  section('🚫 Запрещённые паттерны', forbiddenAll, h => `\`${h.file}:${h.line}\` — ${h.msg} — \`${h.snippet}\``);
+  section('🎬 keyframes: нет определения', kfMissing, s => `\`${s}\``);
+  section('📐 Breakpoints вне списка', badBp, b => `${b.bp}px — ${b.file}:${b.line}`);
   section('🧱 z-index вне шкалы', badZ, z => `${z.val} — ${z.file}:${z.line}`);
-  section('📦 Файлы без @import в styles.css', notImported, f => `\`${f}\``);
+  section('📦 Не импортировано', notImported, f => `\`${f}\``);
   section('📦 Порядок @import', orderIssues);
+  section('🟡 HTML/JS-классы без CSS-покрытия', htmlAnalysis.classes, c =>
+    `.${c.cls} — ${c.lines.slice(0, 3).join(', ')}`);
+  section('🔴 Дубликаты ID', htmlAnalysis.ids, i => `#${i.id} — ${i.lines.join(', ')}`);
+  section('⚠ Inline display:none', htmlAnalysis.inlineStyles, s => `строка ${s.line}: \`${s.style.slice(0, 60)}\``);
 
   const clean = missing.length === 0 && forbiddenAll.length === 0 &&
-    dupWithin.length === 0 && undefinedVars.size === 0 &&
-    kfMissing.length === 0 && notImported.length === 0 && orderIssues.length === 0;
+    dupWithin.length === 0 && undefinedVars.size === 0 && kfMissing.length === 0 &&
+    notImported.length === 0 && orderIssues.length === 0 &&
+    htmlAnalysis.classes.length === 0 && htmlAnalysis.ids.length === 0;
 
-  push('## Итог', '', clean ? '✅ **Чисто** — перенос полный, паттерны старой системы отсутствуют.' :
-    '❌ **Есть находки** — см. секции выше.', '');
+  push('## Итог', '', clean ? '✅ **Чисто**' : '❌ **Есть находки**', '');
   fs.writeFileSync(OUT_MD, md.join('\n'), 'utf8');
-
   console.log(md.join('\n'));
-  console.log(`\nОтчёт сохранён: ${OUT_MD}`);
+  console.log(`\nОтчёт: ${OUT_MD}`);
   process.exit(clean ? 0 : 1);
 }
 
