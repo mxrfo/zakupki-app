@@ -108,7 +108,7 @@
   color: var(--text-inverse);
 }
 
-/* ── WARNING (доработка) ── */
+/* ── WARNING (доработка / rework) ── */
 .btn-warning {
   background: var(--status-warning-bg);
   border-color: var(--status-warning-border);
@@ -118,6 +118,32 @@
 .btn-warning:hover {
   background: var(--status-warning-text);
   border-color: var(--status-warning-text);
+  color: var(--text-inverse);
+}
+
+/* ── REWORK (на доработку) — алиас warning ── */
+.btn-rework {
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
+  color: var(--status-warning-text);
+}
+
+.btn-rework:hover {
+  background: var(--status-warning-text);
+  border-color: var(--status-warning-text);
+  color: var(--text-inverse);
+}
+
+/* ── CONFIRM PAYMENT (подтверждение оплаты) — info-стиль ── */
+.btn-confirm-payment {
+  background: var(--status-info-bg);
+  border-color: var(--status-info-border);
+  color: var(--status-info-text);
+}
+
+.btn-confirm-payment:hover {
+  background: var(--status-info-text);
+  border-color: var(--status-info-text);
   color: var(--text-inverse);
 }
 
